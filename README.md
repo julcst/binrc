@@ -2,4 +2,4 @@
 
 ## Overview
 
-An implementation of bidirectional Neural Radiance Caching for my bachelor thesis.
+An implementation of bidirectional Neural Radiance Caching for my bachelor thesis.                 
