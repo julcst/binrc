@@ -81,7 +81,7 @@ void MainApp::render() {
     cudaGraphicsMapResources(1, &cudaPboResource);
     cudaGraphicsResourceGetMappedPointer((void**)&devPtr, &size, cudaPboResource);
 
-    // Launch the CUDA kernel to fill the buffer with green
+    // Fill buffer with a pattern
     dim3 block(16, 16);
     dim3 grid((resolution.x + block.x - 1) / block.x, (resolution.y + block.y - 1) / block.y);
     fillPattern<<<grid, block>>>(devPtr, resolution.x, resolution.y);
@@ -95,6 +95,5 @@ void MainApp::render() {
     glTextureSubImage2D(blitTexture.handle, 0, 0, 0, resolution.x, resolution.y, GL_RGBA, GL_UNSIGNED_BYTE, 0);
 
     // Blit the texture using OpenGL
-    blitProgram.use();
     fullscreenTriangle.draw();
 }
