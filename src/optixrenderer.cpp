@@ -20,13 +20,15 @@ OptixRenderer::OptixRenderer() {
     check(optixInit()); // Initialize the OptiX API
     
     // Initialize the OptiX device context
-    OptixDeviceContextOptions options = {};
+    OptixDeviceContextOptions options = {
+        .logCallbackFunction = [](unsigned int level, const char* tag, const char* message, void*) {
+            std::cerr << "[" << tag << "] " << message << std::endl;
+        },
+        .logCallbackLevel = 4, // Print all log messages
+        .validationMode = OPTIX_DEVICE_CONTEXT_VALIDATION_MODE_OFF,
+    };
 #ifndef NDEBUG
     options.validationMode = OPTIX_DEVICE_CONTEXT_VALIDATION_MODE_ALL; // Enable all validation checks
-    options.logCallbackLevel = 4; // Print all log messages
-    options.logCallbackFunction = [](unsigned int level, const char* tag, const char* message, void*) {
-        std::cerr << "[" << tag << "] " << message << std::endl;
-    };
 #endif
     CUcontext cuCtx = nullptr; // zero means take the current context
     check(optixDeviceContextCreate(cuCtx, &options, &context));
@@ -34,11 +36,15 @@ OptixRenderer::OptixRenderer() {
     // Create module
     OptixModuleCompileOptions moduleCompileOptions = {
         .maxRegisterCount = OPTIX_COMPILE_DEFAULT_MAX_REGISTER_COUNT,
-        .optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0, //OPTIX_COMPILE_OPTIMIZATION_LEVEL_3
-        .debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL, //OPTIX_COMPILE_DEBUG_LEVEL_MINIMAL
+        .optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3,
+        .debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_MINIMAL,
         .numPayloadTypes = 0,
         .payloadTypes = nullptr,
     };
+#ifndef NDEBUG
+    moduleCompileOptions.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0; // Disable optimizations
+    moduleCompileOptions.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL; // Generate debug information
+#endif
     OptixPipelineCompileOptions pipelineCompileOptions = {
         .usesMotionBlur = false,
         .traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING,
@@ -100,6 +106,4 @@ void OptixRenderer::render(uchar4* image, int width, int height) {
     params->dim = make_uint2(width, height);
 
     check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params), sizeof(Params), &sbt, width, height, 1));
-
-    check(cudaDeviceSynchronize()); // Necessary?
 }

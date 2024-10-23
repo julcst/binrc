@@ -45,7 +45,7 @@ MainApp::~MainApp() {
 
 void MainApp::resizeCallback(const vec2& res) {
     pbo.allocate(res.x * res.y * 4, GL_STREAM_DRAW);
-    cudaGraphicsGLRegisterBuffer(&cudaPboResource, pbo.handle, cudaGraphicsMapFlagsWriteDiscard);
+    check(cudaGraphicsGLRegisterBuffer(&cudaPboResource, pbo.handle, cudaGraphicsMapFlagsWriteDiscard));
     blitTexture = Texture<GL_TEXTURE_2D>();
     blitTexture.allocate2D(GL_RGBA8, res.x, res.y);
     blitTexture.bindTextureUnit(0);
@@ -59,15 +59,15 @@ void MainApp::render() {
     // Map the buffer to CUDA
     uchar4* devPtr;
     size_t size;
-    cudaGraphicsMapResources(1, &cudaPboResource);
-    cudaGraphicsResourceGetMappedPointer((void**)&devPtr, &size, cudaPboResource);
+    check(cudaGraphicsMapResources(1, &cudaPboResource));
+    check(cudaGraphicsResourceGetMappedPointer((void**)&devPtr, &size, cudaPboResource));
 
     renderer.render(devPtr, resolution.x, resolution.y);
 
-    cudaDeviceSynchronize();
+    check(cudaDeviceSynchronize());
 
     // Unmap the buffer
-    cudaGraphicsUnmapResources(1, &cudaPboResource);
+    check(cudaGraphicsUnmapResources(1, &cudaPboResource));
 
     // Map the buffer to a texture
     pbo.bind();
