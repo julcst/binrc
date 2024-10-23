@@ -11,13 +11,15 @@
 #include <glm/glm.hpp>
 using namespace glm;
 
+#include "optixrenderer.hpp"
+
 class MainApp : public App {
   public:
     MainApp();
     ~MainApp();
   protected:
     void render() override;
-    // void buildImGui() override;
+    void buildImGui() override;
     // void keyCallback(Key key, Action action) override;
     // void clickCallback(Button button, Action action, Modifier modifier) override;
     // void scrollCallback(float amount) override;
@@ -30,4 +32,5 @@ class MainApp : public App {
     Mesh fullscreenTriangle;
     Program blitProgram;
     cudaGraphicsResource_t cudaPboResource;
+    OptixRenderer renderer;
 };

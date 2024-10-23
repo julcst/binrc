@@ -3,55 +3,41 @@
 #include <cuda_runtime.h>
 
 #include <framework/gl/buffer.hpp>
+#include <framework/imguiutil.hpp>
 
 #include <cuda_gl_interop.h>
 
 #include <glm/glm.hpp>
 using namespace glm;
 
-__global__ void fillPattern(uchar4* pos, int width, int height) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    if (x < width && y < height) {
-        int idx = y * width + x;
-        pos[idx] = make_uchar4(blockIdx.x * 128, blockIdx.y * 128, 0, 255);
-    }
-}
+#include <iostream>
+#include <format>
 
 void printCudaDevices() {
     int deviceCount, device;
     cudaGetDeviceCount(&deviceCount);
     for (device = 0; device < deviceCount; ++device) {
-        cudaDeviceProp deviceProp;
-        cudaGetDeviceProperties(&deviceProp, device);
-        printf ("Device %d has compute capability %d.%d and %d cores.\n", device,
-            deviceProp.major, deviceProp.minor, deviceProp.multiProcessorCount);
+        cudaDeviceProp prop;
+        cudaGetDeviceProperties(&prop, device);
+        std::cout << std::format("Device {} - {}, compute capability {}.{}, cores {}, warp size {}", device, prop.name, prop.major, prop.minor, prop.multiProcessorCount, prop.warpSize) << std::endl;
     }
 }
 
 const std::string vs = R"(#version 460 core
-
 layout(location = 0) in vec2 position;
-
 out vec2 texCoord;
-
 void main() {
     gl_Position = vec4(position, 0.0, 1.0);
     texCoord = position * 0.5 + 0.5;
-}
-)";
+})";
 
 const std::string fs = R"(#version 460 core
-
 in vec2 texCoord;
 out vec4 fragColor;
-
 layout(location = 0) uniform sampler2D tex;
-
 void main() {
     fragColor = texture(tex, texCoord);
-}
-)";
+})";
 
 MainApp::MainApp() : App(800, 600) {
     printCudaDevices();
@@ -74,6 +60,10 @@ void MainApp::resizeCallback(const vec2& res) {
     blitTexture.bindTextureUnit(0);
 }
 
+void MainApp::buildImGui() {
+    ImGui::StatisticsWindow(delta, resolution);
+}
+
 void MainApp::render() {
     // Map the buffer to CUDA
     uchar4* devPtr;
@@ -81,10 +71,8 @@ void MainApp::render() {
     cudaGraphicsMapResources(1, &cudaPboResource);
     cudaGraphicsResourceGetMappedPointer((void**)&devPtr, &size, cudaPboResource);
 
-    // Fill buffer with a pattern
-    dim3 block(16, 16);
-    dim3 grid((resolution.x + block.x - 1) / block.x, (resolution.y + block.y - 1) / block.y);
-    fillPattern<<<grid, block>>>(devPtr, resolution.x, resolution.y);
+    renderer.render(devPtr, resolution.x, resolution.y);
+
     cudaDeviceSynchronize();
 
     // Unmap the buffer
