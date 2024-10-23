@@ -33,6 +33,7 @@ target_link_libraries(optixir CUDA::cudart)
 target_include_directories(optixir PRIVATE ${OPTIX_DIR}/include ${CUDAToolkit_INCLUDE_DIRS})
 set_property(TARGET optixir PROPERTY CUDA_OPTIX_COMPILATION ON)
 
+# TODO: Embed the file content
 set(CONTENT "#pragma once\n#include <filesystem>\nnamespace optixir {\n")
 foreach(obj $<TARGET_OBJECTS:optixir>)
     string(APPEND CONTENT "static const std::filesystem::path $<PATH:GET_STEM,${obj}>_path = \"$<TARGET_OBJECTS:optixir>\"\;\n")

@@ -85,11 +85,12 @@ OptixRenderer::OptixRenderer() {
     check(cudaMallocManaged(reinterpret_cast<void**>(&missRecord), sizeof(MissRecord)));
     check(optixSbtRecordPackHeader(programGroup, reinterpret_cast<void*>(missRecord)));
 
-    sbt = {};
-    sbt.raygenRecord = reinterpret_cast<CUdeviceptr>(raygenRecord);
-    sbt.missRecordBase = reinterpret_cast<CUdeviceptr>(missRecord);
-    sbt.missRecordCount = 1;
-    sbt.missRecordStrideInBytes = sizeof(MissRecord);
+    sbt = {
+        .raygenRecord = reinterpret_cast<CUdeviceptr>(raygenRecord),
+        .missRecordBase = reinterpret_cast<CUdeviceptr>(missRecord),
+        .missRecordStrideInBytes = sizeof(MissRecord),
+        .missRecordCount = 1,
+    };
 
     check(cudaMallocManaged(reinterpret_cast<void**>(&params), sizeof(Params)));
 }
