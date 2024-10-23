@@ -55,6 +55,8 @@ target_include_directories(${PROJECT_NAME} PUBLIC src ${OPTIX_DIR}/include ${CUD
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20 cuda_std_20)
 set_target_properties(${PROJECT_NAME} PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
+    CUDA_EXTENSIONS OFF
+    CUDA_STANDARD_REQUIRED ON
     CXX_EXTENSIONS OFF
     CXX_STANDARD_REQUIRED ON
 )

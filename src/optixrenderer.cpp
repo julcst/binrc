@@ -13,20 +13,7 @@
 #include <array>
 
 #include "optixir.hpp"
-
-// OPTIX check as constexpr function
-constexpr void check(OptixResult res) {
-    if (res != OPTIX_SUCCESS) {
-        throw std::runtime_error(optixGetErrorName(res));
-    }
-}
-
-// CUDA check as constexpr function
-constexpr void check(cudaError_t error) {
-    if (error != cudaSuccess) {
-        throw std::runtime_error(cudaGetErrorName(error));
-    }
-}
+#include "cudautil.hpp"
 
 OptixRenderer::OptixRenderer() {
     check(cudaFree(nullptr)); // Initialize CUDA for this device on this thread
@@ -64,10 +51,7 @@ OptixRenderer::OptixRenderer() {
 
     OptixModule module = nullptr;
     const std::string source = Common::readFile(optixir::optixpathtracer_path);
-    std::array<char, 2048> logString;
-    auto logSize = logString.size();
-    check(optixModuleCreate(context, &moduleCompileOptions, &pipelineCompileOptions, source.c_str(), source.size(), logString.data(), &logSize, &module));
-    std::cerr << "Module Log: " << logString.data() << std::endl;
+    check(optixModuleCreate(context, &moduleCompileOptions, &pipelineCompileOptions, source.c_str(), source.size(), nullptr, nullptr, &module));
 
     // Create program group
     OptixProgramGroupOptions pgOptions = {};
@@ -80,9 +64,7 @@ OptixRenderer::OptixRenderer() {
     };
 
     OptixProgramGroup programGroup = nullptr;
-    logSize = logString.size();
-    check(optixProgramGroupCreate(context, &pgDesc, 1, &pgOptions, logString.data(), &logSize, &programGroup));
-    std::cerr << "Program Group Log: " << logString.data() << std::endl;
+    check(optixProgramGroupCreate(context, &pgDesc, 1, &pgOptions, nullptr, nullptr, &programGroup));
 
     // Create pipeline
     OptixPipelineLinkOptions pipelineLinkOptions = {

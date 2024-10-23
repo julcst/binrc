@@ -1,11 +1,10 @@
 #include "mainapp.hpp"
 
 #include <cuda_runtime.h>
+#include <cuda_gl_interop.h>
 
 #include <framework/gl/buffer.hpp>
 #include <framework/imguiutil.hpp>
-
-#include <cuda_gl_interop.h>
 
 #include <glm/glm.hpp>
 using namespace glm;
@@ -13,15 +12,7 @@ using namespace glm;
 #include <iostream>
 #include <format>
 
-void printCudaDevices() {
-    int deviceCount, device;
-    cudaGetDeviceCount(&deviceCount);
-    for (device = 0; device < deviceCount; ++device) {
-        cudaDeviceProp prop;
-        cudaGetDeviceProperties(&prop, device);
-        std::cout << std::format("Device {} - {}, compute capability {}.{}, cores {}, warp size {}", device, prop.name, prop.major, prop.minor, prop.multiProcessorCount, prop.warpSize) << std::endl;
-    }
-}
+#include "cudautil.hpp"
 
 const std::string vs = R"(#version 460 core
 layout(location = 0) in vec2 position;
