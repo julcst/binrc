@@ -18,7 +18,7 @@ class OptixRenderer {
 public:
     OptixRenderer();
     ~OptixRenderer();
-    void render(uchar4* pos, int width, int height);
+    void render(float4* image, int width, int height);
 
 private:
     OptixDeviceContext context;

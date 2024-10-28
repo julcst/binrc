@@ -33,4 +33,5 @@ class MainApp : public App {
     Program blitProgram;
     cudaGraphicsResource_t cudaPboResource;
     OptixRenderer renderer;
+    float exposure = 1.0f;
 };

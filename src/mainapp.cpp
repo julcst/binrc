@@ -9,6 +9,8 @@
 #include <glm/glm.hpp>
 using namespace glm;
 
+#include <imgui.h>
+
 #include <iostream>
 #include <format>
 
@@ -26,8 +28,9 @@ const std::string fs = R"(#version 460 core
 in vec2 texCoord;
 out vec4 fragColor;
 layout(location = 0) uniform sampler2D tex;
+layout(location = 1) uniform float exposure;
 void main() {
-    fragColor = texture(tex, texCoord);
+    fragColor = texture(tex, texCoord) * exposure;
 })";
 
 MainApp::MainApp() : App(800, 600) {
@@ -37,6 +40,7 @@ MainApp::MainApp() : App(800, 600) {
 
     blitProgram.loadSource(vs, fs);
     blitProgram.use();
+    blitProgram.set(1, exposure);
 }
 
 MainApp::~MainApp() {
@@ -44,25 +48,28 @@ MainApp::~MainApp() {
 }
 
 void MainApp::resizeCallback(const vec2& res) {
-    pbo.allocate(res.x * res.y * 4, GL_STREAM_DRAW);
+    pbo.allocate(res.x * res.y * 4 * sizeof(float), GL_STREAM_DRAW);
     check(cudaGraphicsGLRegisterBuffer(&cudaPboResource, pbo.handle, cudaGraphicsMapFlagsWriteDiscard));
     blitTexture = Texture<GL_TEXTURE_2D>();
-    blitTexture.allocate2D(GL_RGBA8, res.x, res.y);
+    blitTexture.allocate2D(GL_RGBA32F, res.x, res.y);
     blitTexture.bindTextureUnit(0);
 }
 
 void MainApp::buildImGui() {
     ImGui::StatisticsWindow(delta, resolution);
+    ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+    if (ImGui::SliderFloat("Exposure", &exposure, 0.1f, 10.0f, "%.1f", ImGuiSliderFlags_Logarithmic)) blitProgram.set(1, exposure);
+    ImGui::End();
 }
 
 void MainApp::render() {
     // Map the buffer to CUDA
-    uchar4* devPtr;
+    float4* image;
     size_t size;
     check(cudaGraphicsMapResources(1, &cudaPboResource));
-    check(cudaGraphicsResourceGetMappedPointer((void**)&devPtr, &size, cudaPboResource));
+    check(cudaGraphicsResourceGetMappedPointer((void**)&image, &size, cudaPboResource));
 
-    renderer.render(devPtr, resolution.x, resolution.y);
+    renderer.render(image, resolution.x, resolution.y);
 
     check(cudaDeviceSynchronize());
 
@@ -71,7 +78,7 @@ void MainApp::render() {
 
     // Map the buffer to a texture
     pbo.bind();
-    glTextureSubImage2D(blitTexture.handle, 0, 0, 0, resolution.x, resolution.y, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+    glTextureSubImage2D(blitTexture.handle, 0, 0, 0, resolution.x, resolution.y, GL_RGBA, GL_FLOAT, nullptr);
 
     // Blit the texture using OpenGL
     fullscreenTriangle.draw();

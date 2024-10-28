@@ -102,7 +102,7 @@ OptixRenderer::~OptixRenderer() {
     check(optixDeviceContextDestroy(context));
 }
 
-void OptixRenderer::render(uchar4* image, int width, int height) {
+void OptixRenderer::render(float4* image, int width, int height) {
     params->image = image;
     params->dim = make_uint2(width, height);
 
