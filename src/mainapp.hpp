@@ -31,7 +31,7 @@ class MainApp : public App {
     Texture<GL_TEXTURE_2D> blitTexture;
     Mesh fullscreenTriangle;
     Program blitProgram;
-    cudaGraphicsResource_t cudaPboResource;
+    cudaGraphicsResource_t cudaPboResource = nullptr;
     OptixRenderer renderer;
     float exposure = 1.0f;
 };

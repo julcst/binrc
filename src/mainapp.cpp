@@ -41,6 +41,18 @@ MainApp::MainApp() : App(800, 600) {
     blitProgram.loadSource(vs, fs);
     blitProgram.use();
     blitProgram.set(1, exposure);
+
+    std::vector<float3> vertices = {
+        make_float3(-0.5f, -0.5f, 0.0f),
+        make_float3(0.5f, -0.5f, 0.0f),
+        make_float3(0.0f, 0.5f, 0.0f),
+    };
+
+    std::vector<uint3> indices = {
+        make_uint3(0, 1, 2),
+    };
+
+    renderer.buildGAS(vertices, indices);
 }
 
 MainApp::~MainApp() {
@@ -68,8 +80,9 @@ void MainApp::render() {
     size_t size;
     check(cudaGraphicsMapResources(1, &cudaPboResource));
     check(cudaGraphicsResourceGetMappedPointer((void**)&image, &size, cudaPboResource));
+    uint2 dim = make_uint2(resolution.x, resolution.y);
 
-    renderer.render(image, resolution.x, resolution.y);
+    renderer.render(image, dim);
 
     check(cudaDeviceSynchronize());
 
@@ -78,7 +91,7 @@ void MainApp::render() {
 
     // Map the buffer to a texture
     pbo.bind();
-    glTextureSubImage2D(blitTexture.handle, 0, 0, 0, resolution.x, resolution.y, GL_RGBA, GL_FLOAT, nullptr);
+    glTextureSubImage2D(blitTexture.handle, 0, 0, 0, dim.x, dim.y, GL_RGBA, GL_FLOAT, nullptr);
 
     // Blit the texture using OpenGL
     fullscreenTriangle.draw();
