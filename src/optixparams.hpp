@@ -2,9 +2,13 @@
 
 #include <cuda_runtime.h>
 
+#include <glm/glm.hpp>
+using namespace glm;
+
 struct Params {
-    float4* image;
-    uint2 dim;
+    vec4* image;
+    uvec2 dim;
     OptixTraversableHandle handle;
+    mat4 clipToWorld;
 };
 extern "C" __constant__ Params params;

@@ -60,11 +60,24 @@ MainApp::~MainApp() {
 }
 
 void MainApp::resizeCallback(const vec2& res) {
-    pbo.allocate(res.x * res.y * 4 * sizeof(float), GL_STREAM_DRAW);
+    pbo.allocate(res.x * res.y * sizeof(vec4), GL_STREAM_DRAW);
     check(cudaGraphicsGLRegisterBuffer(&cudaPboResource, pbo.handle, cudaGraphicsMapFlagsWriteDiscard));
     blitTexture = Texture<GL_TEXTURE_2D>();
     blitTexture.allocate2D(GL_RGBA32F, res.x, res.y);
     blitTexture.bindTextureUnit(0);
+    camera.resize(res.x / res.y);
+}
+
+void MainApp::keyCallback(Key key, Action action, Modifier modifier) {
+    if (action == Action::PRESS && key == Key::ESC) close();
+}
+
+void MainApp::scrollCallback(float amount) {
+    camera.zoom(amount);
+}
+
+void MainApp::moveCallback(const vec2& movement, bool leftButton, bool rightButton, bool middleButton) {
+    if (leftButton) camera.orbit(movement * 0.01f);
 }
 
 void MainApp::buildImGui() {
@@ -76,11 +89,13 @@ void MainApp::buildImGui() {
 
 void MainApp::render() {
     // Map the buffer to CUDA
-    float4* image;
+    vec4* image;
     size_t size;
     check(cudaGraphicsMapResources(1, &cudaPboResource));
-    check(cudaGraphicsResourceGetMappedPointer((void**)&image, &size, cudaPboResource));
-    uint2 dim = make_uint2(resolution.x, resolution.y);
+    check(cudaGraphicsResourceGetMappedPointer(reinterpret_cast<void**>(&image), &size, cudaPboResource));
+    uvec2 dim = uvec2(resolution);
+
+    if(camera.updateIfChanged()) renderer.setCamera(inverse(camera.projectionMatrix * camera.viewMatrix));
 
     renderer.render(image, dim);
 

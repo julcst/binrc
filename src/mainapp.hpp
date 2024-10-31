@@ -5,6 +5,7 @@
 #include <framework/gl/texture.hpp>
 #include <framework/mesh.hpp>
 #include <framework/gl/program.hpp>
+#include <framework/camera.hpp>
 
 #include <cuda_runtime.h>
 
@@ -16,14 +17,18 @@ using namespace glm;
 class MainApp : public App {
   public:
     MainApp();
-    ~MainApp();
+    ~MainApp() override;
+    MainApp(const MainApp&) = delete;
+    MainApp& operator=(const MainApp&) = delete;
+    MainApp(MainApp&&) = delete;
+    MainApp& operator=(MainApp&&) = delete;
   protected:
     void render() override;
     void buildImGui() override;
-    // void keyCallback(Key key, Action action) override;
+    void keyCallback(Key key, Action action, Modifier modifier) override;
     // void clickCallback(Button button, Action action, Modifier modifier) override;
-    // void scrollCallback(float amount) override;
-    // void moveCallback(const vec2& movement, bool leftButton, bool rightButton, bool middleButton) override;
+    void scrollCallback(float amount) override;
+    void moveCallback(const vec2& movement, bool leftButton, bool rightButton, bool middleButton) override;
     void resizeCallback(const vec2& resolution) override;
   private:
   void resize(int width, int height);
@@ -33,5 +38,6 @@ class MainApp : public App {
     Program blitProgram;
     cudaGraphicsResource_t cudaPboResource = nullptr;
     OptixRenderer renderer;
+    Camera camera;
     float exposure = 1.0f;
 };
