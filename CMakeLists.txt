@@ -13,6 +13,8 @@ add_compile_definitions(GLM_FORCE_CUDA)
 set(GLM_ENABLE_FAST_MATH ON)
 set(GLM_ENABLE_CXX_20 ON)
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -diag-suppress 20012 --use_fast_math") # Disables glm warnings
+set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Fin dependencies
 find_package(CUDAToolkit 12 REQUIRED)
@@ -29,7 +31,7 @@ set(OPTIXIR
     src/optixpathtracer.cu
 )
 add_library(optixir OBJECT ${OPTIXIR})
-target_link_libraries(optixir CUDA::cudart)
+target_link_libraries(optixir CUDA::cudart glm)
 target_include_directories(optixir PRIVATE ${OPTIX_DIR}/include ${CUDAToolkit_INCLUDE_DIRS})
 set_property(TARGET optixir PROPERTY CUDA_OPTIX_COMPILATION ON)
 

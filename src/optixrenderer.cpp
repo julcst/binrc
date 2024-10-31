@@ -168,7 +168,11 @@ void OptixRenderer::buildGAS(const std::vector<float3>& vertices, const std::vec
     params->handle = gasHandle;
 }
 
-void OptixRenderer::render(float4* image, uint2 dim) {
+void OptixRenderer::setCamera(const mat4& clipToWorld) {
+    params->clipToWorld = clipToWorld;
+}
+
+void OptixRenderer::render(vec4* image, uvec2 dim) {
     params->image = image;
     params->dim = dim;
 
