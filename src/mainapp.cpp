@@ -43,33 +43,8 @@ MainApp::MainApp() : App(800, 600) {
     blitProgram.loadSource(vs, fs);
     blitProgram.use();
     blitProgram.set(1, exposure);
-
-    std::vector<float3> vertices = {
-        make_float3(-0.5f, -0.5f, 0.0f),
-        make_float3(0.5f, -0.5f, 0.0f),
-        make_float3(0.0f, 0.5f, 0.0f),
-    };
-
-    std::vector<uint3> indices = {
-        make_uint3(0, 1, 2),
-    };
-
-    const auto handle = renderer.buildGAS(vertices, indices);
-    const auto instances = {
-        OptixInstance {
-            .transform = {
-                1.0f, 0.0f, 0.0f, 0.0f,
-                0.0f, 1.0f, 0.0f, 0.0f,
-                0.0f, 0.0f, 1.0f, 0.0f,
-            },
-            .instanceId = 0,
-            .sbtOffset = 0,
-            .visibilityMask = 255,
-            .flags = OPTIX_INSTANCE_FLAG_NONE,
-            .traversableHandle = handle,
-        },
-    };
-    renderer.buildIAS(instances);
+    
+    renderer.loadGLTF("testscene.glb");
 }
 
 MainApp::~MainApp() {
