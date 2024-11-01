@@ -48,7 +48,7 @@ OptixRenderer::OptixRenderer() {
 #endif
     OptixPipelineCompileOptions pipelineCompileOptions = {
         .usesMotionBlur = false,
-        .traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_GAS,
+        .traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING,
         .numPayloadValues = 3,
         .numAttributeValues = 2,
         .exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE,
@@ -119,12 +119,14 @@ OptixRenderer::OptixRenderer() {
 
 OptixRenderer::~OptixRenderer() {
     check(cudaFree(reinterpret_cast<void*>(raygenRecord)));
+    check(cudaFree(reinterpret_cast<void*>(missRecord)));
+    check(cudaFree(reinterpret_cast<void*>(hitRecord)));
     check(cudaFree(reinterpret_cast<void*>(params)));
     check(optixPipelineDestroy(pipeline));
     check(optixDeviceContextDestroy(context));
 }
 
-void OptixRenderer::buildGAS(const std::vector<float3>& vertices, const std::vector<uint3>& indices) {
+OptixTraversableHandle OptixRenderer::buildGAS(const std::vector<float3>& vertices, const std::vector<uint3>& indices) {
     // Move data to GPU
     CUdeviceptr d_vertices, d_indices;
     check(cudaMalloc(reinterpret_cast<void**>(&d_vertices), vertices.size() * sizeof(float3)));
@@ -132,10 +134,6 @@ void OptixRenderer::buildGAS(const std::vector<float3>& vertices, const std::vec
     check(cudaMalloc(reinterpret_cast<void**>(&d_indices), indices.size() * sizeof(uint3)));
     check(cudaMemcpy(reinterpret_cast<void*>(d_indices), indices.data(), indices.size() * sizeof(uint3), cudaMemcpyHostToDevice));
 
-    OptixAccelBuildOptions accelOptions = {
-        .buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_TRACE,
-        .operation = OPTIX_BUILD_OPERATION_BUILD,
-    };
     std::array<uint, 1> flags = { OPTIX_GEOMETRY_FLAG_NONE };
     OptixBuildInput buildInput = {
         .type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES,
@@ -154,18 +152,56 @@ void OptixRenderer::buildGAS(const std::vector<float3>& vertices, const std::vec
     };
 
     // Allocate memory for acceleration structure
+    OptixAccelBuildOptions accelOptions = {
+        .buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_TRACE,
+        .operation = OPTIX_BUILD_OPERATION_BUILD,
+    };
     OptixAccelBufferSizes bufferSizes;
     check(optixAccelComputeMemoryUsage(context, &accelOptions, &buildInput, 1, &bufferSizes));
     CUdeviceptr d_tempBuffer, d_outputBuffer;
     check(cudaMalloc(reinterpret_cast<void**>(&d_tempBuffer), bufferSizes.tempSizeInBytes));
     check(cudaMalloc(reinterpret_cast<void**>(&d_outputBuffer), bufferSizes.outputSizeInBytes));
 
-    OptixTraversableHandle gasHandle;
-    optixAccelBuild(context, nullptr, &accelOptions, &buildInput, 1, d_tempBuffer, bufferSizes.tempSizeInBytes, d_outputBuffer, bufferSizes.outputSizeInBytes, &gasHandle, nullptr, 0);
+    OptixTraversableHandle handle;
+    optixAccelBuild(context, nullptr, &accelOptions, &buildInput, 1, d_tempBuffer, bufferSizes.tempSizeInBytes, d_outputBuffer, bufferSizes.outputSizeInBytes, &handle, nullptr, 0);
 
     check(cudaFree(reinterpret_cast<void*>(d_vertices)));
+    check(cudaFree(reinterpret_cast<void*>(d_indices)));
+    check(cudaFree(reinterpret_cast<void*>(d_tempBuffer)));
+    // FIXME: d_outputBuffer is never freed
 
-    params->handle = gasHandle;
+    return handle;
+}
+
+void OptixRenderer::buildIAS(const std::vector<OptixInstance>& instances) {
+    // TODO: Make d_instances persistent
+    CUdeviceptr d_instances;
+    check(cudaMalloc(reinterpret_cast<void**>(&d_instances), instances.size() * sizeof(OptixInstance)));
+    check(cudaMemcpy(reinterpret_cast<void*>(d_instances), instances.data(), instances.size() * sizeof(OptixInstance), cudaMemcpyHostToDevice));
+
+    OptixBuildInput buildInput = {
+        .type = OPTIX_BUILD_INPUT_TYPE_INSTANCES,
+        .instanceArray = {
+            .instances = d_instances,
+            .numInstances = static_cast<unsigned int>(instances.size()),
+        },
+    };
+
+    OptixAccelBuildOptions accelOptions = {
+        .buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_TRACE,
+        .operation = OPTIX_BUILD_OPERATION_BUILD,
+    };
+    OptixAccelBufferSizes bufferSizes;
+    check(optixAccelComputeMemoryUsage(context, &accelOptions, &buildInput, 1, &bufferSizes));
+    CUdeviceptr d_tempBuffer, d_outputBuffer;
+    check(cudaMalloc(reinterpret_cast<void**>(&d_tempBuffer), bufferSizes.tempSizeInBytes));
+    check(cudaMalloc(reinterpret_cast<void**>(&d_outputBuffer), bufferSizes.outputSizeInBytes));
+
+    optixAccelBuild(context, nullptr, &accelOptions, &buildInput, 1, d_tempBuffer, bufferSizes.tempSizeInBytes, d_outputBuffer, bufferSizes.outputSizeInBytes, &params->handle, nullptr, 0);
+
+    check(cudaFree(reinterpret_cast<void*>(d_instances)));
+    check(cudaFree(reinterpret_cast<void*>(d_tempBuffer)));
+    // FIXME: d_outputBuffer is never freed
 }
 
 void OptixRenderer::setCamera(const mat4& clipToWorld) {

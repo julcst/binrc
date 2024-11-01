@@ -35,7 +35,8 @@ public:
     OptixRenderer& operator=(OptixRenderer&&) = delete;
     void render(vec4* image, uvec2 dim);
     void setCamera(const mat4& clipToWorld);
-    void buildGAS(const std::vector<float3>& vertices, const std::vector<uint3>& indices);
+    OptixTraversableHandle buildGAS(const std::vector<float3>& vertices, const std::vector<uint3>& indices);
+    void buildIAS(const std::vector<OptixInstance>& instances);
 private:
     OptixDeviceContext context;
     OptixPipeline pipeline;

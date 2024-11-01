@@ -2,11 +2,13 @@
 
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
+#include <optix_types.h>
 
 #include <framework/gl/buffer.hpp>
 #include <framework/imguiutil.hpp>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
 using namespace glm;
 
 #include <imgui.h>
@@ -52,11 +54,26 @@ MainApp::MainApp() : App(800, 600) {
         make_uint3(0, 1, 2),
     };
 
-    renderer.buildGAS(vertices, indices);
+    const auto handle = renderer.buildGAS(vertices, indices);
+    const auto instances = {
+        OptixInstance {
+            .transform = {
+                1.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f,
+            },
+            .instanceId = 0,
+            .sbtOffset = 0,
+            .visibilityMask = 255,
+            .flags = OPTIX_INSTANCE_FLAG_NONE,
+            .traversableHandle = handle,
+        },
+    };
+    renderer.buildIAS(instances);
 }
 
 MainApp::~MainApp() {
-    cudaGraphicsUnregisterResource(cudaPboResource);
+    check(cudaGraphicsUnregisterResource(cudaPboResource));
 }
 
 void MainApp::resizeCallback(const vec2& res) {
@@ -93,7 +110,7 @@ void MainApp::render() {
     size_t size;
     check(cudaGraphicsMapResources(1, &cudaPboResource));
     check(cudaGraphicsResourceGetMappedPointer(reinterpret_cast<void**>(&image), &size, cudaPboResource));
-    uvec2 dim = uvec2(resolution);
+    const auto dim = uvec2(resolution);
 
     if(camera.updateIfChanged()) renderer.setCamera(inverse(camera.projectionMatrix * camera.viewMatrix));
 

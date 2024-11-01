@@ -44,13 +44,13 @@ extern "C" __global__ void __raygen__rg() {
     const uvec3 idx = cudaToGlm(optixGetLaunchIndex());
     const uvec3 dim = cudaToGlm(optixGetLaunchDimensions());
     const vec2 uv = vec2(idx) / vec2(dim);
+    const uint i = idx.y * params.dim.x + idx.x;
 
     const Ray ray = makeCameraRay(uv);
     uint a, b, c;
     optixTrace(params.handle, glmToCuda(ray.origin), glmToCuda(ray.direction), 0.0f, 1e32f, 0.0f, OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE, 0, 0, 0, a, b, c);
     const Payload payload = getPayload(a, b, c);
 
-    const uint i = idx.y * params.dim.x + idx.x;
     params.image[i] = vec4(payload.color, 1.0f);
 }
 
