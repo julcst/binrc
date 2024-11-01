@@ -1,11 +1,10 @@
 cmake_minimum_required(VERSION 3.28...3.31)
-project(biNRC LANGUAGES CXX CUDA)
 
 # FIXME: These should be cmake -D arguments but I am lazy
-set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures to compile for")
-set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc CACHE PATH "Path to the CUDA compiler")
-set(CMAKE_CUDA_HOST_COMPILER /usr/bin/clang++ CACHE PATH "Path to the host C++ compiler")
-set(OPTIX_DIR ../NVIDIA-OptiX-SDK-8.0.0-linux64-x86_64 CACHE PATH "Path to the OptiX SDK")
+set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures to compile for" FORCE)
+set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc CACHE PATH "Path to the CUDA compiler" FORCE)
+set(CMAKE_CUDA_HOST_COMPILER /usr/bin/clang++ CACHE PATH "Path to the host C++ compiler" FORCE)
+set(OPTIX_DIR ../NVIDIA-OptiX-SDK-8.0.0-linux64-x86_64 CACHE PATH "Path to the OptiX SDK" FORCE)
 
 # Config
 add_compile_definitions(CUDA_VERSION=12060)
@@ -16,6 +15,8 @@ set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -diag-suppress 20012 --use_fast_math")
 set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+project(biNRC LANGUAGES CXX CUDA)
+
 # Fin dependencies
 find_package(CUDAToolkit 12 REQUIRED)
 
@@ -24,7 +25,11 @@ FetchContent_Declare(
     framework
     URL https://github.com/julcst/gltemplate/archive/v1.5.tar.gz
 )
-FetchContent_MakeAvailable(framework)
+FetchContent_Declare(
+    fastgltf
+    URL https://github.com/spnda/fastgltf/archive/v0.8.0.tar.gz
+)
+FetchContent_MakeAvailable(framework fastgltf)
 
 # Build the OptiX IR
 set(OPTIXIR
@@ -47,11 +52,12 @@ set(SRC
     src/main.cpp
     src/mainapp.cpp
     src/optixrenderer.cpp
+    src/scene.cpp
 )
 
 # Add the executable
 add_executable(${PROJECT_NAME} ${SRC})
-target_link_libraries(${PROJECT_NAME} CUDA::cudart framework)
+target_link_libraries(${PROJECT_NAME} CUDA::cudart framework fastgltf)
 target_include_directories(${PROJECT_NAME} PUBLIC src ${OPTIX_DIR}/include ${CUDAToolkit_INCLUDE_DIRS} ${CMAKE_BINARY_DIR}/include)
 
 # Set compiler flags
