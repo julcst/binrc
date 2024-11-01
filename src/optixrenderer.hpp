@@ -5,11 +5,13 @@
 
 #include <array>
 #include <vector>
+#include <filesystem>
 
 #include <glm/glm.hpp>
 using namespace glm;
 
 #include "optixparams.hpp"
+#include "scene.hpp"
 
 struct RaygenData {};
 struct MissData {};
@@ -35,8 +37,7 @@ public:
     OptixRenderer& operator=(OptixRenderer&&) = delete;
     void render(vec4* image, uvec2 dim);
     void setCamera(const mat4& clipToWorld);
-    OptixTraversableHandle buildGAS(const std::vector<float3>& vertices, const std::vector<uint3>& indices);
-    void buildIAS(const std::vector<OptixInstance>& instances);
+    void loadGLTF(const std::filesystem::path& path);
 private:
     OptixDeviceContext context;
     OptixPipeline pipeline;
@@ -45,4 +46,5 @@ private:
     MissRecord* missRecord;
     HitRecord* hitRecord;
     Params* params;
+    Scene scene;
 };
