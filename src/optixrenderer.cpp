@@ -49,7 +49,7 @@ OptixRenderer::OptixRenderer() {
     OptixPipelineCompileOptions pipelineCompileOptions = {
         .usesMotionBlur = false,
         .traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING,
-        .numPayloadValues = 3,
+        .numPayloadValues = 4,
         .numAttributeValues = 2,
         .exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE,
         .pipelineLaunchParamsVariableName = "params",
@@ -89,7 +89,7 @@ OptixRenderer::OptixRenderer() {
 
     // Create pipeline
     OptixPipelineLinkOptions pipelineLinkOptions = {
-        .maxTraceDepth = 1,
+        .maxTraceDepth = 16,
     };
     check(optixPipelineCreate(context, &pipelineCompileOptions, &pipelineLinkOptions, programGroups.data(), programGroups.size(), nullptr, nullptr, &pipeline));
 

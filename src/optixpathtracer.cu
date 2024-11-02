@@ -20,23 +20,26 @@ __device__ Ray makeCameraRay(const vec2& uv) {
 
 struct Payload {
     vec3 color;
+    uint depth;
 };
 
 __device__ void setPayload(const Payload& value) {
     optixSetPayload_0(__float_as_uint(value.color.x));
     optixSetPayload_1(__float_as_uint(value.color.y));
     optixSetPayload_2(__float_as_uint(value.color.z));
+    optixSetPayload_3(value.depth);
 }
 
 __device__ Payload getPayload() {
     return Payload{
-        vec3(__uint_as_float(optixGetPayload_0()), __uint_as_float(optixGetPayload_1()), __uint_as_float(optixGetPayload_2()))
+        vec3(__uint_as_float(optixGetPayload_0()), __uint_as_float(optixGetPayload_1()), __uint_as_float(optixGetPayload_2())), optixGetPayload_3()
     };
 }
 
-__device__ Payload getPayload(uint a, uint b, uint c) {
+__device__ Payload getPayload(uint a, uint b, uint c, uint d) {
     return Payload{
-        vec3(__uint_as_float(a), __uint_as_float(b), __uint_as_float(c))
+        vec3(__uint_as_float(a), __uint_as_float(b), __uint_as_float(c)), d
+
     };
 }
 
@@ -46,10 +49,10 @@ extern "C" __global__ void __raygen__rg() {
     const vec2 uv = vec2(idx) / vec2(dim);
     const uint i = idx.y * params.dim.x + idx.x;
 
-    const Ray ray = makeCameraRay(uv);
+    const auto ray = makeCameraRay(uv);
 
     // Trace the ray
-    uint a, b, c;
+    uint a, b, c, d = 0;
     optixTrace(
         params.handle,
         glmToCuda(ray.origin), glmToCuda(ray.direction),
@@ -57,9 +60,9 @@ extern "C" __global__ void __raygen__rg() {
         0.0f, // rayTime
         OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
         0, 1, 0, // SBT offset, stride, miss index
-        a, b, c // Payload
+        a, b, c, d // Payload
     );
-    const Payload payload = getPayload(a, b, c);
+    const auto payload = getPayload(a, b, c, d);
 
     // TODO: Reorder
 
@@ -86,8 +89,27 @@ extern "C" __global__ void __closesthit__ch() {
     const auto worldSpaceNormal = cudaToGlm(optixTransformNormalFromObjectToWorldSpace(glmToCuda(objectSpaceNormal)));
     const auto normal = normalize(worldSpaceNormal);
 
+    const auto reflectOrigin = hitPoint + 1e-3f * normal;
+    const auto reflectDir = reflect(rayDir, normal);
+
+    uint depth = optixGetPayload_3() + 1;
+    uint a, b, c;
+    if (depth < 16) {
+        optixTrace(
+            params.handle,
+            glmToCuda(reflectOrigin), glmToCuda(reflectDir),
+            0.0f, 1e32f, // tmin, tmax
+            0.0f, // rayTime
+            OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
+            0, 1, 0, // SBT offset, stride, miss index
+            a, b, c, depth // Payload
+        );
+    }
+    const auto payload2 = getPayload(a, b, c, depth);
+
     Payload payload;
-    payload.color = normal * 0.5f + 0.5f; 
+    payload.color = payload2.color * 0.7f; 
+    payload.depth = depth;
     setPayload(payload);
 }
 
