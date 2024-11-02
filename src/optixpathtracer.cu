@@ -47,18 +47,32 @@ extern "C" __global__ void __raygen__rg() {
     const uint i = idx.y * params.dim.x + idx.x;
 
     const Ray ray = makeCameraRay(uv);
+
+    // Trace the ray
     uint a, b, c;
-    optixTrace(params.handle, glmToCuda(ray.origin), glmToCuda(ray.direction), 0.0f, 1e32f, 0.0f, OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE, 0, 0, 0, a, b, c);
+    optixTrace(
+        params.handle,
+        glmToCuda(ray.origin), glmToCuda(ray.direction),
+        0.0f, 1e32f, // tmin, tmax
+        0.0f, // rayTime
+        OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
+        0, 1, 0, // SBT offset, stride, miss index
+        a, b, c // Payload
+    );
     const Payload payload = getPayload(a, b, c);
+
+    // TODO: Reorder
 
     params.image[i] = vec4(payload.color, 1.0f);
 }
 
 extern "C" __global__ void __closesthit__ch() {
-    const vec2 bary = cudaToGlm(optixGetTriangleBarycentrics());
+    const vec2 bary2 = cudaToGlm(optixGetTriangleBarycentrics());
+    const vec3 bary = vec3(bary2, 1.0f - bary2.x - bary2.y);
+    const GASData* data = reinterpret_cast<GASData*>(optixGetSbtDataPointer());
 
     Payload payload;
-    payload.color = vec3(bary.x, bary.y, 1.0f - bary.x - bary.y); 
+    payload.color = vec3(data->materialIndex * 0.2f); 
     setPayload(payload);
 }
 

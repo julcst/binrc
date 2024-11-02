@@ -85,7 +85,6 @@ OptixRenderer::OptixRenderer() {
             },
         },
     };
-    std::array<OptixProgramGroup, programDecriptions.size()> programGroups;
     check(optixProgramGroupCreate(context, programDecriptions.data(), programDecriptions.size(), &pgOptions, nullptr, nullptr, programGroups.data()));
 
     // Create pipeline
@@ -101,15 +100,12 @@ OptixRenderer::OptixRenderer() {
     check(cudaMallocManaged(reinterpret_cast<void**>(&missRecord), sizeof(MissRecord)));
     check(optixSbtRecordPackHeader(programGroups[1], reinterpret_cast<void*>(missRecord)));
 
-    check(cudaMallocManaged(reinterpret_cast<void**>(&hitRecord), sizeof(HitRecord)));
-    check(optixSbtRecordPackHeader(programGroups[2], reinterpret_cast<void*>(hitRecord)));
-
     sbt = {
         .raygenRecord = reinterpret_cast<CUdeviceptr>(raygenRecord),
         .missRecordBase = reinterpret_cast<CUdeviceptr>(missRecord),
         .missRecordStrideInBytes = sizeof(MissRecord),
         .missRecordCount = 1,
-        .hitgroupRecordBase = reinterpret_cast<CUdeviceptr>(hitRecord),
+        .hitgroupRecordBase = 0,
         .hitgroupRecordStrideInBytes = sizeof(HitRecord),
         .hitgroupRecordCount = 1,
     };
@@ -120,14 +116,13 @@ OptixRenderer::OptixRenderer() {
 OptixRenderer::~OptixRenderer() {
     check(cudaFree(reinterpret_cast<void*>(raygenRecord)));
     check(cudaFree(reinterpret_cast<void*>(missRecord)));
-    check(cudaFree(reinterpret_cast<void*>(hitRecord)));
     check(cudaFree(reinterpret_cast<void*>(params)));
     check(optixPipelineDestroy(pipeline));
     check(optixDeviceContextDestroy(context));
 }
 
 void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
-    params->handle = scene.loadGLTF(context, path);
+    scene.loadGLTF(context, params, programGroups[2], sbt, path);
 }
 
 void OptixRenderer::setCamera(const mat4& clipToWorld) {

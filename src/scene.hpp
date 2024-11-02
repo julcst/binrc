@@ -9,11 +9,23 @@
 #include <glm/glm.hpp>
 using namespace glm;
 
+#include "optixparams.hpp"
+
+struct Geometry {
+    OptixTraversableHandle handle;
+    CUdeviceptr gasBuffer;
+    uint sbtOffset;
+};
+
 struct Scene {
-    OptixInstance* instances = nullptr;
     uint nInstances = 0;
+    OptixInstance* instances = nullptr;
+    
+    uint nGeometries = 0;
+    HitRecord* hitRecords = nullptr;
+
     CUdeviceptr iasBuffer = 0;
-    std::vector<CUdeviceptr> gasBuffers;
+    std::vector<std::vector<Geometry>> meshToGeometries;
 
     Scene() = default;
     ~Scene();
@@ -22,11 +34,10 @@ struct Scene {
     Scene(Scene&&) = delete;
     Scene& operator=(Scene&&) = delete;
 
-    OptixTraversableHandle loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& path);
-    
+    void loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& o, OptixShaderBindingTable& sbt, const std::filesystem::path& path);
+
   private:
     void free();
-    OptixTraversableHandle buildGAS(OptixDeviceContext ctx, const std::vector<OptixBuildInput>& buildInputs);
     OptixTraversableHandle buildIAS(OptixDeviceContext ctx);
     OptixTraversableHandle updateIAS(OptixDeviceContext ctx);
 };

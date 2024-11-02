@@ -13,20 +13,6 @@ using namespace glm;
 #include "optixparams.hpp"
 #include "scene.hpp"
 
-struct RaygenData {};
-struct MissData {};
-struct HitData {};
-
-template <typename T>
-struct Record {
-    __align__(OPTIX_SBT_RECORD_ALIGNMENT) std::array<char, OPTIX_SBT_RECORD_HEADER_SIZE> header;
-    T data;
-};
-
-using RaygenRecord = Record<RaygenData>;
-using MissRecord = Record<MissData>;
-using HitRecord = Record<HitData>;
-
 class OptixRenderer {
 public:
     OptixRenderer();
@@ -42,9 +28,9 @@ private:
     OptixDeviceContext context;
     OptixPipeline pipeline;
     OptixShaderBindingTable sbt;
+    std::array<OptixProgramGroup, 3> programGroups;
     RaygenRecord* raygenRecord;
     MissRecord* missRecord;
-    HitRecord* hitRecord;
     Params* params;
     Scene scene;
 };
