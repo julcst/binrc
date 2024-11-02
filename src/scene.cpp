@@ -38,6 +38,12 @@ void Scene::free() {
         }
     }
     check(cudaFree(reinterpret_cast<void*>(iasBuffer)));
+    for (auto indexBuffer : indexBuffers) {
+        check(cudaFree(reinterpret_cast<void*>(indexBuffer)));
+    }
+    for (auto vertexData : vertexDatas) {
+        check(cudaFree(reinterpret_cast<void*>(vertexData)));
+    }
 }
 
 std::tuple<OptixTraversableHandle, CUdeviceptr> buildGAS(OptixDeviceContext ctx, const std::vector<OptixBuildInput>& buildInputs) {
@@ -96,6 +102,8 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
     // Build geometry
     std::array<uint, 1> flags = { OPTIX_GEOMETRY_FLAG_NONE };
     meshToGeometries = std::vector<std::vector<Geometry>>(asset->meshes.size());
+    indexBuffers = std::vector<uint3*>(nGeometries);
+    vertexDatas = std::vector<VertexData*>(nGeometries);
 
     uint geometryID = 0;
     for (uint i = 0; i < asset->meshes.size(); i++) {
@@ -116,6 +124,13 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
             check(cudaMallocManaged(reinterpret_cast<void**>(&indices), nTriangles * sizeof(uint3)));
             fastgltf::iterateAccessorWithIndex<uint>(asset.get(), indexAcc, [&](const uint& index, auto i) {
                 indices[i] = index;
+            });
+
+            VertexData* vertexData;
+            check(cudaMallocManaged(reinterpret_cast<void**>(&vertexData), nVertices * sizeof(VertexData)));
+            auto& normalAcc = asset->accessors[primitive.findAttribute("NORMAL")->accessorIndex];
+            fastgltf::iterateAccessorWithIndex<vec3>(asset.get(), normalAcc, [&](const vec3& normal, auto i) {
+                vertexData[i].normal = normal;
             });
 
             const auto [handle, gasBuffer] = buildGAS(ctx, { OptixBuildInput {
@@ -140,16 +155,18 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
                 },
             }});
 
+            uint materialIdx = primitive.materialIndex.value_or(0);
             optixSbtRecordPackHeader(program, reinterpret_cast<void*>(&hitRecords[geometryID]));
-            hitRecords[geometryID].data = GASData {
+            hitRecords[geometryID].data = HitData {
                 .indexBuffer = reinterpret_cast<uint3*>(indices),
-                .vertexBuffer = reinterpret_cast<VertexData*>(vertices),
-                .materialIndex = geometryID,
+                .vertexData = reinterpret_cast<VertexData*>(vertexData),
+                .materialIndex = materialIdx,
             };
 
             check(cudaFree(reinterpret_cast<void*>(vertices)));
-            check(cudaFree(reinterpret_cast<void*>(indices)));
 
+            indexBuffers[geometryID] = reinterpret_cast<uint3*>(indices);
+            vertexDatas[geometryID] = vertexData;
             meshToGeometries[i].emplace_back(handle, gasBuffer, geometryID);
             geometryID++;
         }

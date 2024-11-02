@@ -67,12 +67,27 @@ extern "C" __global__ void __raygen__rg() {
 }
 
 extern "C" __global__ void __closesthit__ch() {
-    const vec2 bary2 = cudaToGlm(optixGetTriangleBarycentrics());
-    const vec3 bary = vec3(bary2, 1.0f - bary2.x - bary2.y);
-    const GASData* data = reinterpret_cast<GASData*>(optixGetSbtDataPointer());
+    // Get optix built-in variables
+    const auto bary2 = cudaToGlm(optixGetTriangleBarycentrics());
+    const auto bary = vec3(1.0f - bary2.x - bary2.y, bary2);
+    const auto data = reinterpret_cast<HitData*>(optixGetSbtDataPointer());
+    const auto rayOrigin = cudaToGlm(optixGetWorldRayOrigin());
+    const auto rayDir = cudaToGlm(optixGetWorldRayDirection());
+    const auto hitPoint = rayOrigin + optixGetRayTmax() * rayDir;
+
+    // Get triangle vertices
+    const auto idx = data->indexBuffer[optixGetPrimitiveIndex()];
+    const auto v0 = data->vertexData[idx.x];
+    const auto v1 = data->vertexData[idx.y];
+    const auto v2 = data->vertexData[idx.z];
+
+    // Interpolate normal
+    const auto objectSpaceNormal = bary.x * v0.normal + bary.y * v1.normal + bary.z * v2.normal;
+    const auto worldSpaceNormal = cudaToGlm(optixTransformNormalFromObjectToWorldSpace(glmToCuda(objectSpaceNormal)));
+    const auto normal = normalize(worldSpaceNormal);
 
     Payload payload;
-    payload.color = vec3(data->materialIndex * 0.2f); 
+    payload.color = normal * 0.5f + 0.5f; 
     setPayload(payload);
 }
 

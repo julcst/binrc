@@ -27,6 +27,9 @@ struct Scene {
     CUdeviceptr iasBuffer = 0;
     std::vector<std::vector<Geometry>> meshToGeometries;
 
+    std::vector<uint3*> indexBuffers;
+    std::vector<VertexData*> vertexDatas;
+
     Scene() = default;
     ~Scene();
     Scene(const Scene&) = delete;

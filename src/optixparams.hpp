@@ -20,14 +20,13 @@ struct VertexData {
     vec2 texCoord;
 };
 
-struct GASData {
-    uint3* indexBuffer;        // Pointer to triangle indices
-    VertexData* vertexBuffer;  // Pointer to vertex data
-    uint materialIndex;         // Material index or identifier
-};
-
 struct RaygenData {};
 struct MissData {};
+struct HitData {
+    uint3* indexBuffer;      // Pointer to triangle indices
+    VertexData* vertexData;  // Pointer to vertex data
+    uint materialIndex;      // Material index or identifier
+};
 
 template <typename T>
 struct Record {
@@ -37,4 +36,4 @@ struct Record {
 
 using RaygenRecord = Record<RaygenData>;
 using MissRecord = Record<MissData>;
-using HitRecord = Record<GASData>;
+using HitRecord = Record<HitData>;
