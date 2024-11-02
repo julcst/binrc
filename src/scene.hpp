@@ -13,7 +13,7 @@ struct Scene {
     OptixInstance* instances = nullptr;
     uint nInstances = 0;
     CUdeviceptr iasBuffer = 0;
-    CUdeviceptr gasBuffer = 0;
+    std::vector<CUdeviceptr> gasBuffers;
 
     Scene() = default;
     ~Scene();
@@ -23,6 +23,9 @@ struct Scene {
     Scene& operator=(Scene&&) = delete;
 
     OptixTraversableHandle loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& path);
+    
+  private:
+    void free();
     OptixTraversableHandle buildGAS(OptixDeviceContext ctx, const std::vector<OptixBuildInput>& buildInputs);
     OptixTraversableHandle buildIAS(OptixDeviceContext ctx);
     OptixTraversableHandle updateIAS(OptixDeviceContext ctx);
