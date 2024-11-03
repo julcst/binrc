@@ -43,6 +43,37 @@ __device__ Payload getPayload(uint a, uint b, uint c, uint d) {
     };
 }
 
+__device__ Payload trace(const Ray& ray, uint depth = 0) {
+    uint a, b, c;
+    optixTrace(
+        params.handle,
+        glmToCuda(ray.origin), glmToCuda(ray.direction),
+        0.0f, 1e32f, // tmin, tmax
+        0.0f, // rayTime
+        OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
+        0, 1, 0, // SBT offset, stride, miss index
+        a, b, c, depth // Payload
+    );
+    return getPayload(a, b, c, depth);
+}
+
+// Has to be called in raygen
+__device__ Payload rtrace(const Ray& ray, uint depth = 0) {
+    uint a, b, c;
+    optixTraverse(
+        params.handle,
+        glmToCuda(ray.origin), glmToCuda(ray.direction),
+        0.0f, 1e32f, // tmin, tmax
+        0.0f, // rayTime
+        OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
+        0, 1, 0, // SBT offset, stride, miss index
+        a, b, c, depth // Payload
+    );
+    optixReorder(); // TODO: Provide coherence hints
+    optixInvoke(a, b, c, depth);
+    return getPayload(a, b, c, depth);
+}
+
 extern "C" __global__ void __raygen__rg() {
     const uvec3 idx = cudaToGlm(optixGetLaunchIndex());
     const uvec3 dim = cudaToGlm(optixGetLaunchDimensions());
@@ -51,18 +82,7 @@ extern "C" __global__ void __raygen__rg() {
 
     const auto ray = makeCameraRay(uv);
 
-    // Trace the ray
-    uint a, b, c, d = 0;
-    optixTrace(
-        params.handle,
-        glmToCuda(ray.origin), glmToCuda(ray.direction),
-        0.0f, 1e32f, // tmin, tmax
-        0.0f, // rayTime
-        OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
-        0, 1, 0, // SBT offset, stride, miss index
-        a, b, c, d // Payload
-    );
-    const auto payload = getPayload(a, b, c, d);
+    const auto payload = trace(ray);
 
     // TODO: Reorder
 
@@ -91,25 +111,16 @@ extern "C" __global__ void __closesthit__ch() {
 
     const auto reflectOrigin = hitPoint + 1e-3f * normal;
     const auto reflectDir = reflect(rayDir, normal);
-
-    uint depth = optixGetPayload_3() + 1;
-    uint a, b, c;
-    if (depth < 16) {
-        optixTrace(
-            params.handle,
-            glmToCuda(reflectOrigin), glmToCuda(reflectDir),
-            0.0f, 1e32f, // tmin, tmax
-            0.0f, // rayTime
-            OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
-            0, 1, 0, // SBT offset, stride, miss index
-            a, b, c, depth // Payload
-        );
-    }
-    const auto payload2 = getPayload(a, b, c, depth);
+    const auto reflectRay = Ray{reflectOrigin, reflectDir};
 
     Payload payload;
-    payload.color = payload2.color * 0.7f; 
-    payload.depth = depth;
+    payload.depth = optixGetPayload_3();
+
+    if (payload.depth < 16 - 1) {
+        const auto payload2 = trace(reflectRay, payload.depth + 1);
+        payload.color = payload2.color * 0.7f; 
+    }
+
     setPayload(payload);
 }
 
