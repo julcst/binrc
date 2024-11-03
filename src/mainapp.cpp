@@ -53,7 +53,8 @@ MainApp::~MainApp() {
     check(cudaGraphicsUnregisterResource(cudaPboResource));
 }
 
-void MainApp::resizeCallback(const vec2& res) {
+void MainApp::resizeCallback(const vec2& res) { 
+    if (cudaPboResource) check(cudaGraphicsUnregisterResource(cudaPboResource)); // Unregister the old resource to prevent memory leak
     pbo.allocate(res.x * res.y * sizeof(vec4), GL_STREAM_DRAW);
     check(cudaGraphicsGLRegisterBuffer(&cudaPboResource, pbo.handle, cudaGraphicsMapFlagsWriteDiscard));
     blitTexture = Texture<GL_TEXTURE_2D>();
