@@ -85,7 +85,7 @@ __device__ vec3 SampleVndf_GGX(vec2 u, vec3 wi, float alpha, vec3 n) {
     float wiStd_z = dot(wiStd, n);
     float phi = (2.0f * u.x - 1.0f) * 3.1415926f;
     float z = (1.0f - u.y) * (1.0f + wiStd_z) - wiStd_z;
-    float sinTheta = sqrtf(1.0f - z * z);
+    float sinTheta = sqrtf(max(1.0f - z * z, 0.0f));
     float x = sinTheta * cosf(phi);
     float y = sinTheta * sinf(phi);
     vec3 cStd = vec3(x, y, z);
