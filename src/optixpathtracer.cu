@@ -93,11 +93,13 @@ extern "C" __global__ void __raygen__rg() {
 
     const auto ray = makeCameraRay(uv);
 
+    vec3 output;
     const auto payload = trace(ray);
+    output = payload.color;
 
     // TODO: Reorder
 
-    params.image[i] = mix(params.image[i], vec4(payload.color, 1.0f), params.weight);
+    params.image[i] = mix(params.image[i], vec4(output, 1.0f), params.weight);
 }
 
 __device__ vec3 SampleVndf_GGX(vec2 u, vec3 wi, float alpha, vec3 n) {

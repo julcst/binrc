@@ -3,7 +3,6 @@
 #include <cuda_runtime.h>
 #include <glm/glm.hpp>
 
-
 // Conversion glm -> CUDA
 
 __host__ __device__ constexpr float2 glmToCuda(const glm::vec2& v) {
@@ -81,6 +80,12 @@ __host__ __device__ constexpr glm::uvec4 cudaToGlm(const uint4& v) {
     return glm::uvec4(v.x, v.y, v.z, v.w);
 }
 
+// Operators on float
+
+__host__ __device__ constexpr float fract(float x) {
+    return x - truncf(x);
+}
+
 // Operators on CUDA float2
 
 __host__ __device__ constexpr float2 operator+(const float2& a, const float2& b) {
@@ -135,12 +140,20 @@ __host__ __device__ constexpr float dot(const float2& a, const float2& b) {
     return a.x * b.x + a.y * b.y;
 }
 
+__host__ __device__ constexpr float dot2(const float2& a) {
+    return dot(a, a);
+}
+
 __host__ __device__ constexpr float length(const float2& v) {
-    return sqrtf(dot(v, v));
+    return sqrtf(dot2(v));
 }
 
 __host__ __device__ constexpr float2 normalize(const float2& v) {
     return v / length(v);
+}
+
+__host__ __device__ constexpr float2 fract(const float2& v) {
+    return make_float2(fract(v.x), fract(v.y));
 }
 
 // Operators on CUDA float3
@@ -197,16 +210,24 @@ __host__ __device__ constexpr float dot(const float3& a, const float3& b) {
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
+__host__ __device__ constexpr float dot2(const float3& a) {
+    return dot(a, a);
+}
+
 __host__ __device__ constexpr float3 cross(const float3& a, const float3& b) {
     return make_float3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
 }
 
 __host__ __device__ constexpr float length(const float3& v) {
-    return sqrtf(dot(v, v));
+    return norm3df(v.x, v.y, v.z);
 }
 
 __host__ __device__ constexpr float3 normalize(const float3& v) {
     return v / length(v);
+}
+
+__host__ __device__ constexpr float3 fract(const float3& v) {
+    return make_float3(fract(v.x), fract(v.y), fract(v.z));
 }
 
 // Operators on CUDA float4
@@ -263,12 +284,20 @@ __host__ __device__ constexpr float dot(const float4& a, const float4& b) {
     return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
 }
 
+__host__ __device__ constexpr float dot2(const float4& a) {
+    return dot(a, a);
+}
+
 __host__ __device__ constexpr float length(const float4& v) {
-    return sqrtf(dot(v, v));
+    return norm4df(v.x, v.y, v.z, v.w);
 }
 
 __host__ __device__ constexpr float4 normalize(const float4& v) {
     return v / length(v);
+}
+
+__host__ __device__ constexpr float4 fract(const float4& v) {
+    return make_float4(fract(v.x), fract(v.y), fract(v.z), fract(v.w));
 }
 
 // Operators on CUDA int2

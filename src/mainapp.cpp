@@ -80,7 +80,7 @@ void MainApp::buildImGui() {
     ImGui::StatisticsWindow(delta, resolution);
     ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
     if (ImGui::SliderFloat("Exposure", &exposure, 0.1f, 10.0f, "%.1f", ImGuiSliderFlags_Logarithmic)) blitProgram.set(1, exposure);
-    ImGui::Text(std::format("Sample: {}", renderer.params->sample).c_str());
+    ImGui::Text("Sample: %d", renderer.params->sample);
     ImGui::End();
 }
 

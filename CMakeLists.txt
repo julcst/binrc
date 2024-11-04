@@ -12,7 +12,8 @@ add_compile_definitions(GLM_FORCE_CUDA)
 set(GLM_ENABLE_FAST_MATH ON)
 set(GLM_ENABLE_CXX_20 ON)
 # FIXME: Clang 19.1.0 is technically not supported
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -diag-suppress 20012 --use_fast_math -allow-unsupported-compiler") # Disables glm warnings
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --diag-suppress 20012 --use_fast_math --allow-unsupported-compiler") # Disables glm warnings
+#set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} --debug --device-debug") # Enables debugging
 set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 

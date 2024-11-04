@@ -7,6 +7,11 @@
 #include <glm/glm.hpp>
 using namespace glm;
 
+constexpr int PAYLOAD_SIZE = 4;
+constexpr uint MAX_RAY_DEPTH = 16;
+constexpr uint RAND_SEQUENCE_DIMS = 4;
+constexpr uint RAND_SEQUENCE_CACHE_SIZE = 1024;
+
 // NOTE: Because this includes pointers this should be zero-initialized using cudaMemset
 struct Params {
     vec4* image; // A copied pointer to the image buffer

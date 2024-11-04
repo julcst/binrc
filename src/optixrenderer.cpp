@@ -51,7 +51,7 @@ OptixRenderer::OptixRenderer() {
     OptixPipelineCompileOptions pipelineCompileOptions = {
         .usesMotionBlur = false,
         .traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING,
-        .numPayloadValues = 4,
+        .numPayloadValues = PAYLOAD_SIZE,
         .numAttributeValues = 2,
         .exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE,
         .pipelineLaunchParamsVariableName = "params",
@@ -91,7 +91,7 @@ OptixRenderer::OptixRenderer() {
 
     // Create pipeline
     OptixPipelineLinkOptions pipelineLinkOptions = {
-        .maxTraceDepth = 16,
+        .maxTraceDepth = MAX_RAY_DEPTH,
     };
     check(optixPipelineCreate(context, &pipelineCompileOptions, &pipelineLinkOptions, programGroups.data(), programGroups.size(), nullptr, nullptr, &pipeline));
 
@@ -149,13 +149,12 @@ void OptixRenderer::render(vec4* image, uvec2 dim) {
 
 void OptixRenderer::generateSobol(uint offset, uint n) {
     // NOTE: We rebuild the generator, this makes regeneration slow but saves memory
-    const uint d = 4; // 4 dimensions for 4D Sobol sequence
-    const uint nfloats = n * d;
+    const uint nfloats = n * RAND_SEQUENCE_DIMS;
     params->sequenceStride = n;
     params->sequenceOffset = offset;
     curandGenerator_t generator;
     check(curandCreateGenerator(&generator, CURAND_RNG_QUASI_SCRAMBLED_SOBOL32));
-    check(curandSetQuasiRandomGeneratorDimensions(generator, d)); // 4 dimensions for 4D Sobol sequence
+    check(curandSetQuasiRandomGeneratorDimensions(generator, RAND_SEQUENCE_DIMS)); // 4 dimensions for 4D Sobol sequence
     check(curandSetGeneratorOffset(generator, offset)); // Reset the sequence
     check(cudaFree(reinterpret_cast<void*>(params->randSequence)));
     check(cudaMalloc(reinterpret_cast<void**>(&params->randSequence), nfloats * sizeof(float)));
@@ -165,8 +164,8 @@ void OptixRenderer::generateSobol(uint offset, uint n) {
 
 void OptixRenderer::ensureSobol(uint sample) {
     if (sample < params->sequenceOffset || sample >= params->sequenceOffset + params->sequenceStride) {
-        std::cout << std::format("Regenerating Sobol sequence for samples [{},{})", sample, sample + 1024) << std::endl;
-        generateSobol(sample, 1024);
+        std::cout << std::format("Regenerating Sobol sequence for samples [{},{})", sample, sample + RAND_SEQUENCE_CACHE_SIZE) << std::endl;
+        generateSobol(sample, RAND_SEQUENCE_CACHE_SIZE);
     }
 }
 
