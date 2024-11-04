@@ -100,6 +100,38 @@ extern "C" __global__ void __raygen__rg() {
     params.image[i] = mix(params.image[i], vec4(payload.color, 1.0f), params.weight);
 }
 
+__device__ vec3 SampleVndf_GGX(vec2 u, vec3 wi, float alpha, vec3 n) {
+    // Dirac function for alpha = 0
+    if (alpha == 0.0f) return n;
+    // decompose the vector in parallel and perpendicular components
+    vec3 wi_z = n * dot(wi, n);
+    vec3 wi_xy = wi - wi_z;
+    // warp to the hemisphere configuration
+    vec3 wiStd = normalize(wi_z - alpha * wi_xy);
+    // sample a spherical cap in (-wiStd.z, 1]
+    float wiStd_z = dot(wiStd, n);
+    float phi = (2.0f * u.x - 1.0f) * 3.1415926f;
+    float z = (1.0f - u.y) * (1.0f + wiStd_z) - wiStd_z;
+    float sinTheta = sqrt(clamp(1.0f - z * z, 1e-6f, 1.0f));
+    float x = sinTheta * cos(phi);
+    float y = sinTheta * sin(phi);
+    vec3 cStd = vec3(x, y, z);
+    // reflect sample to align with normal
+    vec3 up = vec3(0.0f, 0.0f, 1.0f);
+    vec3 wr = n + up;
+    // prevent division by zero
+    float wrz_safe = max(wr.z, 1e-6f);
+    vec3 c = dot(wr, cStd) * wr / wrz_safe - cStd;
+    // compute halfway direction as standard normal
+    vec3 wmStd = c + wiStd;
+    vec3 wmStd_z = n * dot(n, wmStd);
+    vec3 wmStd_xy = wmStd_z - wmStd;
+    // warp back to the ellipsoid configuration
+    vec3 wm = normalize(wmStd_z + alpha * wmStd_xy);
+    // return final normal
+    return wm;
+}
+
 extern "C" __global__ void __closesthit__ch() {
     // Get optix built-in variables
     const auto bary2 = cudaToGlm(optixGetTriangleBarycentrics());
@@ -120,8 +152,15 @@ extern "C" __global__ void __closesthit__ch() {
     const auto worldSpaceNormal = cudaToGlm(optixTransformNormalFromObjectToWorldSpace(glmToCuda(objectSpaceNormal)));
     const auto normal = normalize(worldSpaceNormal);
 
+    const uvec3 index = cudaToGlm(optixGetLaunchIndex());
+    const uvec3 dim = cudaToGlm(optixGetLaunchDimensions());
+    const uint i = index.y * params.dim.x + index.x;
+    const vec4 rotation = params.rotationTable[i];
+    const auto vndfRand = fract(vec2(getRand(2), getRand(3)) + vec2(rotation));
+    const auto microfacetNormal = SampleVndf_GGX(vndfRand, -rayDir, 0.1f, normal);
+
     const auto reflectOrigin = hitPoint + 1e-2f * normal;
-    const auto reflectDir = reflect(rayDir, normal);
+    const auto reflectDir = reflect(rayDir, microfacetNormal);
     const auto reflectRay = Ray{reflectOrigin, reflectDir};
 
     Payload payload;

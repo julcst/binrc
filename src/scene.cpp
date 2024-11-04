@@ -176,16 +176,16 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
     for (const auto& node : asset->nodes) {
         if (auto m = node.meshIndex; m.has_value()) {
             auto mesh = asset->meshes[m.value()];
+            auto mat = fastgltf::math::fmat4x4(1.0f);
+            auto* trs = std::get_if<fastgltf::TRS>(&node.transform);
+            auto* matrix = std::get_if<fastgltf::math::fmat4x4>(&node.transform);
+            if (trs) {
+                mat = fastgltf::math::scale(fastgltf::math::rotate(fastgltf::math::translate(mat, trs->translation), trs->rotation), trs->scale);
+            } else if (matrix) {
+                mat = *matrix;
+            }
             for (uint j = 0; j < mesh.primitives.size(); j++) {
                 const auto& primitive = mesh.primitives[j];
-                auto mat = fastgltf::math::fmat4x4(1.0f);
-                auto* trs = std::get_if<fastgltf::TRS>(&node.transform);
-                auto* matrix = std::get_if<fastgltf::math::fmat4x4>(&node.transform);
-                if (trs) {
-                    mat = fastgltf::math::scale(fastgltf::math::rotate(fastgltf::math::translate(mat, trs->translation), trs->rotation), trs->scale);
-                } else if (matrix) {
-                    mat = *matrix;
-                }
                 auto& geometry = meshToGeometries[m.value()][j];
                 instances[i] = OptixInstance {
                     .transform = {
