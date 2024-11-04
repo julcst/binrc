@@ -11,7 +11,7 @@ constexpr int PAYLOAD_SIZE = 9;
 constexpr float MAX_T = 1e32f;
 constexpr uint MAX_BOUNCES = 16;
 constexpr uint RANDS_PER_PIXEL = 2;
-constexpr uint RANDS_PER_BOUNCE = 3;
+constexpr uint RANDS_PER_BOUNCE = 4;
 constexpr uint RAND_SEQUENCE_DIMS = RANDS_PER_PIXEL + RANDS_PER_BOUNCE * MAX_BOUNCES;
 constexpr uint RAND_SEQUENCE_CACHE_SIZE = 1024;
 

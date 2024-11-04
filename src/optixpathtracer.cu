@@ -3,6 +3,7 @@
 
 #include "optixparams.hpp"
 #include "cudaglm.hpp"
+#include "brdf.hpp"
 
 struct Ray {
     vec3 origin;
@@ -76,38 +77,6 @@ __device__ Payload trace(const Ray& ray) {
     return getPayload(a, b, c, d, e, f, g, h, i);
 }
 
-__device__ vec3 SampleVndf_GGX(vec2 u, vec3 wi, float alpha, vec3 n) {
-    // Dirac function for alpha = 0
-    if (alpha == 0.0f) return n;
-    // decompose the vector in parallel and perpendicular components
-    vec3 wi_z = n * dot(wi, n);
-    vec3 wi_xy = wi - wi_z;
-    // warp to the hemisphere configuration
-    vec3 wiStd = normalize(wi_z - alpha * wi_xy);
-    // sample a spherical cap in (-wiStd.z, 1]
-    float wiStd_z = dot(wiStd, n);
-    float phi = (2.0f * u.x - 1.0f) * 3.1415926f;
-    float z = (1.0f - u.y) * (1.0f + wiStd_z) - wiStd_z;
-    float sinTheta = sqrtf(max(1.0f - z * z, 0.0f));
-    float x = sinTheta * cosf(phi);
-    float y = sinTheta * sinf(phi);
-    vec3 cStd = vec3(x, y, z);
-    // reflect sample to align with normal
-    vec3 up = vec3(0.0f, 0.0f, 1.0f);
-    vec3 wr = n + up;
-    // prevent division by zero
-    float wrz_safe = max(wr.z, 1e-32f);
-    vec3 c = dot(wr, cStd) * wr / wrz_safe - cStd;
-    // compute halfway direction as standard normal
-    vec3 wmStd = c + wiStd;
-    vec3 wmStd_z = n * dot(n, wmStd);
-    vec3 wmStd_xy = wmStd_z - wmStd;
-    // warp back to the ellipsoid configuration
-    vec3 wm = normalize(wmStd_z + alpha * wmStd_xy);
-    // return final normal
-    return wm;
-}
-
 __device__ float luminance(const vec3& linearRGB) {
     return dot(vec3(0.2126f, 0.7152f, 0.0722f), linearRGB);
 }
@@ -126,23 +95,61 @@ extern "C" __global__ void __raygen__rg() {
     vec3 throughput = vec3(1.0f);
     for (uint depth = 0; depth < MAX_BOUNCES; depth++) {
         payload = trace(ray);
-        throughput *= payload.color;
-        if (isinf(payload.t)) break;
 
-        const auto alpha = payload.roughness * payload.roughness;
+        if (isinf(payload.t)) {
+            throughput *= payload.color;
+            break;
+        }
+
         const auto hitPoint = ray.origin + payload.t * ray.direction;
-        const auto vndfRand = fract(vec2(getRand(depth, 0), getRand(depth, 1)) + vec2(rotation));
-        const auto microfacetNormal = SampleVndf_GGX(vndfRand, -ray.direction, alpha, payload.normal);
-        ray.origin = hitPoint + 1e-2f * payload.normal;
-        ray.direction = reflect(ray.direction, microfacetNormal);
+        const auto alpha = payload.roughness * payload.roughness;
+        const auto alpha2 = alpha * alpha;
+        const auto wo = -ray.direction;
+        const auto cosThetaO = dot(wo, payload.normal);
+        const auto F0 = mix(vec3(0.04f), payload.color, payload.metallic);
+
+        // Importance sampling weights // TODO: Use precomputed
+        const auto wSpecular = luminance(F_SchlickApprox(cosThetaO, F0));
+        const auto wDiffuse = (1.0f - payload.metallic) * luminance(payload.color);
+        const auto pSpecular = wSpecular / (wSpecular + wDiffuse);
+        const auto pDiffuse = 1.0f - pSpecular;
+
+        if (fract(getRand(depth, 0) + rotation.w) < pSpecular) { 
+            // Sample Trowbridge-Reitz specular
+            const auto vndfRand = fract(vec2(getRand(depth, 1) + rotation.x, getRand(depth, 2) + rotation.y));
+            const auto microfacetNormal = sampleVNDFTrowbridgeReitz(vndfRand, wo, alpha, payload.normal);
+            ray.direction = reflect(-wo, microfacetNormal);
+            const auto cosThetaD = dot(wo, microfacetNormal); // = dot(ray.direction, microfacetNormal)
+            const auto cosThetaI = dot(ray.direction, payload.normal);
+            const auto F = F_SchlickApprox(cosThetaD, F0);
+            const auto LambdaL = Lambda_TrowbridgeReitz(cosThetaI, alpha2);
+            const auto LambdaV = Lambda_TrowbridgeReitz(cosThetaO, alpha2);
+            const auto specular = F * (1.0f + LambdaV) / (1.0f + LambdaL + LambdaV); // = F * (G2 / G1)
+            throughput *= specular / pSpecular;
+        } else {
+            // Sample Brent-Burley diffuse
+            const auto hemisphereRand = fract(vec2(getRand(depth, 1) + rotation.z, getRand(depth, 2) + rotation.w)); 
+            const auto tangentToWorld = buildTBN(payload.normal);
+            ray.direction = tangentToWorld * sampleCosineHemisphere(hemisphereRand);
+            const auto microfacetNormal = normalize(ray.direction + wo);
+            const auto cosThetaD = dot(wo, microfacetNormal); // = dot(ray.direction, microfacetNormal)
+            const auto cosThetaI = dot(ray.direction, payload.normal);
+            const auto FD90 = 0.5f + 2.0f * alpha * cosThetaD * cosThetaD;
+            const auto response = (1.0f + (FD90 - 1.0f) * pow5(1.0f - cosThetaI)) * (1.0f + (FD90 - 1.0f) * pow5(1.0f - cosThetaO));
+            // NOTE: We drop the 1.0 / PI prefactor
+            const auto diffuse = (1.0f - payload.metallic) * payload.color * response;
+            throughput *= diffuse / pDiffuse;
+        }
 
         // Russian roulette
         const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
-        if (fract(getRand(depth, 2) + rotation.z) > pContinue) {
+        if (fract(getRand(depth, 3) + rotation.z) > pContinue) {
             throughput = vec3(0.0f);
             break;
         }
         throughput /= pContinue;
+
+        ray.origin = hitPoint + 1e-2f * payload.normal;
     }
 
     params.image[i] = mix(params.image[i], vec4(throughput, 1.0f), params.weight);

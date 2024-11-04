@@ -80,10 +80,29 @@ __host__ __device__ constexpr glm::uvec4 cudaToGlm(const uint4& v) {
     return glm::uvec4(v.x, v.y, v.z, v.w);
 }
 
+constexpr float PI = 3.14159265358979323846f;
+constexpr float TWO_PI = 6.28318530717958647692f;
+
 // Operators on float
 
 __host__ __device__ constexpr float fract(float x) {
     return x - truncf(x);
+}
+
+__host__ __device__ constexpr float pow2(float x) {
+    return x * x;
+}
+
+__host__ __device__ constexpr float pow3(float x) {
+    return pow2(x) * x;
+}
+
+__host__ __device__ constexpr float pow4(float x) {
+    return pow2(pow2(x));
+}
+
+__host__ __device__ constexpr float pow5(float x) {
+    return pow4(x) * x;
 }
 
 // Operators on CUDA float2
@@ -626,4 +645,28 @@ __host__ __device__ constexpr uint4 operator/(unsigned int a, const uint4& b) {
 
 __host__ __device__ constexpr unsigned int dot(const uint4& a, const uint4& b) {
     return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+}
+
+/**
+ * Reorthogonalizes a tangent space using the Gram-Schmidt process and returns an orthonormal tangent space matrix
+ * Note: n needs to be normalized and t must be linearly independent from n
+ */
+__host__ __device__ constexpr mat3 buildTBN(const vec3& n, const vec3& t) {
+    const auto nt = normalize(t - dot(t, n) * n);
+    const auto b = cross(n, nt);
+    return mat3(nt, b, n);
+}
+
+/**
+ * Builds an orthogonal tangent space to world space matrix from a normalized normal
+ */
+__host__ __device__ constexpr mat3 buildTBN(const vec3& n) {
+    if (abs(n.y) > 0.99f) {
+        vec3 t = normalize(cross(n, vec3(1.0f, 0.0f, 0.0f)));
+        // t = vec3(0.0f, n.z, -n.y) / sqrtf(n.z * n.z + n.y * n.y); // TODO: Optimize
+        return mat3(t, cross(n, t), n);
+    } else {
+        vec3 t = normalize(cross(n, vec3(0.0f, 1.0f, 0.0f)));
+        return mat3(t, cross(n, t), n);
+    }
 }
