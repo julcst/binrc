@@ -24,22 +24,20 @@ struct Payload {
     float t;
 };
 
-__device__ void setPayload(const Payload& value) {
-    optixSetPayload_0(__float_as_uint(value.color.x));
-    optixSetPayload_1(__float_as_uint(value.color.y));
-    optixSetPayload_2(__float_as_uint(value.color.z));
-    optixSetPayload_3(__float_as_uint(value.normal.x));
-    optixSetPayload_4(__float_as_uint(value.normal.y));
-    optixSetPayload_5(__float_as_uint(value.normal.z));
-    optixSetPayload_6(__float_as_uint(value.t));
+__device__ void setColor(const vec3& value) {
+    optixSetPayload_0(__float_as_uint(value.x));
+    optixSetPayload_1(__float_as_uint(value.y));
+    optixSetPayload_2(__float_as_uint(value.z));
 }
 
-__device__ Payload getPayload() {
-    return Payload{
-        vec3(__uint_as_float(optixGetPayload_0()), __uint_as_float(optixGetPayload_1()), __uint_as_float(optixGetPayload_2())),
-        vec3(__uint_as_float(optixGetPayload_3()), __uint_as_float(optixGetPayload_4()), __uint_as_float(optixGetPayload_5())),
-        __uint_as_float(optixGetPayload_6()),
-    };
+__device__ void setNormal(const vec3& value) {
+    optixSetPayload_3(__float_as_uint(value.x));
+    optixSetPayload_4(__float_as_uint(value.y));
+    optixSetPayload_5(__float_as_uint(value.z));
+}
+
+__device__ void setT(const float value) {
+    optixSetPayload_6(__float_as_uint(value));
 }
 
 __device__ Payload getPayload(uint a, uint b, uint c, uint d, uint e, uint f, uint g) {
@@ -61,23 +59,7 @@ __device__ Payload trace(const Ray& ray) {
         0, 1, 0, // SBT offset, stride, miss index
         a, b, c, d, e, f, g // Payload
     );
-    return getPayload(a, b, c, d, e, f, g);
-}
-
-// Has to be called in raygen
-__device__ Payload rtrace(const Ray& ray) {
-    uint a, b, c, d, e, f, g;
-    optixTraverse(
-        params.handle,
-        glmToCuda(ray.origin), glmToCuda(ray.direction),
-        0.0f, MAX_T, // tmin, tmax
-        0.0f, // rayTime
-        OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
-        0, 1, 0, // SBT offset, stride, miss index
-        a, b, c, d, e, f, g // Payload
-    );
-    optixReorder(); // TODO: Provide coherence hints
-    optixInvoke(a, b, c, d, e, f, g);
+    //optixReorder(); // TODO: Provide coherence hints
     return getPayload(a, b, c, d, e, f, g);
 }
 
@@ -164,18 +146,14 @@ extern "C" __global__ void __closesthit__ch() {
     const auto objectSpaceNormal = bary.x * v0.normal + bary.y * v1.normal + bary.z * v2.normal;
     const auto worldSpaceNormal = cudaToGlm(optixTransformNormalFromObjectToWorldSpace(glmToCuda(objectSpaceNormal)));
 
-    Payload payload;
-    payload.color = vec3(0.7f);
-    payload.normal = normalize(worldSpaceNormal);
-    payload.t = optixGetRayTmax();
-    setPayload(payload);
+    setColor(vec3(0.7f));
+    setNormal(normalize(worldSpaceNormal));
+    setT(optixGetRayTmax());
 }
 
 extern "C" __global__ void __miss__ms() {
     const vec3 dir = cudaToGlm(optixGetWorldRayDirection());
 
-    Payload payload;
-    payload.color = 0.5f * (dir + 1.0f);
-    payload.t = INFINITY;
-    setPayload(payload);
+    setColor(0.5f * (dir + 1.0f));
+    setT(INFINITY);
 }
