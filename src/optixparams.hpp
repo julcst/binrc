@@ -7,8 +7,9 @@
 #include <glm/glm.hpp>
 using namespace glm;
 
-constexpr int PAYLOAD_SIZE = 4;
+constexpr int PAYLOAD_SIZE = 7;
 constexpr uint MAX_RAY_DEPTH = 16;
+constexpr float MAX_T = 1e32f;
 constexpr uint RAND_SEQUENCE_DIMS = 4;
 constexpr uint RAND_SEQUENCE_CACHE_SIZE = 1024;
 
