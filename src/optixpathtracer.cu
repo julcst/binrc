@@ -64,15 +64,6 @@ __device__ Payload trace(const Ray& ray) {
     return getPayload(a, b, c, d, e, f, g);
 }
 
-__device__ float getRand(uint dim) {
-    const uint i = params.sample - params.sequenceOffset + params.sequenceStride * dim;
-    return params.randSequence[i];
-}
-
-__device__ vec2 getRand4(uint dim, vec4 rotation) {
-    return fract(vec4(getRand(dim), getRand(dim + 1), getRand(dim + 2), getRand(dim + 3)) + rotation);
-}
-
 __device__ vec3 SampleVndf_GGX(vec2 u, vec3 wi, float alpha, vec3 n) {
     // Dirac function for alpha = 0
     if (alpha == 0.0f) return n;
@@ -117,12 +108,12 @@ extern "C" __global__ void __raygen__rg() {
 
     Payload payload;
     vec3 throughput = vec3(1.0f);
-    for (uint depth = 0; depth < MAX_RAY_DEPTH; depth++) {
+    for (uint depth = 0; depth < MAX_BOUNCES; depth++) {
         payload = trace(ray);
         throughput *= payload.color;
         if (isinf(payload.t)) break;
         const auto hitPoint = ray.origin + payload.t * ray.direction;
-        const auto vndfRand = fract(vec2(getRand(2), getRand(3)) + vec2(rotation));
+        const auto vndfRand = fract(vec2(getRand(depth, 0), getRand(depth, 1)) + vec2(rotation));
         const auto microfacetNormal = SampleVndf_GGX(vndfRand, -ray.direction, 0.1f, payload.normal);
         ray.origin = hitPoint + 1e-2f * payload.normal;
         ray.direction = reflect(ray.direction, microfacetNormal);

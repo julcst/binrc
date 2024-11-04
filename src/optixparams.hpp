@@ -8,9 +8,11 @@
 using namespace glm;
 
 constexpr int PAYLOAD_SIZE = 7;
-constexpr uint MAX_RAY_DEPTH = 16;
 constexpr float MAX_T = 1e32f;
-constexpr uint RAND_SEQUENCE_DIMS = 4;
+constexpr uint MAX_BOUNCES = 16;
+constexpr uint RANDS_PER_PIXEL = 2;
+constexpr uint RANDS_PER_BOUNCE = 2;
+constexpr uint RAND_SEQUENCE_DIMS = RANDS_PER_PIXEL + RANDS_PER_BOUNCE * MAX_BOUNCES;
 constexpr uint RAND_SEQUENCE_CACHE_SIZE = 1024;
 
 // NOTE: Because this includes pointers this should be zero-initialized using cudaMemset
@@ -27,6 +29,15 @@ struct Params {
     float weight; // Weight of the current sample (= 1 / (sample + 1))
 };
 extern "C" __constant__ Params params;
+
+__device__ inline float getRand(uint dim) {
+    const uint i = params.sample - params.sequenceOffset + params.sequenceStride * dim;
+    return params.randSequence[i];
+}
+
+__device__ inline float getRand(uint depth, uint i) {
+    return getRand(RANDS_PER_PIXEL + depth * RANDS_PER_BOUNCE + i);
+}
 
 struct VertexData {
     vec3 normal;

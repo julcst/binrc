@@ -91,7 +91,7 @@ OptixRenderer::OptixRenderer() {
 
     // Create pipeline
     OptixPipelineLinkOptions pipelineLinkOptions = {
-        .maxTraceDepth = MAX_RAY_DEPTH,
+        .maxTraceDepth = MAX_BOUNCES,
     };
     check(optixPipelineCreate(context, &pipelineCompileOptions, &pipelineLinkOptions, programGroups.data(), programGroups.size(), nullptr, nullptr, &pipeline));
 
