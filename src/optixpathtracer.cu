@@ -10,7 +10,7 @@ struct Ray {
 };
 
 __device__ Ray makeCameraRay(const vec2& uv) {
-    const vec4 origin = params.clipToWorld * vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    const vec4 origin = params.clipToWorld[3]; // = params.clipToWorld[3] * vec4(0.0f, 0.0f, 0.0f, 1.0f);
     const vec4 clipTarget(-2.0f * uv + 1.0f, -1.0f, 1.0f);
     const vec4 target = params.clipToWorld * clipTarget;
     const vec3 origin3 = vec3(origin) / origin.w;
@@ -50,7 +50,7 @@ __device__ Payload getPayload(uint a, uint b, uint c, uint d, uint e, uint f, ui
 
 __device__ Payload trace(const Ray& ray) {
     uint a, b, c, d, e, f, g;
-    optixTrace(
+    optixTraverse(
         params.handle,
         glmToCuda(ray.origin), glmToCuda(ray.direction),
         0.0f, MAX_T, // tmin, tmax
@@ -60,6 +60,7 @@ __device__ Payload trace(const Ray& ray) {
         a, b, c, d, e, f, g // Payload
     );
     //optixReorder(); // TODO: Provide coherence hints
+    optixInvoke(a, b, c, d, e, f, g);
     return getPayload(a, b, c, d, e, f, g);
 }
 
@@ -84,15 +85,15 @@ __device__ vec3 SampleVndf_GGX(vec2 u, vec3 wi, float alpha, vec3 n) {
     float wiStd_z = dot(wiStd, n);
     float phi = (2.0f * u.x - 1.0f) * 3.1415926f;
     float z = (1.0f - u.y) * (1.0f + wiStd_z) - wiStd_z;
-    float sinTheta = sqrt(clamp(1.0f - z * z, 1e-6f, 1.0f));
-    float x = sinTheta * cos(phi);
-    float y = sinTheta * sin(phi);
+    float sinTheta = sqrtf(1.0f - z * z);
+    float x = sinTheta * cosf(phi);
+    float y = sinTheta * sinf(phi);
     vec3 cStd = vec3(x, y, z);
     // reflect sample to align with normal
     vec3 up = vec3(0.0f, 0.0f, 1.0f);
     vec3 wr = n + up;
     // prevent division by zero
-    float wrz_safe = max(wr.z, 1e-6f);
+    float wrz_safe = max(wr.z, 1e-32f);
     vec3 c = dot(wr, cStd) * wr / wrz_safe - cStd;
     // compute halfway direction as standard normal
     vec3 wmStd = c + wiStd;
