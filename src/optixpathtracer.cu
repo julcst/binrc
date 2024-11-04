@@ -74,11 +74,22 @@ __device__ Payload rtrace(const Ray& ray, uint depth = 0) {
     return getPayload(a, b, c, depth);
 }
 
+__device__ float getRand(uint dim) {
+    const uint i = params.sample - params.sequenceOffset + params.sequenceStride * dim;
+    return params.randSequence[i];
+}
+
+__device__ vec2 getRand4(uint dim, vec4 rotation) {
+    return fract(vec4(getRand(dim), getRand(dim + 1), getRand(dim + 2), getRand(dim + 3)) + rotation);
+}
+
 extern "C" __global__ void __raygen__rg() {
     const uvec3 idx = cudaToGlm(optixGetLaunchIndex());
     const uvec3 dim = cudaToGlm(optixGetLaunchDimensions());
-    const vec2 uv = vec2(idx) / vec2(dim);
     const uint i = idx.y * params.dim.x + idx.x;
+    const vec4 rotation = params.rotationTable[i];
+    const vec2 jitter = fract(vec2(getRand(0), getRand(1)) + vec2(rotation));
+    const vec2 uv = (vec2(idx) + jitter) / vec2(dim);
 
     const auto ray = makeCameraRay(uv);
 
@@ -86,7 +97,7 @@ extern "C" __global__ void __raygen__rg() {
 
     // TODO: Reorder
 
-    params.image[i] = vec4(payload.color, 1.0f);
+    params.image[i] = mix(params.image[i], vec4(payload.color, 1.0f), params.weight);
 }
 
 extern "C" __global__ void __closesthit__ch() {
@@ -109,7 +120,7 @@ extern "C" __global__ void __closesthit__ch() {
     const auto worldSpaceNormal = cudaToGlm(optixTransformNormalFromObjectToWorldSpace(glmToCuda(objectSpaceNormal)));
     const auto normal = normalize(worldSpaceNormal);
 
-    const auto reflectOrigin = hitPoint + 1e-3f * normal;
+    const auto reflectOrigin = hitPoint + 1e-2f * normal;
     const auto reflectDir = reflect(rayDir, normal);
     const auto reflectRay = Ray{reflectOrigin, reflectDir};
 

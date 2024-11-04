@@ -1,6 +1,8 @@
 #include "optixrenderer.hpp"
 
 #include <cuda_runtime.h>
+#include <curand.h>
+
 #include <optix.h>
 #include <optix_host.h>
 #include <optix_stubs.h>
@@ -111,11 +113,14 @@ OptixRenderer::OptixRenderer() {
     };
 
     check(cudaMallocManaged(reinterpret_cast<void**>(&params), sizeof(Params)));
+    check(cudaMemset(reinterpret_cast<void*>(params), 0, sizeof(Params)));
 }
 
 OptixRenderer::~OptixRenderer() {
     check(cudaFree(reinterpret_cast<void*>(raygenRecord)));
     check(cudaFree(reinterpret_cast<void*>(missRecord)));
+    check(cudaFree(reinterpret_cast<void*>(params->randSequence)));
+    check(cudaFree(reinterpret_cast<void*>(params->rotationTable)));
     check(cudaFree(reinterpret_cast<void*>(params)));
     check(optixPipelineDestroy(pipeline));
     check(optixDeviceContextDestroy(context));
@@ -127,11 +132,56 @@ void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
 
 void OptixRenderer::setCamera(const mat4& clipToWorld) {
     params->clipToWorld = clipToWorld;
+    reset();
 }
 
 void OptixRenderer::render(vec4* image, uvec2 dim) {
     params->image = image;
     params->dim = dim;
 
+    ensureSobol(params->sample);
     check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params), sizeof(Params), &sbt, dim.x, dim.y, 1));
+
+    params->sample++;
+    params->weight = 1.0f / static_cast<float>(params->sample);
+}
+
+void OptixRenderer::generateSobol(uint offset, uint n) {
+    // NOTE: We rebuild the generator, this makes regeneration slow but saves memory
+    const uint d = 4; // 4 dimensions for 4D Sobol sequence
+    const uint nfloats = n * d;
+    params->sequenceStride = n;
+    params->sequenceOffset = offset;
+    curandGenerator_t generator;
+    check(curandCreateGenerator(&generator, CURAND_RNG_QUASI_SCRAMBLED_SOBOL32));
+    check(curandSetQuasiRandomGeneratorDimensions(generator, d)); // 4 dimensions for 4D Sobol sequence
+    check(curandSetGeneratorOffset(generator, offset)); // Reset the sequence
+    check(cudaFree(reinterpret_cast<void*>(params->randSequence)));
+    check(cudaMalloc(reinterpret_cast<void**>(&params->randSequence), nfloats * sizeof(float)));
+    check(curandGenerateUniform(generator, reinterpret_cast<float*>(params->randSequence), nfloats));
+    check(curandDestroyGenerator(generator));
+}
+
+void OptixRenderer::ensureSobol(uint sample) {
+    if (sample < params->sequenceOffset || sample >= params->sequenceOffset + params->sequenceStride) {
+        std::cout << std::format("Regenerating Sobol sequence for samples [{},{})", sample, sample + 1024) << std::endl;
+        generateSobol(sample, 1024);
+    }
+}
+
+void OptixRenderer::resize(uvec2 dim) {
+    // NOTE: We rebuild the generator on resize, this makes resize slow but saves memory
+    curandGenerator_t generator;
+    check(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_XORWOW));
+    check(cudaFree(reinterpret_cast<void*>(params->rotationTable)));
+    size_t n = static_cast<size_t>(dim.x * dim.y) * 4;
+    check(cudaMalloc(reinterpret_cast<void**>(&params->rotationTable), n * sizeof(float)));
+    check(curandGenerateUniform(generator, reinterpret_cast<float*>(params->rotationTable), n));
+    check(curandDestroyGenerator(generator));
+    reset();
+}
+
+void OptixRenderer::reset() {
+    params->sample = 0;
+    params->weight = 1.0f;
 }

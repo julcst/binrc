@@ -58,7 +58,7 @@ set(SRC
 
 # Add the executable
 add_executable(${PROJECT_NAME} ${SRC})
-target_link_libraries(${PROJECT_NAME} CUDA::cudart framework fastgltf)
+target_link_libraries(${PROJECT_NAME} CUDA::cudart CUDA::curand framework fastgltf)
 target_include_directories(${PROJECT_NAME} PUBLIC src ${OPTIX_DIR}/include ${CUDAToolkit_INCLUDE_DIRS} ${CMAKE_BINARY_DIR}/include)
 
 # Set compiler flags

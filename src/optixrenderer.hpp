@@ -21,9 +21,14 @@ public:
     OptixRenderer& operator=(const OptixRenderer&) = delete;
     OptixRenderer(OptixRenderer&&) = delete;
     OptixRenderer& operator=(OptixRenderer&&) = delete;
+
     void render(vec4* image, uvec2 dim);
     void setCamera(const mat4& clipToWorld);
     void loadGLTF(const std::filesystem::path& path);
+    void resize(uvec2 dim);
+    
+    Params* params;
+
 private:
     OptixDeviceContext context;
     OptixPipeline pipeline;
@@ -31,6 +36,9 @@ private:
     std::array<OptixProgramGroup, 3> programGroups;
     RaygenRecord* raygenRecord;
     MissRecord* missRecord;
-    Params* params;
     Scene scene;
+
+    void reset();
+    void generateSobol(uint offset, uint n);
+    void ensureSobol(uint sample);
 };
