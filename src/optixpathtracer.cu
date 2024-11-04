@@ -21,6 +21,8 @@ __device__ Ray makeCameraRay(const vec2& uv) {
 struct Payload {
     vec3 color;
     vec3 normal;
+    float roughness;
+    float metallic;
     float t;
 };
 
@@ -36,20 +38,30 @@ __device__ void setNormal(const vec3& value) {
     optixSetPayload_5(__float_as_uint(value.z));
 }
 
-__device__ void setT(const float value) {
+__device__ void setRoughness(const float value) {
     optixSetPayload_6(__float_as_uint(value));
 }
 
-__device__ Payload getPayload(uint a, uint b, uint c, uint d, uint e, uint f, uint g) {
+__device__ void setMetallic(const float value) {
+    optixSetPayload_7(__float_as_uint(value));
+}
+
+__device__ void setT(const float value) {
+    optixSetPayload_8(__float_as_uint(value));
+}
+
+__device__ Payload getPayload(uint a, uint b, uint c, uint d, uint e, uint f, uint g, uint h, uint i) {
     return Payload{
         vec3(__uint_as_float(a), __uint_as_float(b), __uint_as_float(c)),
         vec3(__uint_as_float(d), __uint_as_float(e), __uint_as_float(f)),
         __uint_as_float(g),
+        __uint_as_float(h),
+        __uint_as_float(i),
     };
 }
 
 __device__ Payload trace(const Ray& ray) {
-    uint a, b, c, d, e, f, g;
+    uint a, b, c, d, e, f, g, h, i;
     optixTraverse(
         params.handle,
         glmToCuda(ray.origin), glmToCuda(ray.direction),
@@ -57,11 +69,11 @@ __device__ Payload trace(const Ray& ray) {
         0.0f, // rayTime
         OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
         0, 1, 0, // SBT offset, stride, miss index
-        a, b, c, d, e, f, g // Payload
+        a, b, c, d, e, f, g, h, i // Payload
     );
     //optixReorder(); // TODO: Provide coherence hints
-    optixInvoke(a, b, c, d, e, f, g);
-    return getPayload(a, b, c, d, e, f, g);
+    optixInvoke(a, b, c, d, e, f, g, h, i);
+    return getPayload(a, b, c, d, e, f, g, h, i);
 }
 
 __device__ vec3 SampleVndf_GGX(vec2 u, vec3 wi, float alpha, vec3 n) {
@@ -116,9 +128,11 @@ extern "C" __global__ void __raygen__rg() {
         payload = trace(ray);
         throughput *= payload.color;
         if (isinf(payload.t)) break;
+
+        const auto alpha = payload.roughness * payload.roughness;
         const auto hitPoint = ray.origin + payload.t * ray.direction;
         const auto vndfRand = fract(vec2(getRand(depth, 0), getRand(depth, 1)) + vec2(rotation));
-        const auto microfacetNormal = SampleVndf_GGX(vndfRand, -ray.direction, 0.1f, payload.normal);
+        const auto microfacetNormal = SampleVndf_GGX(vndfRand, -ray.direction, alpha, payload.normal);
         ray.origin = hitPoint + 1e-2f * payload.normal;
         ray.direction = reflect(ray.direction, microfacetNormal);
 
@@ -150,8 +164,13 @@ extern "C" __global__ void __closesthit__ch() {
     const auto objectSpaceNormal = bary.x * v0.normal + bary.y * v1.normal + bary.z * v2.normal;
     const auto worldSpaceNormal = cudaToGlm(optixTransformNormalFromObjectToWorldSpace(glmToCuda(objectSpaceNormal)));
 
-    setColor(vec3(0.7f));
+    // Get material
+    const auto material = data->material;
+
+    setColor(material->color);
     setNormal(normalize(worldSpaceNormal));
+    setRoughness(material->roughness);
+    setMetallic(material->metallic);
     setT(optixGetRayTmax());
 }
 

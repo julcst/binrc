@@ -24,6 +24,9 @@ struct Scene {
     uint nGeometries = 0;
     HitRecord* hitRecords = nullptr;
 
+    uint nMaterials = 0;
+    Material* materials = nullptr;
+
     CUdeviceptr iasBuffer = 0;
     std::vector<std::vector<Geometry>> meshToGeometries;
 

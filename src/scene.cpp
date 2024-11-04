@@ -71,13 +71,16 @@ std::tuple<OptixTraversableHandle, CUdeviceptr> buildGAS(OptixDeviceContext ctx,
     return {handle, gasBuffer};
 }
 
+vec3 toVec3(const fastgltf::math::fvec4 v) {
+    return glm::vec3(v.x(), v.y(), v.z());
+}
+
 void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& program, OptixShaderBindingTable& sbt, const std::filesystem::path& path) {
     // Free previous scene
     free();
 
     // Parse GLTF file
     auto parser = fastgltf::Parser(fastgltf::Extensions::None);
-    Context::setWorkingDirectory();
     auto data = fastgltf::GltfDataBuffer::FromPath(path);
     if (auto e = data.error(); e != fastgltf::Error::None) throw std::runtime_error(std::format("Error: {}", fastgltf::getErrorMessage(e)));
     auto asset = parser.loadGltf(data.get(), path.parent_path(), fastgltf::Options::GenerateMeshIndices);
@@ -98,6 +101,17 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
         nGeometries += mesh.primitives.size();
     }
     check(cudaMallocManaged(reinterpret_cast<void**>(&hitRecords), nGeometries * sizeof(HitRecord)));
+
+    // Create materials
+    nMaterials = asset->materials.size();
+    check(cudaMallocManaged(reinterpret_cast<void**>(&materials), nMaterials * sizeof(Material)));
+    for (uint i = 0; i < nMaterials; i++) {
+        const auto& material = asset->materials[i];
+        materials[i] = Material {
+            .color = toVec3(material.pbrData.baseColorFactor),
+            .roughness = material.pbrData.roughnessFactor,
+        };
+    }
 
     // Build geometry
     std::array<uint, 1> flags = { OPTIX_GEOMETRY_FLAG_NONE };
@@ -160,7 +174,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
             hitRecords[geometryID].data = HitData {
                 .indexBuffer = reinterpret_cast<uint3*>(indices),
                 .vertexData = reinterpret_cast<VertexData*>(vertexData),
-                .materialIndex = materialIdx,
+                .material = &materials[materialIdx],
             };
 
             check(cudaFree(reinterpret_cast<void*>(vertices)));

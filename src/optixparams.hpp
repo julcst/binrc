@@ -7,7 +7,7 @@
 #include <glm/glm.hpp>
 using namespace glm;
 
-constexpr int PAYLOAD_SIZE = 7;
+constexpr int PAYLOAD_SIZE = 9;
 constexpr float MAX_T = 1e32f;
 constexpr uint MAX_BOUNCES = 16;
 constexpr uint RANDS_PER_PIXEL = 2;
@@ -45,12 +45,18 @@ struct VertexData {
     vec2 texCoord;
 };
 
+struct Material {
+    vec3 color;
+    float roughness;
+    float metallic;
+};
+
 struct RaygenData {};
 struct MissData {};
 struct HitData {
     uint3* indexBuffer;      // Pointer to triangle indices         // NOTE: This is owned memory and must be freed
     VertexData* vertexData;  // Pointer to vertex data              // NOTE: This is owned memory and must be freed
-    uint materialIndex;      // Material index or identifier
+    Material* material;      // Pointer to material data
 };
 
 template <typename T>
