@@ -79,8 +79,9 @@ void MainApp::moveCallback(const vec2& movement, bool leftButton, bool rightButt
 void MainApp::buildImGui() {
     ImGui::StatisticsWindow(delta, resolution);
     ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-    if (ImGui::SliderFloat("Exposure", &exposure, 0.1f, 10.0f, "%.1f", ImGuiSliderFlags_Logarithmic)) blitProgram.set(1, exposure);
     ImGui::Text("Sample: %d", renderer.params->sample);
+    if (ImGui::SliderFloat("Exposure", &exposure, 0.1f, 10.0f, "%.1f", ImGuiSliderFlags_Logarithmic)) blitProgram.set(1, exposure);
+    ImGui::SliderFloat("Russian Roulette", &renderer.params->russianRouletteWeight, 1.0f, 10.0f, "%.1f");
     ImGui::End();
 }
 

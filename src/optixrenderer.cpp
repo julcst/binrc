@@ -113,7 +113,10 @@ OptixRenderer::OptixRenderer() {
     };
 
     check(cudaMallocManaged(reinterpret_cast<void**>(&params), sizeof(Params)));
-    check(cudaMemset(reinterpret_cast<void*>(params), 0, sizeof(Params)));
+    params->image = nullptr;
+    params->randSequence = nullptr;
+    params->rotationTable = nullptr;
+    params->russianRouletteWeight = 3.0f;
 }
 
 OptixRenderer::~OptixRenderer() {

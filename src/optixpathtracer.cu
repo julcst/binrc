@@ -96,6 +96,10 @@ __device__ vec3 SampleVndf_GGX(vec2 u, vec3 wi, float alpha, vec3 n) {
     return wm;
 }
 
+__device__ float luminance(const vec3& linearRGB) {
+    return dot(vec3(0.2126f, 0.7152f, 0.0722f), linearRGB);
+}
+
 extern "C" __global__ void __raygen__rg() {
     const uvec3 idx = cudaToGlm(optixGetLaunchIndex());
     const uvec3 dim = cudaToGlm(optixGetLaunchDimensions());
@@ -117,6 +121,14 @@ extern "C" __global__ void __raygen__rg() {
         const auto microfacetNormal = SampleVndf_GGX(vndfRand, -ray.direction, 0.1f, payload.normal);
         ray.origin = hitPoint + 1e-2f * payload.normal;
         ray.direction = reflect(ray.direction, microfacetNormal);
+
+        // Russian roulette
+        const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
+        if (fract(getRand(depth, 2) + rotation.z) > pContinue) {
+            throughput = vec3(0.0f);
+            break;
+        }
+        throughput /= pContinue;
     }
 
     params.image[i] = mix(params.image[i], vec4(throughput, 1.0f), params.weight);
