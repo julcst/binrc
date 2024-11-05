@@ -17,6 +17,7 @@
 
 #include "optixir.hpp"
 #include "cudautil.hpp"
+#include "cudaglm.hpp"
 
 OptixRenderer::OptixRenderer() {
     check(cudaFree(nullptr)); // Initialize CUDA for this device on this thread
@@ -39,7 +40,7 @@ OptixRenderer::OptixRenderer() {
     // Create module
     OptixModuleCompileOptions moduleCompileOptions = {
         .maxRegisterCount = OPTIX_COMPILE_DEFAULT_MAX_REGISTER_COUNT,
-        .optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3,
+        .optLevel = OPTIX_COMPILE_OPTIMIZATION_DEFAULT,
         .debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_MINIMAL,
         .numPayloadTypes = 0,
         .payloadTypes = nullptr,
@@ -135,13 +136,13 @@ void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
 }
 
 void OptixRenderer::setCamera(const mat4& clipToWorld) {
-    params->clipToWorld = clipToWorld;
+    params->clipToWorld = glmToCuda(clipToWorld);
     reset();
 }
 
 void OptixRenderer::render(vec4* image, uvec2 dim) {
-    params->image = image;
-    params->dim = dim;
+    params->image = (float4*) image;
+    params->dim = make_uint2(dim.x, dim.y);
 
     ensureSobol(params->sample);
     check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params), sizeof(Params), &sbt, dim.x, dim.y, 1));

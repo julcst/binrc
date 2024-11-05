@@ -1,11 +1,9 @@
 #pragma once
 
 #include <cuda_runtime.h>
-
 #include <array>
 
-#include <glm/glm.hpp>
-using namespace glm;
+#include "cudamathtypes.cuh"
 
 constexpr int PAYLOAD_SIZE = 9;
 constexpr float MAX_T = 1e32f;
@@ -17,12 +15,12 @@ constexpr uint RAND_SEQUENCE_CACHE_SIZE = 1024;
 
 // NOTE: Because this includes pointers this should be zero-initialized using cudaMemset
 struct Params {
-    vec4* image; // A copied pointer to the image buffer
+    float4* image; // A copied pointer to the image buffer
     float* randSequence; // Quasi-random Sobol sequence             // NOTE: This is owned memory and must be freed
-    vec4* rotationTable; // Cranley-Patterson-Rotation per pixel    // NOTE: This is owned memory and must be freed
-    uvec2 dim;
+    float4* rotationTable; // Cranley-Patterson-Rotation per pixel    // NOTE: This is owned memory and must be freed
+    uint2 dim;
     OptixTraversableHandle handle;
-    mat4 clipToWorld;
+    float4x4 clipToWorld;
     uint sequenceOffset; // Offset into the Sobol sequence
     uint sequenceStride; // Stride between different dimensions
     uint sample; // Current sample
@@ -41,12 +39,12 @@ __device__ inline float getRand(uint depth, uint i) {
 }
 
 struct VertexData {
-    vec3 normal;
-    vec2 texCoord;
+    float3 normal;
+    float2 texCoord;
 };
 
 struct Material {
-    vec3 color;
+    float3 color;
     float roughness;
     float metallic;
 };

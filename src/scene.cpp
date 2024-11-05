@@ -24,6 +24,7 @@ using namespace glm;
 #include <framework/context.hpp>
 
 #include "optixparams.hpp"
+#include "cudaglm.hpp"
 
 Scene::~Scene() {
     free();
@@ -71,8 +72,8 @@ std::tuple<OptixTraversableHandle, CUdeviceptr> buildGAS(OptixDeviceContext ctx,
     return {handle, gasBuffer};
 }
 
-vec3 toVec3(const fastgltf::math::fvec4 v) {
-    return glm::vec3(v.x(), v.y(), v.z());
+float3 toVec3(const fastgltf::math::fvec4 v) {
+    return make_float3(v.x(), v.y(), v.z());
 }
 
 void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& program, OptixShaderBindingTable& sbt, const std::filesystem::path& path) {
@@ -144,7 +145,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
             check(cudaMallocManaged(reinterpret_cast<void**>(&vertexData), nVertices * sizeof(VertexData)));
             auto& normalAcc = asset->accessors[primitive.findAttribute("NORMAL")->accessorIndex];
             fastgltf::iterateAccessorWithIndex<vec3>(asset.get(), normalAcc, [&](const vec3& normal, auto i) {
-                vertexData[i].normal = normal;
+                vertexData[i].normal = glmToCuda(normal);
             });
 
             const auto [handle, gasBuffer] = buildGAS(ctx, { OptixBuildInput {

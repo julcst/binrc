@@ -2,38 +2,38 @@
 #include <cuda_runtime.h>
 
 #include "optixparams.hpp"
-#include "cudaglm.hpp"
+#include "cudamath.cuh"
 #include "brdf.hpp"
 
 struct Ray {
-    vec3 origin;
-    vec3 direction;
+    float3 origin;
+    float3 direction;
 };
 
-__device__ Ray makeCameraRay(const vec2& uv) {
-    const vec4 origin = params.clipToWorld[3]; // = params.clipToWorld[3] * vec4(0.0f, 0.0f, 0.0f, 1.0f);
-    const vec4 clipTarget(-2.0f * uv + 1.0f, -1.0f, 1.0f);
-    const vec4 target = params.clipToWorld * clipTarget;
-    const vec3 origin3 = vec3(origin) / origin.w;
-    const vec3 dir3 = normalize(origin3 - vec3(target) / target.w);
+__device__ Ray makeCameraRay(const float2& uv) {
+    const float4 origin = params.clipToWorld[3]; // = params.clipToWorld[3] * make_float4(0.0f, 0.0f, 0.0f, 1.0f);
+    const float4 clipTarget = make_float4(-2.0f * uv + 1.0f, -1.0f, 1.0f);
+    const float4 target = params.clipToWorld * clipTarget;
+    const float3 origin3 = make_float3(origin) / origin.w;
+    const float3 dir3 = normalize(origin3 - make_float3(target) / target.w);
     return Ray{origin3, dir3};
 }
 
 struct Payload {
-    vec3 color;
-    vec3 normal;
+    float3 color;
+    float3 normal;
     float roughness;
     float metallic;
     float t;
 };
 
-__device__ void setColor(const vec3& value) {
+__device__ void setColor(const float3& value) {
     optixSetPayload_0(__float_as_uint(value.x));
     optixSetPayload_1(__float_as_uint(value.y));
     optixSetPayload_2(__float_as_uint(value.z));
 }
 
-__device__ void setNormal(const vec3& value) {
+__device__ void setNormal(const float3& value) {
     optixSetPayload_3(__float_as_uint(value.x));
     optixSetPayload_4(__float_as_uint(value.y));
     optixSetPayload_5(__float_as_uint(value.z));
@@ -53,8 +53,8 @@ __device__ void setT(const float value) {
 
 __device__ Payload getPayload(uint a, uint b, uint c, uint d, uint e, uint f, uint g, uint h, uint i) {
     return Payload{
-        vec3(__uint_as_float(a), __uint_as_float(b), __uint_as_float(c)),
-        vec3(__uint_as_float(d), __uint_as_float(e), __uint_as_float(f)),
+        make_float3(__uint_as_float(a), __uint_as_float(b), __uint_as_float(c)),
+        make_float3(__uint_as_float(d), __uint_as_float(e), __uint_as_float(f)),
         __uint_as_float(g),
         __uint_as_float(h),
         __uint_as_float(i),
@@ -65,7 +65,7 @@ __device__ Payload trace(const Ray& ray) {
     uint a, b, c, d, e, f, g, h, i;
     optixTraverse(
         params.handle,
-        glmToCuda(ray.origin), glmToCuda(ray.direction),
+        ray.origin, ray.direction,
         0.0f, MAX_T, // tmin, tmax
         0.0f, // rayTime
         OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
@@ -77,22 +77,22 @@ __device__ Payload trace(const Ray& ray) {
     return getPayload(a, b, c, d, e, f, g, h, i);
 }
 
-__device__ float luminance(const vec3& linearRGB) {
-    return dot(vec3(0.2126f, 0.7152f, 0.0722f), linearRGB);
+__device__ float luminance(const float3& linearRGB) {
+    return dot(make_float3(0.2126f, 0.7152f, 0.0722f), linearRGB);
 }
 
 extern "C" __global__ void __raygen__rg() {
-    const uvec3 idx = cudaToGlm(optixGetLaunchIndex());
-    const uvec3 dim = cudaToGlm(optixGetLaunchDimensions());
-    const uint i = idx.y * params.dim.x + idx.x;
-    const vec4 rotation = params.rotationTable[i];
+    const auto idx = optixGetLaunchIndex();
+    const auto dim = optixGetLaunchDimensions();
+    const auto i = idx.y * params.dim.x + idx.x;
+    const auto rotation = params.rotationTable[i];
 
-    const vec2 jitter = fract(vec2(getRand(0), getRand(1)) + vec2(rotation));
-    const vec2 uv = (vec2(idx) + jitter) / vec2(dim);
+    const auto jitter = fract(make_float2(getRand(0), getRand(1)) + make_float2(rotation));
+    const auto uv = (make_float2(idx.x, idx.y) + jitter) / make_float2(dim.x, dim.y);
     auto ray = makeCameraRay(uv);
 
     Payload payload;
-    vec3 throughput = vec3(1.0f);
+    auto throughput = make_float3(1.0f);
     for (uint depth = 0; depth < MAX_BOUNCES; depth++) {
         payload = trace(ray);
 
@@ -106,7 +106,7 @@ extern "C" __global__ void __raygen__rg() {
         const auto alpha2 = alpha * alpha;
         const auto wo = -ray.direction;
         const auto cosThetaO = dot(wo, payload.normal);
-        const auto F0 = mix(vec3(0.04f), payload.color, payload.metallic);
+        const auto F0 = mix(make_float3(0.04f), payload.color, payload.metallic);
 
         // Importance sampling weights // TODO: Use precomputed
         const auto wSpecular = luminance(F_SchlickApprox(cosThetaO, F0));
@@ -116,7 +116,7 @@ extern "C" __global__ void __raygen__rg() {
 
         if (fract(getRand(depth, 0) + rotation.w) < pSpecular) { 
             // Sample Trowbridge-Reitz specular
-            const auto vndfRand = fract(vec2(getRand(depth, 1) + rotation.x, getRand(depth, 2) + rotation.y));
+            const auto vndfRand = fract(make_float2(getRand(depth, 1) + rotation.x, getRand(depth, 2) + rotation.y));
             const auto microfacetNormal = sampleVNDFTrowbridgeReitz(vndfRand, wo, alpha, payload.normal);
             ray.direction = reflect(-wo, microfacetNormal);
             const auto cosThetaD = dot(wo, microfacetNormal); // = dot(ray.direction, microfacetNormal)
@@ -128,7 +128,7 @@ extern "C" __global__ void __raygen__rg() {
             throughput *= specular / pSpecular;
         } else {
             // Sample Brent-Burley diffuse
-            const auto hemisphereRand = fract(vec2(getRand(depth, 1) + rotation.z, getRand(depth, 2) + rotation.w)); 
+            const auto hemisphereRand = fract(make_float2(getRand(depth, 1) + rotation.z, getRand(depth, 2) + rotation.w)); 
             const auto tangentToWorld = buildTBN(payload.normal);
             ray.direction = tangentToWorld * sampleCosineHemisphere(hemisphereRand);
             const auto microfacetNormal = normalize(ray.direction + wo);
@@ -144,21 +144,21 @@ extern "C" __global__ void __raygen__rg() {
         // Russian roulette
         const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
         if (fract(getRand(depth, 3) + rotation.z) > pContinue) {
-            throughput = vec3(0.0f);
+            throughput = make_float3(0.0f);
             break;
         }
-        throughput /= pContinue;
+        throughput /= make_float3(pContinue);
 
         ray.origin = hitPoint + 1e-2f * payload.normal;
     }
 
-    params.image[i] = mix(params.image[i], vec4(throughput, 1.0f), params.weight);
+    params.image[i] = mix(params.image[i], make_float4(throughput, 1.0f), params.weight);
 }
 
 extern "C" __global__ void __closesthit__ch() {
     // Get optix built-in variables
-    const auto bary2 = cudaToGlm(optixGetTriangleBarycentrics());
-    const auto bary = vec3(1.0f - bary2.x - bary2.y, bary2);
+    const auto bary2 = optixGetTriangleBarycentrics();
+    const auto bary = make_float3(1.0f - bary2.x - bary2.y, bary2);
     const auto data = reinterpret_cast<HitData*>(optixGetSbtDataPointer());
 
     // Get triangle vertices
@@ -169,7 +169,7 @@ extern "C" __global__ void __closesthit__ch() {
 
     // Interpolate normal
     const auto objectSpaceNormal = bary.x * v0.normal + bary.y * v1.normal + bary.z * v2.normal;
-    const auto worldSpaceNormal = cudaToGlm(optixTransformNormalFromObjectToWorldSpace(glmToCuda(objectSpaceNormal)));
+    const auto worldSpaceNormal = optixTransformNormalFromObjectToWorldSpace(objectSpaceNormal);
 
     // Get material
     const auto material = data->material;
@@ -182,7 +182,7 @@ extern "C" __global__ void __closesthit__ch() {
 }
 
 extern "C" __global__ void __miss__ms() {
-    const vec3 dir = cudaToGlm(optixGetWorldRayDirection());
+    const auto dir = optixGetWorldRayDirection();
 
     setColor(0.5f * (dir + 1.0f));
     setT(INFINITY);
