@@ -17,7 +17,7 @@
 
 #include "optixir.hpp"
 #include "cudautil.hpp"
-#include "cudaglm.hpp"
+#include "cudaglm.cuh"
 
 OptixRenderer::OptixRenderer() {
     check(cudaFree(nullptr)); // Initialize CUDA for this device on this thread
@@ -141,7 +141,7 @@ void OptixRenderer::setCamera(const mat4& clipToWorld) {
 }
 
 void OptixRenderer::render(vec4* image, uvec2 dim) {
-    params->image = (float4*) image;
+    params->image = reinterpret_cast<float4*>(image);
     params->dim = make_uint2(dim.x, dim.y);
 
     ensureSobol(params->sample);

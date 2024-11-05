@@ -23,8 +23,8 @@ using namespace glm;
 
 #include <framework/context.hpp>
 
-#include "optixparams.hpp"
-#include "cudaglm.hpp"
+#include "optixparams.cuh"
+#include "cudaglm.cuh"
 
 Scene::~Scene() {
     free();
@@ -72,7 +72,7 @@ std::tuple<OptixTraversableHandle, CUdeviceptr> buildGAS(OptixDeviceContext ctx,
     return {handle, gasBuffer};
 }
 
-float3 toVec3(const fastgltf::math::fvec4 v) {
+float3 toVec3(const fastgltf::math::fvec4& v) {
     return make_float3(v.x(), v.y(), v.z());
 }
 

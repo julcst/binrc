@@ -10,7 +10,7 @@
 #include <glm/glm.hpp>
 using namespace glm;
 
-#include "optixparams.hpp"
+#include "optixparams.cuh"
 #include "scene.hpp"
 
 class OptixRenderer {

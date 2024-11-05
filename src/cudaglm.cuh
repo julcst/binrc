@@ -11,7 +11,6 @@ __host__ __device__ constexpr float2 glmToCuda(const glm::vec2& v) {
 }
 
 __host__ __device__ constexpr float3 glmToCuda(const glm::vec3& v) {
-    //return reinterpret_cast<const float3&>(v);
     return make_float3(v.x, v.y, v.z);
 }
 
@@ -55,39 +54,39 @@ __host__ __device__ constexpr float4x4 glmToCuda(const glm::mat4& m) {
 // Conversion CUDA -> glm
 
 __host__ __device__ constexpr glm::vec2 cudaToGlm(const float2& v) {
-    return glm::vec2(v.x, v.y);
+    return {v.x, v.y};
 }
 
 __host__ __device__ constexpr glm::vec3 cudaToGlm(const float3& v) {
-    return glm::vec3(v.x, v.y, v.z);
+    return {v.x, v.y, v.z};
 }
 
 __host__ __device__ constexpr glm::vec4 cudaToGlm(const float4& v) {
-    return glm::vec4(v.x, v.y, v.z, v.w);
+    return {v.x, v.y, v.z, v.w};
 }
 
 __host__ __device__ constexpr glm::ivec2 cudaToGlm(const int2& v) {
-    return glm::ivec2(v.x, v.y);
+    return {v.x, v.y};
 }
 
 __host__ __device__ constexpr glm::ivec3 cudaToGlm(const int3& v) {
-    return glm::ivec3(v.x, v.y, v.z);
+    return {v.x, v.y, v.z};
 }
 
 __host__ __device__ constexpr glm::ivec4 cudaToGlm(const int4& v) {
-    return glm::ivec4(v.x, v.y, v.z, v.w);
+    return {v.x, v.y, v.z, v.w};
 }
 
 __host__ __device__ constexpr glm::uvec2 cudaToGlm(const uint2& v) {
-    return glm::uvec2(v.x, v.y);
+    return {v.x, v.y};
 }
 
 __host__ __device__ constexpr glm::uvec3 cudaToGlm(const uint3& v) {
-    return glm::uvec3(v.x, v.y, v.z);
+    return {v.x, v.y, v.z};
 }
 
 __host__ __device__ constexpr glm::uvec4 cudaToGlm(const uint4& v) {
-    return glm::uvec4(v.x, v.y, v.z, v.w);
+    return {v.x, v.y, v.z, v.w};
 }
 
 // Special functions
@@ -108,10 +107,9 @@ __host__ __device__ constexpr glm::mat3 buildTBN(const glm::vec3& n, const glm::
 __host__ __device__ constexpr glm::mat3 buildTBN(const glm::vec3& n) {
     if (glm::abs(n.y) > 0.99f) {
         glm::vec3 t = normalize(glm::cross(n, glm::vec3(1.0f, 0.0f, 0.0f)));
-        // t = glm::vec3(0.0f, n.z, -n.y) * rsqrtf(n.z * n.z + n.y * n.y); // TODO: Optimize
-        return glm::mat3(t, glm::cross(n, t), n);
+        return {t, glm::cross(n, t), n};
     } else {
         glm::vec3 t = glm::normalize(glm::cross(n, glm::vec3(0.0f, 1.0f, 0.0f)));
-        return glm::mat3(t, glm::cross(n, t), n);
+        return {t, glm::cross(n, t), n};
     }
 }

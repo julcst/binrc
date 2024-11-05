@@ -115,6 +115,26 @@ __host__ __device__ constexpr void operator/=(float2& a, const float2& b) {
     a.y /= b.y;
 }
 
+__host__ __device__ constexpr void operator+=(float2& a, float b) {
+    a.x += b;
+    a.y += b;
+}
+
+__host__ __device__ constexpr void operator-=(float2& a, float b) {
+    a.x -= b;
+    a.y -= b;
+}
+
+__host__ __device__ constexpr void operator*=(float2& a, float b) {
+    a.x *= b;
+    a.y *= b;
+}
+
+__host__ __device__ constexpr void operator/=(float2& a, float b) {
+    a.x /= b;
+    a.y /= b;
+}
+
 __host__ __device__ constexpr float2 operator-(const float2& v) {
     return make_float2(-v.x, -v.y);
 }
@@ -233,6 +253,30 @@ __host__ __device__ constexpr void operator/=(float3& a, const float3& b) {
     a.z /= b.z;
 }
 
+__host__ __device__ constexpr void operator+=(float3& a, float b) {
+    a.x += b;
+    a.y += b;
+    a.z += b;
+}
+
+__host__ __device__ constexpr void operator-=(float3& a, float b) {
+    a.x -= b;
+    a.y -= b;
+    a.z -= b;
+}
+
+__host__ __device__ constexpr void operator*=(float3& a, float b) {
+    a.x *= b;
+    a.y *= b;
+    a.z *= b;
+}
+
+__host__ __device__ constexpr void operator/=(float3& a, float b) {
+    a.x /= b;
+    a.y /= b;
+    a.z /= b;
+}
+
 __host__ __device__ constexpr float3 operator-(const float3& v) {
     return make_float3(-v.x, -v.y, -v.z);
 }
@@ -266,7 +310,7 @@ __host__ __device__ constexpr float3 mix(const float3& a, const float3& b, float
 }
 
 __host__ __device__ constexpr float3 reflect(const float3& i, const float3& n) {
-    return i - 2.0f * dot(n, i) * n;
+    return 2.0f * dot(n, i) * n - i;
 }
 
 // Operators on CUDA float4
@@ -361,6 +405,34 @@ __host__ __device__ constexpr void operator/=(float4& a, const float4& b) {
     a.y /= b.y;
     a.z /= b.z;
     a.w /= b.w;
+}
+
+__host__ __device__ constexpr void operator+=(float4& a, float b) {
+    a.x += b;
+    a.y += b;
+    a.z += b;
+    a.w += b;
+}
+
+__host__ __device__ constexpr void operator-=(float4& a, float b) {
+    a.x -= b;
+    a.y -= b;
+    a.z -= b;
+    a.w -= b;
+}
+
+__host__ __device__ constexpr void operator*=(float4& a, float b) {
+    a.x *= b;
+    a.y *= b;
+    a.z *= b;
+    a.w *= b;
+}
+
+__host__ __device__ constexpr void operator/=(float4& a, float b) {
+    a.x /= b;
+    a.y /= b;
+    a.z /= b;
+    a.w /= b;
 }
 
 __host__ __device__ constexpr float4 operator-(const float4& v) {
@@ -471,6 +543,26 @@ __host__ __device__ constexpr void operator*=(int2& a, const int2& b) {
 __host__ __device__ constexpr void operator/=(int2& a, const int2& b) {
     a.x /= b.x;
     a.y /= b.y;
+}
+
+__host__ __device__ constexpr void operator+=(int2& a, int b) {
+    a.x += b;
+    a.y += b;
+}
+
+__host__ __device__ constexpr void operator-=(int2& a, int b) {
+    a.x -= b;
+    a.y -= b;
+}
+
+__host__ __device__ constexpr void operator*=(int2& a, int b) {
+    a.x *= b;
+    a.y *= b;
+}
+
+__host__ __device__ constexpr void operator/=(int2& a, int b) {
+    a.x /= b;
+    a.y /= b;
 }
 
 __host__ __device__ constexpr int2 operator-(const int2& v) {
@@ -735,6 +827,26 @@ __host__ __device__ constexpr void operator/=(uint2& a, const uint2& b) {
     a.y /= b.y;
 }
 
+__host__ __device__ constexpr void operator+=(uint2& a, uint b) {
+    a.x += b;
+    a.y += b;
+}
+
+__host__ __device__ constexpr void operator-=(uint2& a, uint b) {
+    a.x -= b;
+    a.y -= b;
+}
+
+__host__ __device__ constexpr void operator*=(uint2& a, uint b) {
+    a.x *= b;
+    a.y *= b;
+}
+
+__host__ __device__ constexpr void operator/=(uint2& a, uint b) {
+    a.x /= b;
+    a.y /= b;
+}
+
 __host__ __device__ constexpr uint dot(const uint2& a, const uint2& b) {
     return a.x * b.x + a.y * b.y;
 }
@@ -827,6 +939,30 @@ __host__ __device__ constexpr void operator/=(uint3& a, const uint3& b) {
     a.x /= b.x;
     a.y /= b.y;
     a.z /= b.z;
+}
+
+__host__ __device__ constexpr void operator+=(uint3& a, uint b) {
+    a.x += b;
+    a.y += b;
+    a.z += b;
+}
+
+__host__ __device__ constexpr void operator-=(uint3& a, uint b) {
+    a.x -= b;
+    a.y -= b;
+    a.z -= b;
+}
+
+__host__ __device__ constexpr void operator*=(uint3& a, uint b) {
+    a.x *= b;
+    a.y *= b;
+    a.z *= b;
+}
+
+__host__ __device__ constexpr void operator/=(uint3& a, uint b) {
+    a.x /= b;
+    a.y /= b;
+    a.z /= b;
 }
 
 __host__ __device__ constexpr uint dot(const uint3& a, const uint3& b) {
@@ -927,15 +1063,39 @@ __host__ __device__ constexpr void operator/=(uint4& a, const uint4& b) {
     a.w /= b.w;
 }
 
+__host__ __device__ constexpr void operator+=(uint4& a, uint b) {
+    a.x += b;
+    a.y += b;
+    a.z += b;
+    a.w += b;
+}
+
+__host__ __device__ constexpr void operator-=(uint4& a, uint b) {
+    a.x -= b;
+    a.y -= b;
+    a.z -= b;
+    a.w -= b;
+}
+
+__host__ __device__ constexpr void operator*=(uint4& a, uint b) {
+    a.x *= b;
+    a.y *= b;
+    a.z *= b;
+    a.w *= b;
+}
+
+__host__ __device__ constexpr void operator/=(uint4& a, uint b) {
+    a.x /= b;
+    a.y /= b;
+    a.z /= b;
+    a.w /= b;
+}
+
 __host__ __device__ constexpr uint dot(const uint4& a, const uint4& b) {
     return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
 }
 
 // float2x2
-
-__host__ __device__ constexpr float2x2 make_float2x2(const float2& a, const float2& b) {
-    return float2x2{a, b};
-}
 
 __host__ __device__ constexpr float2 operator*(const float2x2& m, const float2& v) {
     return make_float2(
@@ -945,10 +1105,6 @@ __host__ __device__ constexpr float2 operator*(const float2x2& m, const float2& 
 }
 
 // float3x3
-
-__host__ __device__ constexpr float3x3 make_float3x3(const float3& a, const float3& b, const float3& c) {
-    return float3x3{a, b, c};
-}
 
 __host__ __device__ constexpr float3 operator*(const float3x3& m, const float3& v) {
     return make_float3(
@@ -985,7 +1141,6 @@ __host__ __device__ constexpr float3x3 buildTBN(const float3& n, const float3& t
 __host__ __device__ constexpr float3x3 buildTBN(const float3& n) {
     if (abs(n.y) > 0.99f) {
         const auto t = normalize(cross(n, make_float3(1.0f, 0.0f, 0.0f)));
-        // t = vec3(0.0f, n.z, -n.y) / sqrtf(n.z * n.z + n.y * n.y); // TODO: Optimize
         return make_float3x3(t, cross(n, t), n);
     } else {
         const auto t = normalize(cross(n, make_float3(0.0f, 1.0f, 0.0f)));

@@ -1,9 +1,9 @@
 #include <optix_device.h>
 #include <cuda_runtime.h>
 
-#include "optixparams.hpp"
+#include "optixparams.cuh"
 #include "cudamath.cuh"
-#include "brdf.hpp"
+#include "brdf.cuh"
 
 struct Ray {
     float3 origin;
@@ -104,41 +104,34 @@ extern "C" __global__ void __raygen__rg() {
         const auto hitPoint = ray.origin + payload.t * ray.direction;
         const auto alpha = payload.roughness * payload.roughness;
         const auto alpha2 = alpha * alpha;
+        const auto metallic = payload.metallic;
+        const auto albedo = payload.color;
+
+        const auto n = payload.normal;
         const auto wo = -ray.direction;
-        const auto cosThetaO = dot(wo, payload.normal);
-        const auto F0 = mix(make_float3(0.04f), payload.color, payload.metallic);
+        const auto cosThetaO = dot(wo, n);
+        const auto F0 = mix(make_float3(0.04f), albedo, metallic);
+        const auto baseDiffuse = (1.0f - metallic) * albedo;
 
         // Importance sampling weights // TODO: Use precomputed
         const auto wSpecular = luminance(F_SchlickApprox(cosThetaO, F0));
-        const auto wDiffuse = (1.0f - payload.metallic) * luminance(payload.color);
+        const auto wDiffuse = luminance(baseDiffuse);
         const auto pSpecular = wSpecular / (wSpecular + wDiffuse);
         const auto pDiffuse = 1.0f - pSpecular;
 
         if (fract(getRand(depth, 0) + rotation.w) < pSpecular) { 
             // Sample Trowbridge-Reitz specular
-            const auto vndfRand = fract(make_float2(getRand(depth, 1) + rotation.x, getRand(depth, 2) + rotation.y));
-            const auto microfacetNormal = sampleVNDFTrowbridgeReitz(vndfRand, wo, alpha, payload.normal);
-            ray.direction = reflect(-wo, microfacetNormal);
-            const auto cosThetaD = dot(wo, microfacetNormal); // = dot(ray.direction, microfacetNormal)
-            const auto cosThetaI = dot(ray.direction, payload.normal);
-            const auto F = F_SchlickApprox(cosThetaD, F0);
-            const auto LambdaL = Lambda_TrowbridgeReitz(cosThetaI, alpha2);
-            const auto LambdaV = Lambda_TrowbridgeReitz(cosThetaO, alpha2);
-            const auto specular = F * (1.0f + LambdaV) / (1.0f + LambdaL + LambdaV); // = F * (G2 / G1)
-            throughput *= specular / pSpecular;
+            const auto rand = fract(make_float2(getRand(depth, 1) + rotation.x, getRand(depth, 2) + rotation.y));
+            const auto sample = sampleTrowbridgeReitz(rand, wo, cosThetaO, n, alpha, F0);
+            ray.direction = sample.direction;
+            throughput *= sample.throughput / pSpecular;
         } else {
             // Sample Brent-Burley diffuse
-            const auto hemisphereRand = fract(make_float2(getRand(depth, 1) + rotation.z, getRand(depth, 2) + rotation.w)); 
+            const auto rand = fract(make_float2(getRand(depth, 1) + rotation.z, getRand(depth, 2) + rotation.w)); 
             const auto tangentToWorld = buildTBN(payload.normal);
-            ray.direction = tangentToWorld * sampleCosineHemisphere(hemisphereRand);
-            const auto microfacetNormal = normalize(ray.direction + wo);
-            const auto cosThetaD = dot(wo, microfacetNormal); // = dot(ray.direction, microfacetNormal)
-            const auto cosThetaI = dot(ray.direction, payload.normal);
-            const auto FD90 = 0.5f + 2.0f * alpha * cosThetaD * cosThetaD;
-            const auto response = (1.0f + (FD90 - 1.0f) * pow5(1.0f - cosThetaI)) * (1.0f + (FD90 - 1.0f) * pow5(1.0f - cosThetaO));
-            // NOTE: We drop the 1.0 / PI prefactor
-            const auto diffuse = (1.0f - payload.metallic) * payload.color * response;
-            throughput *= diffuse / pDiffuse;
+            const auto sample = sampleBrentBurley(rand, wo, cosThetaO, n, alpha, tangentToWorld, baseDiffuse);
+            ray.direction = sample.direction;
+            throughput *= sample.throughput / pDiffuse;
         }
 
         // Russian roulette

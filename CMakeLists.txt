@@ -7,8 +7,6 @@ set(CMAKE_CUDA_HOST_COMPILER /usr/bin/clang++ CACHE PATH "Path to the host C++ c
 set(OPTIX_DIR ../NVIDIA-OptiX-SDK-8.0.0-linux64-x86_64 CACHE PATH "Path to the OptiX SDK" FORCE)
 
 # Config
-add_compile_definitions(CUDA_VERSION=12060)
-add_compile_definitions(GLM_FORCE_CUDA)
 set(GLM_ENABLE_FAST_MATH ON)
 set(GLM_ENABLE_CXX_20 ON)
 # FIXME: Clang 19.1.0 is technically not supported
