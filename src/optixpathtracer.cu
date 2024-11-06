@@ -103,46 +103,44 @@ extern "C" __global__ void __raygen__rg() {
 
         const auto hitPoint = ray.origin + payload.t * ray.direction;
         const auto alpha = payload.roughness * payload.roughness;
-        const auto alpha2 = alpha * alpha;
         const auto metallic = payload.metallic;
         const auto albedo = payload.color;
 
         const auto n = payload.normal;
         const auto wo = -ray.direction;
         const auto cosThetaO = dot(wo, n);
-        const auto F0 = mix(make_float3(0.04f), albedo, metallic);
+        const auto baseSpecular = mix(make_float3(0.04f), albedo, metallic);
         const auto baseDiffuse = (1.0f - metallic) * albedo;
 
         // Importance sampling weights // TODO: Use precomputed
-        const auto wSpecular = luminance(F_SchlickApprox(cosThetaO, F0));
+        const auto wSpecular = luminance(F_SchlickApprox(cosThetaO, baseSpecular));
         const auto wDiffuse = luminance(baseDiffuse);
         const auto pSpecular = wSpecular / (wSpecular + wDiffuse);
-        const auto pDiffuse = 1.0f - pSpecular;
 
         if (fract(getRand(depth, 0) + rotation.w) < pSpecular) { 
             // Sample Trowbridge-Reitz specular
             const auto rand = fract(make_float2(getRand(depth, 1) + rotation.x, getRand(depth, 2) + rotation.y));
-            const auto sample = sampleTrowbridgeReitz(rand, wo, cosThetaO, n, alpha, F0);
+            const auto sample = sampleTrowbridgeReitz(rand, wo, cosThetaO, n, alpha, baseSpecular);
             ray.direction = sample.direction;
             throughput *= sample.throughput / pSpecular;
         } else {
             // Sample Brent-Burley diffuse
             const auto rand = fract(make_float2(getRand(depth, 1) + rotation.z, getRand(depth, 2) + rotation.w)); 
-            const auto tangentToWorld = buildTBN(payload.normal);
+            const auto tangentToWorld = buildTBN(n);
             const auto sample = sampleBrentBurley(rand, wo, cosThetaO, n, alpha, tangentToWorld, baseDiffuse);
             ray.direction = sample.direction;
-            throughput *= sample.throughput / pDiffuse;
+            throughput *= sample.throughput / (1.0f - pSpecular);
         }
 
         // Russian roulette
         const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
-        if (fract(getRand(depth, 3) + rotation.z) > pContinue) {
+        if (fract(getRand(depth, 3) + rotation.z) >= pContinue) {
             throughput = make_float3(0.0f);
             break;
         }
-        throughput /= make_float3(pContinue);
+        throughput /= pContinue;
 
-        ray.origin = hitPoint + 1e-2f * payload.normal;
+        ray.origin = hitPoint + 1e-2f * n;
     }
 
     params.image[i] = mix(params.image[i], make_float4(throughput, 1.0f), params.weight);
@@ -176,7 +174,10 @@ extern "C" __global__ void __closesthit__ch() {
 
 extern "C" __global__ void __miss__ms() {
     const auto dir = optixGetWorldRayDirection();
+    auto sky = make_float3(0.1f);
+    const auto sundir = normalize(make_float3(0.5f, 0.5f, 0.5f));
+    sky += clamp(powf(dot(dir, sundir), 100.0f), 0.0f, 1.0f) * make_float3(0.8f, 0.9f, 1.0f) * 5.0f;
 
-    setColor(0.5f * (dir + 1.0f));
+    setColor(sky);
     setT(INFINITY);
 }

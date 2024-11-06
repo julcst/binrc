@@ -111,6 +111,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
         materials[i] = Material {
             .color = toVec3(material.pbrData.baseColorFactor),
             .roughness = material.pbrData.roughnessFactor,
+            .metallic = material.pbrData.metallicFactor,
         };
     }
 

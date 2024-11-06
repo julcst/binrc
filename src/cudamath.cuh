@@ -33,6 +33,10 @@ __host__ __device__ constexpr float mix(float a, float b, float t) {
     return a + (b - a) * t;
 }
 
+__host__ __device__ constexpr float clamp(float x, float a, float b) {
+    return max(a, min(b, x));
+}
+
 // Operators on CUDA float2
 
 __host__ __device__ constexpr float2 make_float2(float x) {
