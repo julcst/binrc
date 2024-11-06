@@ -48,6 +48,7 @@ __device__ constexpr float G1_TrowbridgeReitz(float NdotV, float alpha2) {
  * from "Sampling Visible GGX Normals with Spherical Caps" by Dupuy et al. 2023.
  * https://cdrdv2-public.intel.com/782052/sampling-visible-ggx-normals.pdf
  * Implementation from https://gist.github.com/jdupuy/4c6e782b62c92b9cb3d13fbb0a5bd7a0
+ * @note Isotropic world space version
  */
 __device__ constexpr float3 sampleVNDFTrowbridgeReitz(const float2& u, const float3& wi, float3 n, float alpha) {
     // Dirac function for alpha = 0
@@ -81,11 +82,36 @@ __device__ constexpr float3 sampleVNDFTrowbridgeReitz(const float2& u, const flo
     return wm;
 }
 
+/**
+ * Sample visible normal distribution function using the algorithm
+ * from "Sampling Visible GGX Normals with Spherical Caps" by Dupuy et al. 2023.
+ * https://cdrdv2-public.intel.com/782052/sampling-visible-ggx-normals.pdf
+ * Implementation from https://gist.github.com/jdupuy/4c6e782b62c92b9cb3d13fbb0a5bd7a0
+ * @note Tangent space version
+ */
+__device__ constexpr float3 sampleVndfTrowbridgeReitz(const float2& rand, const float3& wi, const float2& alpha) {
+    // warp to the hemisphere configuration
+    const auto wiStd = normalize(make_float3(make_float2(wi) * alpha, wi.z));
+    // sample a spherical cap in (-wi.z, 1]
+    const auto phi = (2.0f * rand.x - 1.0f) * PI;
+    const auto z = fmaf(1.0f - rand.y, 1.0f + wiStd.z, -wiStd.z);
+    const auto sinTheta = sqrtf(clamp(1.0f - z * z, 0.0f, 1.0f));
+    const auto x = sinTheta * cosf(phi);
+    const auto y = sinTheta * sinf(phi);
+    const auto c = make_float3(x, y, z);
+    // compute halfway direction as standard normal
+    const auto wmStd = c + wiStd;
+    // warp back to the ellipsoid configuration
+    const auto wm = normalize(make_float3(make_float2(wmStd) * alpha, wmStd.z));
+    // return final normal
+    return wm;
+}
+
 __device__ constexpr float3 sampleCosineHemisphere(const float2& rand) {
     const auto phi = TWO_PI * rand.x;
     const auto sinTheta = sqrtf(1.0f - rand.y);
     const auto cosTheta = sqrtf(rand.y);
-    return make_float3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+    return make_float3(cosf(phi) * sinTheta, sinf(phi) * sinTheta, cosTheta);
 }
 
 struct SampleResult {
