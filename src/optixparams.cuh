@@ -5,7 +5,7 @@
 
 #include "cudamathtypes.cuh"
 
-constexpr int PAYLOAD_SIZE = 9;
+constexpr int PAYLOAD_SIZE = 12;
 constexpr float MAX_T = 1e32f;
 constexpr uint MAX_BOUNCES = 16;
 constexpr uint RANDS_PER_PIXEL = 2;
@@ -40,6 +40,7 @@ __device__ inline float getRand(uint depth, uint i) {
 
 struct VertexData {
     float3 normal;
+    float4 tangent;
     float2 texCoord;
 };
 

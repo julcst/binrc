@@ -20,11 +20,12 @@ __device__ Ray makeCameraRay(const float2& uv) {
 }
 
 struct Payload {
-    float3 color;
-    float3 normal;
+    float3 color; // Linear RGB base color
+    float3 normal; // World space normal, guaranteed to be normalized
+    float3 tangent; // World space tenagent, not normalized
     float roughness;
     float metallic;
-    float t;
+    float t; // Distonce of intersection on ray, set to INFINITY if no intersection
 };
 
 __device__ void setColor(const float3& value) {
@@ -39,30 +40,37 @@ __device__ void setNormal(const float3& value) {
     optixSetPayload_5(__float_as_uint(value.z));
 }
 
+__device__ void setTangent(const float3& value) {
+    optixSetPayload_6(__float_as_uint(value.x));
+    optixSetPayload_7(__float_as_uint(value.y));
+    optixSetPayload_8(__float_as_uint(value.z));
+}
+
 __device__ void setRoughness(const float value) {
-    optixSetPayload_6(__float_as_uint(value));
+    optixSetPayload_9(__float_as_uint(value));
 }
 
 __device__ void setMetallic(const float value) {
-    optixSetPayload_7(__float_as_uint(value));
+    optixSetPayload_10(__float_as_uint(value));
 }
 
 __device__ void setT(const float value) {
-    optixSetPayload_8(__float_as_uint(value));
+    optixSetPayload_11(__float_as_uint(value));
 }
 
-__device__ Payload getPayload(uint a, uint b, uint c, uint d, uint e, uint f, uint g, uint h, uint i) {
+__device__ Payload getPayload(uint a, uint b, uint c, uint d, uint e, uint f, uint g, uint h, uint i, uint j, uint k, uint l) {
     return Payload{
         make_float3(__uint_as_float(a), __uint_as_float(b), __uint_as_float(c)),
         make_float3(__uint_as_float(d), __uint_as_float(e), __uint_as_float(f)),
-        __uint_as_float(g),
-        __uint_as_float(h),
-        __uint_as_float(i),
+        make_float3(__uint_as_float(g), __uint_as_float(h), __uint_as_float(i)),
+        __uint_as_float(j),
+        __uint_as_float(k),
+        __uint_as_float(l)
     };
 }
 
 __device__ Payload trace(const Ray& ray) {
-    uint a, b, c, d, e, f, g, h, i;
+    uint a, b, c, d, e, f, g, h, i, j, k, l;
     optixTraverse(
         params.handle,
         ray.origin, ray.direction,
@@ -70,11 +78,11 @@ __device__ Payload trace(const Ray& ray) {
         0.0f, // rayTime
         OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
         0, 1, 0, // SBT offset, stride, miss index
-        a, b, c, d, e, f, g, h, i // Payload
+        a, b, c, d, e, f, g, h, i, j, k, l // Payload
     );
     //optixReorder(); // TODO: Provide coherence hints
-    optixInvoke(a, b, c, d, e, f, g, h, i);
-    return getPayload(a, b, c, d, e, f, g, h, i);
+    optixInvoke(a, b, c, d, e, f, g, h, i, j, k, l);
+    return getPayload(a, b, c, d, e, f, g, h, i, j, k, l);
 }
 
 __device__ float luminance(const float3& linearRGB) {
@@ -126,7 +134,7 @@ extern "C" __global__ void __raygen__rg() {
         } else {
             // Sample Brent-Burley diffuse
             const auto rand = fract(make_float2(getRand(depth, 1) + rotation.z, getRand(depth, 2) + rotation.w)); 
-            const auto tangentToWorld = buildTBN(n);
+            const auto tangentToWorld = buildTBN(n, payload.tangent);
             const auto sample = sampleBrentBurley(rand, wo, cosThetaO, n, alpha, tangentToWorld, baseDiffuse);
             ray.direction = sample.direction;
             throughput *= sample.throughput / (1.0f - pSpecular);
@@ -162,11 +170,17 @@ extern "C" __global__ void __closesthit__ch() {
     const auto objectSpaceNormal = bary.x * v0.normal + bary.y * v1.normal + bary.z * v2.normal;
     const auto worldSpaceNormal = optixTransformNormalFromObjectToWorldSpace(objectSpaceNormal);
 
+    // Interpolate tangent
+    const auto objectSpaceTangent = bary.x * v0.tangent + bary.y * v1.tangent + bary.z * v2.tangent;
+    const auto worldSpaceTangent = optixTransformVectorFromObjectToWorldSpace(make_float3(objectSpaceTangent));
+    //const auto tangentOrientation = objectSpaceTangent.w; // Used for MikkTSpace normal mapping
+
     // Get material
     const auto material = data->material;
 
     setColor(material->color);
     setNormal(normalize(worldSpaceNormal));
+    setTangent(worldSpaceTangent);
     setRoughness(material->roughness);
     setMetallic(material->metallic);
     setT(optixGetRayTmax());

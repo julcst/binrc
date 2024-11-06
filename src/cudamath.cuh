@@ -1143,11 +1143,9 @@ __host__ __device__ constexpr float3x3 buildTBN(const float3& n, const float3& t
  * Builds an orthogonal tangent space to world space matrix from a normalized normal
  */
 __host__ __device__ constexpr float3x3 buildTBN(const float3& n) {
-    if (abs(n.y) > 0.99f) {
-        const auto t = normalize(cross(n, make_float3(1.0f, 0.0f, 0.0f)));
-        return make_float3x3(t, cross(n, t), n);
+    if (n.x == 0.0f) {
+        return buildTBN(n, make_float3(1.0f, 0.0f, 0.0f));
     } else {
-        const auto t = normalize(cross(n, make_float3(0.0f, 1.0f, 0.0f)));
-        return make_float3x3(t, cross(n, t), n);
+        return buildTBN(n, make_float3(0.0f, 1.0f, 0.0f));
     }
 }

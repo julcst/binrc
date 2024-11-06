@@ -148,6 +148,15 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
             fastgltf::iterateAccessorWithIndex<vec3>(asset.get(), normalAcc, [&](const vec3& normal, auto i) {
                 vertexData[i].normal = glmToCuda(normal);
             });
+            auto& texCoordAcc = asset->accessors[primitive.findAttribute("TEXCOORD_0")->accessorIndex];
+            fastgltf::iterateAccessorWithIndex<vec2>(asset.get(), texCoordAcc, [&](const vec2& texCoord, auto i) {
+                vertexData[i].texCoord = glmToCuda(texCoord);
+            });
+            auto& tangentAcc = asset->accessors[primitive.findAttribute("TANGENT")->accessorIndex];
+            fastgltf::iterateAccessorWithIndex<vec4>(asset.get(), tangentAcc, [&](const vec4& tangent, auto i) {
+                vertexData[i].tangent = glmToCuda(tangent);
+            });
+
 
             const auto [handle, gasBuffer] = buildGAS(ctx, { OptixBuildInput {
                 .type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES,
