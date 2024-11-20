@@ -1,16 +1,16 @@
 #include "scene.hpp"
 
+#include <fastgltf/core.hpp>
+#include <fastgltf/tools.hpp>
+#include <fastgltf/glm_element_traits.hpp>
+#include <fastgltf/math.hpp>
+
 #include <cuda_runtime.h>
 #include <cudautil.hpp>
 
 #include <optix.h>
 #include <optix_stubs.h>
 #include <optix_types.h>
-
-#include <fastgltf/core.hpp>
-#include <fastgltf/tools.hpp>
-#include <fastgltf/glm_element_traits.hpp>
-#include <fastgltf/math.hpp>
 
 #include <glm/glm.hpp>
 using namespace glm;

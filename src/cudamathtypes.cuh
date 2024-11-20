@@ -2,6 +2,8 @@
 
 #include <cuda_runtime.h>
 
+using uint = unsigned int;
+
 struct float2x2 {
     float2 m[2];
     __host__ __device__ constexpr float2& operator[](uint i) { return m[i]; }
