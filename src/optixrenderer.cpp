@@ -12,9 +12,19 @@
 #include <iostream>
 #include <array>
 #include <vector>
+#include <fstream>
 
 #include "optixir.hpp"
 #include "cudautil.hpp"
+
+using uint = unsigned int;
+
+std::vector<char> readBinaryFile(const std::filesystem::path& filepath) {
+    std::ifstream stream{filepath, std::ios::binary};
+    std::cout << "Loading " << std::filesystem::absolute(filepath) << std::endl;
+    if (stream.fail()) throw std::runtime_error("Could not open file: " + std::filesystem::absolute(filepath).string());
+    return std::vector<char>(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
+}
 
 OptixRenderer::OptixRenderer() {
     check(cudaFree(nullptr)); // Initialize CUDA for this device on this thread
@@ -57,8 +67,8 @@ OptixRenderer::OptixRenderer() {
     };
 
     OptixModule module = nullptr;
-    const std::string source = Common::readFile(optixir::optixpathtracer_path);
-    check(optixModuleCreate(context, &moduleCompileOptions, &pipelineCompileOptions, source.c_str(), source.size(), nullptr, nullptr, &module));
+    const auto source = readBinaryFile(optixir::optixpathtracer_path);
+    check(optixModuleCreate(context, &moduleCompileOptions, &pipelineCompileOptions, source.data(), source.size(), nullptr, nullptr, &module));
 
     // Create program groups
     OptixProgramGroupOptions pgOptions = {};

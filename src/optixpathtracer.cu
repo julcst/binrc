@@ -2,6 +2,8 @@
 
 #include "optixparams.hpp"
 
+using uint = unsigned int;
+
 void __device__ makeCameraRay(const uint3& idx, const uint3& dim, float3& rayOrigin, float3& rayDir) {
     rayOrigin = make_float3(0.0f, 0.0f, -1.0f);
     rayDir = make_float3(
