@@ -61,8 +61,8 @@ void MainApp::resizeCallback(const vec2& res) {
     blitTexture.allocate2D(GL_RGBA32F, res.x, res.y);
     blitTexture.bindTextureUnit(0);
     camera.resize(res.x / res.y);
-    renderer.resize(uvec2(res));
     renderer.reset();
+    renderer.resize(uvec2(res));
 }
 
 void MainApp::keyCallback(Key key, Action action, Modifier modifier) {
@@ -100,8 +100,6 @@ void MainApp::render() {
     }
 
     renderer.render(image, dim);
-
-    check(cudaDeviceSynchronize());
 
     // Unmap the buffer
     check(cudaGraphicsUnmapResources(1, &cudaPboResource));

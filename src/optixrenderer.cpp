@@ -144,25 +144,21 @@ OptixRenderer::~OptixRenderer() {
 }
 
 void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
-    check(cudaDeviceSynchronize());
     scene.loadGLTF(context, params, programGroups[2], sbt, path);
-    check(cudaDeviceSynchronize());
 }
 
 void OptixRenderer::setCamera(const mat4& clipToWorld) {
-    check(cudaDeviceSynchronize());
     params->clipToWorld = glmToCuda(clipToWorld);
 }
 
 void OptixRenderer::render(vec4* image, uvec2 dim) {
-    check(cudaDeviceSynchronize());
     params->image = reinterpret_cast<float4*>(image);
     params->dim = make_uint2(dim.x, dim.y);
-
-    check(cudaDeviceSynchronize());
+    
     ensureSobol(params->sample);
     check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params), sizeof(Params), &sbt, dim.x, dim.y, 1));
-    check(cudaDeviceSynchronize());
+    check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+    
     params->sample++;
     params->weight = 1.0f / static_cast<float>(params->sample);
 }
@@ -179,6 +175,7 @@ void OptixRenderer::generateSobol(uint offset, uint n) {
     check(cudaFree(reinterpret_cast<void*>(params->randSequence)));
     check(cudaMalloc(reinterpret_cast<void**>(&params->randSequence), nfloats * sizeof(float)));
     check(curandGenerateUniform(generator, reinterpret_cast<float*>(params->randSequence), nfloats));
+    check(cudaDeviceSynchronize()); // Wait for the generator to finish
     check(curandDestroyGenerator(generator));
 }
 
@@ -191,17 +188,17 @@ void OptixRenderer::ensureSobol(uint sample) {
 
 void OptixRenderer::resize(uvec2 dim) {
     // NOTE: We rebuild the generator on resize, this makes resize slow but saves memory
+    const size_t n = static_cast<size_t>(dim.x * dim.y) * 4;
     curandGenerator_t generator;
     check(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_XORWOW));
     check(cudaFree(reinterpret_cast<void*>(params->rotationTable)));
-    size_t n = static_cast<size_t>(dim.x * dim.y) * 4;
     check(cudaMalloc(reinterpret_cast<void**>(&params->rotationTable), n * sizeof(float)));
     check(curandGenerateUniform(generator, reinterpret_cast<float*>(params->rotationTable), n));
+    check(cudaDeviceSynchronize()); // Wait for the generator to finish
     check(curandDestroyGenerator(generator));
 }
 
 void OptixRenderer::reset() {
-    check(cudaDeviceSynchronize());
     params->sample = 0;
     params->weight = 1.0f;
 }
