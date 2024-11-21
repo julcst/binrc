@@ -28,58 +28,113 @@ Scene::~Scene() {
 }
 
 OptixTraversableHandle Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& path) {
-    std::vector<float3> vertices = {
-        make_float3(-1.0f, -1.0f, 0.0f),
-        make_float3(1.0f, -1.0f, 0.0f),
-        make_float3(0.0f, 1.0f, 0.0f),
-    };
-    CUdeviceptr vertexBuffer;
-    check(cudaMalloc(reinterpret_cast<void**>(&vertexBuffer), vertices.size() * sizeof(float3)));
-    check(cudaMemcpy(reinterpret_cast<void*>(vertexBuffer), vertices.data(), vertices.size() * sizeof(float3), cudaMemcpyHostToDevice));
+    // Parse GLTF file
+    auto parser = fastgltf::Parser(fastgltf::Extensions::None);
+    auto data = fastgltf::GltfDataBuffer::FromPath(path);
+    if (auto e = data.error(); e != fastgltf::Error::None) throw std::runtime_error(std::format("Error: {}", fastgltf::getErrorMessage(e)));
+    auto asset = parser.loadGltf(data.get(), path.parent_path(), fastgltf::Options::GenerateMeshIndices);
+    if (auto e = asset.error(); e != fastgltf::Error::None) throw std::runtime_error(std::format("Error: {}", fastgltf::getErrorMessage(e)));
 
-    std::vector<uint3> indices = {
-        make_uint3(0, 1, 2),
-    };
-    CUdeviceptr indexBuffer;
-    check(cudaMalloc(reinterpret_cast<void**>(&indexBuffer), indices.size() * sizeof(uint3)));
-    check(cudaMemcpy(reinterpret_cast<void*>(indexBuffer), indices.data(), indices.size() * sizeof(uint3), cudaMemcpyHostToDevice));
+    // Count number of instances
+    nInstances = 0;
+    for (const auto& node : asset->nodes) {
+        if (auto i = node.meshIndex; i.has_value()) {
+            nInstances += asset->meshes[i.value()].primitives.size();
+        }
+    }
 
+    // Count number of primitives
+    size_t nPrimitives = 0;
+    for (const auto& mesh : asset->meshes) {
+        nPrimitives += mesh.primitives.size();
+    }
+
+    // Build geometry
+    std::vector<OptixBuildInput> buildInputs;
+    buildInputs.reserve(nPrimitives);
     std::array<uint, 1> flags = { OPTIX_GEOMETRY_FLAG_NONE };
+    std::vector<std::array<CUdeviceptr, 1>> vertexBuffers; // Store pointers to device buffers in host memory
+    vertexBuffers.reserve(nPrimitives);
 
-    const auto buildInput = OptixBuildInput {
-        .type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES,
-        .triangleArray = {
-            .vertexBuffers = &vertexBuffer,
-            .numVertices = static_cast<unsigned int>(vertices.size()),
-            .vertexFormat = OPTIX_VERTEX_FORMAT_FLOAT3,
-            .vertexStrideInBytes = sizeof(vec3),
-            .indexBuffer = indexBuffer,
-            .numIndexTriplets = static_cast<unsigned int>(indices.size()),
-            .indexFormat = OPTIX_INDICES_FORMAT_UNSIGNED_INT3,
-            .indexStrideInBytes = 0,
-            .flags = flags.data(),
-            .numSbtRecords = 1,
-        },
-    };
-    const auto handle = buildGAS(ctx, {buildInput});
+    for (const auto& mesh : asset->meshes) {
+        for (const auto& primitive : mesh.primitives) {
 
-    nInstances = 1;
-    const std::vector<OptixInstance> instancesHost = {
-        OptixInstance {
+            auto& posAcc = asset->accessors[primitive.findAttribute("POSITION")->accessorIndex];
+            auto nVertices = posAcc.count;
+            std::vector<vec4> hostVertices(nVertices);
+            fastgltf::iterateAccessorWithIndex<vec3>(asset.get(), posAcc, [&](const vec3& vertex, auto i) {
+                hostVertices[i] = vec4(vertex, 1.0f);
+            });
+            vec4* vertices;
+            // TODO: Free
+            check(cudaMalloc(reinterpret_cast<void**>(&vertices), nVertices * sizeof(vec4)));
+            check(cudaMemcpy(reinterpret_cast<void*>(vertices), hostVertices.data(), nVertices * sizeof(vec4), cudaMemcpyHostToDevice));
+            vertexBuffers.push_back({ reinterpret_cast<CUdeviceptr>(vertices) });
+
+            auto& indexAcc = asset->accessors[primitive.indicesAccessor.value()];
+            auto nTriangles = indexAcc.count / 3;
+            std::vector<uint> hostIndices(nTriangles * 3);
+            fastgltf::iterateAccessorWithIndex<uint>(asset.get(), indexAcc, [&](const uint& index, auto i) {
+                hostIndices[i] = index;
+            });
+            uint* indices;
+            // TODO: Free
+            check(cudaMalloc(reinterpret_cast<void**>(&indices), nTriangles * 3 * sizeof(uint)));
+            check(cudaMemcpy(reinterpret_cast<void*>(indices), hostIndices.data(), nTriangles * 3 * sizeof(uint), cudaMemcpyHostToDevice));
+
+            buildInputs.push_back(OptixBuildInput {
+                .type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES,
+                .triangleArray = {
+                    .vertexBuffers = vertexBuffers.back().data(),
+                    .numVertices = static_cast<unsigned int>(nVertices),
+                    .vertexFormat = OPTIX_VERTEX_FORMAT_FLOAT3,
+                    .vertexStrideInBytes = sizeof(vec4),
+                    .indexBuffer = reinterpret_cast<CUdeviceptr>(indices),
+                    .numIndexTriplets = static_cast<unsigned int>(nTriangles),
+                    .indexFormat = OPTIX_INDICES_FORMAT_UNSIGNED_INT3,
+                    .indexStrideInBytes = 0,
+                    .flags = flags.data(),
+                    .numSbtRecords = 1,
+                },
+            });
+        }
+    }
+
+    for (const auto& node : asset->nodes) {
+        if (auto i = node.meshIndex; i.has_value()) {
+            auto mesh = asset->meshes[i.value()];
+            for (auto primitive : mesh.primitives) {
+                
+            }
+        }
+    }
+
+    const auto handle = buildGAS(ctx, buildInputs);
+
+    // Free vertex and index buffers
+    for (auto buildInput : buildInputs) {
+        check(cudaFree(reinterpret_cast<void*>(buildInput.triangleArray.vertexBuffers[0])));
+        check(cudaFree(reinterpret_cast<void*>(buildInput.triangleArray.indexBuffer)));
+    }
+
+    std::vector<OptixInstance> hostInstances(nInstances);
+    for (uint i = 0; i < nInstances; i++) {
+        hostInstances[i] = OptixInstance {
             .transform = {
-                1.0f, 0.0f, 0.0f, 0.0f,
+                1.0f, 0.0f, 0.0f, i * 1.0f,
                 0.0f, 1.0f, 0.0f, 0.0f,
                 0.0f, 0.0f, 1.0f, 0.0f,
             },
-            .instanceId = 0,
+            .instanceId = i,
             .sbtOffset = 0,
             .visibilityMask = 255,
             .flags = OPTIX_INSTANCE_FLAG_NONE,
             .traversableHandle = handle,
-        },
-    };
+        };
+    }
+
     check(cudaMalloc(reinterpret_cast<void**>(&instances), nInstances * sizeof(OptixInstance)));
-    check(cudaMemcpy(reinterpret_cast<void*>(instances), instancesHost.data(), nInstances * sizeof(OptixInstance), cudaMemcpyHostToDevice));
+    check(cudaMemcpy(reinterpret_cast<void*>(instances), hostInstances.data(), nInstances * sizeof(OptixInstance), cudaMemcpyHostToDevice));
 
     return buildIAS(ctx);
 }
