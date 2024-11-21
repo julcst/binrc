@@ -190,7 +190,7 @@ extern "C" __global__ void __miss__ms() {
     const auto dir = optixGetWorldRayDirection();
     auto sky = make_float3(0.1f);
     const auto sundir = normalize(make_float3(0.5f, 0.5f, 0.5f));
-    sky += clamp(powf(dot(dir, sundir), 100.0f), 0.0f, 1.0f) * make_float3(0.8f, 0.9f, 1.0f) * 5.0f;
+    sky += min(powf(max(dot(dir, sundir), 0.0f), 100.0f), 1.0f) * make_float3(0.8f, 0.9f, 1.0f) * 5.0f;
 
     setColor(sky);
     setT(INFINITY);

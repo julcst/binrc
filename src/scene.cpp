@@ -31,7 +31,6 @@ Scene::~Scene() {
 }
 
 void Scene::free() {
-    check(cudaFree(reinterpret_cast<void*>(instances)));
     check(cudaFree(reinterpret_cast<void*>(hitRecords)));
     for (const auto& geometries : meshToGeometries) {
         for (const auto& geometry : geometries) {
@@ -56,6 +55,7 @@ std::tuple<OptixTraversableHandle, CUdeviceptr> buildGAS(OptixDeviceContext ctx,
             .numKeys = 0,
         },
     };
+
     OptixAccelBufferSizes bufferSizes;
     check(optixAccelComputeMemoryUsage(ctx, &accelOptions, buildInputs.data(), buildInputs.size(), &bufferSizes));
     CUdeviceptr tempBuffer, gasBuffer;
@@ -70,6 +70,81 @@ std::tuple<OptixTraversableHandle, CUdeviceptr> buildGAS(OptixDeviceContext ctx,
     check(cudaFree(reinterpret_cast<void*>(tempBuffer)));
 
     return {handle, gasBuffer};
+}
+
+std::tuple<OptixTraversableHandle, CUdeviceptr, CUdeviceptr> buildGAS(OptixDeviceContext ctx, const std::vector<vec4>& vertices, const std::vector<uint>& indices) {
+    std::array<uint, 1> flags = { OPTIX_GEOMETRY_FLAG_NONE };
+
+    CUdeviceptr vertexBuffer, indexBuffer;
+    check(cudaMalloc(reinterpret_cast<void**>(&vertexBuffer), vertices.size() * sizeof(float4)));
+    check(cudaMemcpy(reinterpret_cast<void*>(vertexBuffer), vertices.data(), vertices.size() * sizeof(float4), cudaMemcpyHostToDevice));
+    check(cudaMalloc(reinterpret_cast<void**>(&indexBuffer), indices.size() * sizeof(uint)));
+    check(cudaMemcpy(reinterpret_cast<void*>(indexBuffer), indices.data(), indices.size() * sizeof(uint), cudaMemcpyHostToDevice));
+
+    const auto buildInput = OptixBuildInput {
+        .type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES,
+        .triangleArray = {
+            .vertexBuffers = &vertexBuffer,
+            .numVertices = static_cast<unsigned int>(vertices.size()),
+            .vertexFormat = OPTIX_VERTEX_FORMAT_FLOAT3,
+            .vertexStrideInBytes = sizeof(vec4), // 16 byte stride for better performance
+            .indexBuffer = indexBuffer,
+            .numIndexTriplets = static_cast<unsigned int>(indices.size() / 3),
+            .indexFormat = OPTIX_INDICES_FORMAT_UNSIGNED_INT3,
+            .indexStrideInBytes = 0,
+            .preTransform = 0,
+            .flags = flags.data(),
+            .numSbtRecords = 1,
+            .sbtIndexOffsetBuffer = 0,
+            .sbtIndexOffsetSizeInBytes = 0,
+            .sbtIndexOffsetStrideInBytes = 0,
+            .primitiveIndexOffset = 0,
+            .transformFormat = OPTIX_TRANSFORM_FORMAT_NONE,
+        },
+    };
+
+    const auto [handle, gasBuffer] = buildGAS(ctx, {buildInput});
+
+    check(cudaFree(reinterpret_cast<void*>(vertexBuffer)));
+
+    return {handle, gasBuffer, indexBuffer};
+}
+
+std::tuple<OptixTraversableHandle, CUdeviceptr> buildIAS(OptixDeviceContext ctx, const std::vector<OptixInstance>& instances) {
+    CUdeviceptr instanceBuffer;
+    check(cudaMalloc(reinterpret_cast<void**>(&instanceBuffer), instances.size() * sizeof(OptixInstance)));
+    check(cudaMemcpy(reinterpret_cast<void*>(instanceBuffer), instances.data(), instances.size() * sizeof(OptixInstance), cudaMemcpyHostToDevice));
+
+    OptixBuildInput buildInput = {
+        .type = OPTIX_BUILD_INPUT_TYPE_INSTANCES,
+        .instanceArray = {
+            .instances = instanceBuffer,
+            .numInstances = static_cast<unsigned int>(instances.size()),
+        },
+    };
+
+    OptixAccelBuildOptions accelOptions = {
+        .buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_TRACE,
+        .operation = OPTIX_BUILD_OPERATION_BUILD,
+        .motionOptions = {
+            .numKeys = 0,
+        },
+    };
+    OptixAccelBufferSizes bufferSizes;
+    check(optixAccelComputeMemoryUsage(ctx, &accelOptions, &buildInput, 1, &bufferSizes));
+    CUdeviceptr tempBuffer, iasBuffer;
+    check(cudaMalloc(reinterpret_cast<void**>(&tempBuffer), bufferSizes.tempSizeInBytes));
+    check(cudaMalloc(reinterpret_cast<void**>(&iasBuffer), bufferSizes.outputSizeInBytes));
+
+    OptixTraversableHandle handle;
+    optixAccelBuild(ctx, nullptr, &accelOptions, &buildInput, 1, tempBuffer, bufferSizes.tempSizeInBytes, iasBuffer, bufferSizes.outputSizeInBytes, &handle, nullptr, 0);
+
+    // TODO: Compact
+
+    check(cudaFree(reinterpret_cast<void*>(instanceBuffer)));
+    check(cudaFree(reinterpret_cast<void*>(tempBuffer)));
+
+    return {handle, iasBuffer};
 }
 
 float3 toVec3(const fastgltf::math::fvec4& v) {
@@ -88,13 +163,12 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
     if (auto e = asset.error(); e != fastgltf::Error::None) throw std::runtime_error(std::format("Error: {}", fastgltf::getErrorMessage(e)));
 
     // Count number of instances
-    nInstances = 0;
+    uint nInstances = 0;
     for (const auto& node : asset->nodes) {
         if (auto i = node.meshIndex; i.has_value()) {
             nInstances += asset->meshes[i.value()].primitives.size();
         }
     }
-    check(cudaMallocManaged(reinterpret_cast<void**>(&instances), nInstances * sizeof(OptixInstance)));
 
     // Count number of geometries
     nGeometries = 0;
@@ -116,7 +190,6 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
     }
 
     // Build geometry
-    std::array<uint, 1> flags = { OPTIX_GEOMETRY_FLAG_NONE };
     meshToGeometries = std::vector<std::vector<Geometry>>(asset->meshes.size());
     indexBuffers = std::vector<uint3*>(nGeometries);
     vertexDatas = std::vector<VertexData*>(nGeometries);
@@ -126,24 +199,20 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
         const auto& mesh = asset->meshes[i];
         for (const auto& primitive : mesh.primitives) {
             auto& posAcc = asset->accessors[primitive.findAttribute("POSITION")->accessorIndex];
-            auto nVertices = posAcc.count;
-            vec4* vertices;
-            check(cudaMallocManaged(reinterpret_cast<void**>(&vertices), nVertices * sizeof(vec4)));
+            std::vector<vec4> vertices(posAcc.count);
             fastgltf::iterateAccessorWithIndex<vec3>(asset.get(), posAcc, [&](const vec3& vertex, auto i) {
                 vertices[i] = vec4(vertex, 1.0f);
             });
 
             auto& indexAcc = asset->accessors[primitive.indicesAccessor.value()];
-            auto nTriangles = indexAcc.count / 3;
-            uint* indices;
-            // TODO: Keep
-            check(cudaMallocManaged(reinterpret_cast<void**>(&indices), nTriangles * sizeof(uint3)));
+            std::vector<uint> indices(indexAcc.count);
             fastgltf::iterateAccessorWithIndex<uint>(asset.get(), indexAcc, [&](const uint& index, auto i) {
                 indices[i] = index;
             });
 
             VertexData* vertexData;
-            check(cudaMallocManaged(reinterpret_cast<void**>(&vertexData), nVertices * sizeof(VertexData)));
+            check(cudaMallocManaged(reinterpret_cast<void**>(&vertexData), vertices.size() * sizeof(VertexData)));
+
             auto& normalAcc = asset->accessors[primitive.findAttribute("NORMAL")->accessorIndex];
             fastgltf::iterateAccessorWithIndex<vec3>(asset.get(), normalAcc, [&](const vec3& normal, auto i) {
                 vertexData[i].normal = glmToCuda(normal);
@@ -157,48 +226,26 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
                 vertexData[i].tangent = glmToCuda(tangent);
             });
 
-
-            const auto [handle, gasBuffer] = buildGAS(ctx, { OptixBuildInput {
-                .type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES,
-                .triangleArray = {
-                    .vertexBuffers = reinterpret_cast<CUdeviceptr*>(&vertices),
-                    .numVertices = static_cast<unsigned int>(nVertices),
-                    .vertexFormat = OPTIX_VERTEX_FORMAT_FLOAT3,
-                    .vertexStrideInBytes = sizeof(vec4), // 16 byte stride for better performance
-                    .indexBuffer = reinterpret_cast<CUdeviceptr>(indices),
-                    .numIndexTriplets = static_cast<unsigned int>(nTriangles),
-                    .indexFormat = OPTIX_INDICES_FORMAT_UNSIGNED_INT3,
-                    .indexStrideInBytes = 0,
-                    .preTransform = 0,
-                    .flags = flags.data(),
-                    .numSbtRecords = 1,
-                    .sbtIndexOffsetBuffer = 0,
-                    .sbtIndexOffsetSizeInBytes = 0,
-                    .sbtIndexOffsetStrideInBytes = 0,
-                    .primitiveIndexOffset = 0,
-                    .transformFormat = OPTIX_TRANSFORM_FORMAT_NONE,
-                },
-            }});
+            const auto [handle, gasBuffer, indexBuffer] = buildGAS(ctx, vertices, indices);
 
             uint materialIdx = primitive.materialIndex.value_or(0);
             optixSbtRecordPackHeader(program, reinterpret_cast<void*>(&hitRecords[geometryID]));
             hitRecords[geometryID].data = HitData {
-                .indexBuffer = reinterpret_cast<uint3*>(indices),
+                .indexBuffer = reinterpret_cast<uint3*>(indexBuffer),
                 .vertexData = reinterpret_cast<VertexData*>(vertexData),
                 .material = &materials[materialIdx],
             };
 
-            check(cudaFree(reinterpret_cast<void*>(vertices)));
-
-            indexBuffers[geometryID] = reinterpret_cast<uint3*>(indices);
+            indexBuffers[geometryID] = reinterpret_cast<uint3*>(indexBuffer);
             vertexDatas[geometryID] = vertexData;
             meshToGeometries[i].emplace_back(handle, gasBuffer, geometryID);
             geometryID++;
 
-            std::cout << "Loaded geometry " << geometryID << " with " << nVertices << " vertices and " << nTriangles << " triangles" << std::endl;
+            std::cout << "Loaded geometry " << geometryID << " with " << vertices.size() << " vertices and " << indices.size() / 3 << " triangles" << std::endl;
         }
     }
 
+    std::vector<OptixInstance> instances(nInstances);
     uint i = 0;
     for (const auto& node : asset->nodes) {
         if (auto m = node.meshIndex; m.has_value()) {
@@ -231,75 +278,11 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
         }
     }
 
-    check(cudaDeviceSynchronize());
-    params->handle = buildIAS(ctx);
+    const auto [handle, iasBuffer] = buildIAS(ctx, instances);
+
+    params->handle = handle;
+    this->iasBuffer = iasBuffer;
     sbt.hitgroupRecordBase = reinterpret_cast<CUdeviceptr>(hitRecords);
     sbt.hitgroupRecordStrideInBytes = sizeof(HitRecord);
     sbt.hitgroupRecordCount = nGeometries;
-    check(cudaDeviceSynchronize());
-}
-
-OptixTraversableHandle Scene::buildIAS(OptixDeviceContext ctx) {
-    OptixBuildInput buildInput = {
-        .type = OPTIX_BUILD_INPUT_TYPE_INSTANCES,
-        .instanceArray = {
-            .instances = reinterpret_cast<CUdeviceptr>(instances),
-            .numInstances = nInstances,
-        },
-    };
-
-    OptixAccelBuildOptions accelOptions = {
-        .buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_TRACE,
-        .operation = OPTIX_BUILD_OPERATION_BUILD,
-        .motionOptions = {
-            .numKeys = 0,
-        },
-    };
-    OptixAccelBufferSizes bufferSizes;
-    check(optixAccelComputeMemoryUsage(ctx, &accelOptions, &buildInput, 1, &bufferSizes));
-    CUdeviceptr tempBuffer;
-    check(cudaMalloc(reinterpret_cast<void**>(&tempBuffer), bufferSizes.tempSizeInBytes));
-    check(cudaMalloc(reinterpret_cast<void**>(&iasBuffer), bufferSizes.outputSizeInBytes));
-
-    check(cudaDeviceSynchronize());
-
-    OptixTraversableHandle handle;
-    optixAccelBuild(ctx, nullptr, &accelOptions, &buildInput, 1, tempBuffer, bufferSizes.tempSizeInBytes, iasBuffer, bufferSizes.outputSizeInBytes, &handle, nullptr, 0);
-
-    // TODO: Compact
-
-    check(cudaFree(reinterpret_cast<void*>(tempBuffer)));
-
-    check(cudaDeviceSynchronize());
-
-    return handle;
-}
-
-OptixTraversableHandle Scene::updateIAS(OptixDeviceContext ctx) {
-    OptixBuildInput buildInput = {
-        .type = OPTIX_BUILD_INPUT_TYPE_INSTANCES,
-        .instanceArray = {
-            .instances = reinterpret_cast<CUdeviceptr>(instances),
-            .numInstances = nInstances,
-        },
-    };
-
-    OptixAccelBuildOptions accelOptions = {
-        .buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_TRACE,
-        .operation = OPTIX_BUILD_OPERATION_UPDATE,
-        .motionOptions = {
-            .numKeys = 0,
-        },
-    };
-    OptixAccelBufferSizes bufferSizes;
-    check(optixAccelComputeMemoryUsage(ctx, &accelOptions, nullptr, 0, &bufferSizes));
-    CUdeviceptr d_tempBuffer;
-    check(cudaMalloc(reinterpret_cast<void**>(&d_tempBuffer), bufferSizes.tempUpdateSizeInBytes));
-
-    OptixTraversableHandle handle;
-    optixAccelBuild(ctx, nullptr, &accelOptions, &buildInput, 1, d_tempBuffer, bufferSizes.tempSizeInBytes, iasBuffer, bufferSizes.outputSizeInBytes, &handle, nullptr, 0);
-
-    check(cudaFree(reinterpret_cast<void*>(d_tempBuffer)));
-
-    return handle;
 }

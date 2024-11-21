@@ -18,8 +18,7 @@ struct Geometry {
 };
 
 struct Scene {
-    uint nInstances = 0;
-    OptixInstance* instances = nullptr;
+    std::vector<OptixInstance> instances;
     
     uint nGeometries = 0;
     HitRecord* hitRecords = nullptr;
@@ -44,6 +43,4 @@ struct Scene {
 
   private:
     void free();
-    OptixTraversableHandle buildIAS(OptixDeviceContext ctx);
-    OptixTraversableHandle updateIAS(OptixDeviceContext ctx);
 };

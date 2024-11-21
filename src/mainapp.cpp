@@ -44,7 +44,7 @@ MainApp::MainApp() : App(800, 600) {
     blitProgram.use();
     blitProgram.set(1, exposure);
     
-    renderer.loadGLTF("C:/Users/Michael/Desktop/testscene.glb");
+    renderer.loadGLTF("/Users/Michael/Desktop/testscene.glb");
 
     setVSync(false);
 }
