@@ -1,5 +1,9 @@
 #include "scene.hpp"
 
+#include <fastgltf/core.hpp>
+#include <fastgltf/tools.hpp>
+#include <fastgltf/glm_element_traits.hpp>
+
 #include <cuda_runtime.h>
 #include <cudautil.hpp>
 

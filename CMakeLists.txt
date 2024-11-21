@@ -33,7 +33,7 @@ FetchContent_Declare(
     fastgltf
     URL https://github.com/spnda/fastgltf/archive/v0.8.0.tar.gz
 )
-FetchContent_MakeAvailable(framework)
+FetchContent_MakeAvailable(framework fastgltf)
 
 # Build the OptiX IR
 set(OPTIXIR
@@ -48,11 +48,12 @@ set(SRC
     src/main.cpp
     src/mainapp.cpp
     src/optixrenderer.cpp
+    src/scene.cpp
 )
 
 # Add the executable
 add_executable(${PROJECT_NAME} ${SRC})
-target_link_libraries(${PROJECT_NAME} CUDA::cudart CUDA::curand framework)
+target_link_libraries(${PROJECT_NAME} CUDA::cudart CUDA::curand framework fastgltf)
 target_include_directories(${PROJECT_NAME} PUBLIC src ${OPTIX_DIR}/include ${CUDAToolkit_INCLUDE_DIRS})
 
 # Set compiler flags

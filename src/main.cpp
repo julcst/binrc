@@ -3,6 +3,11 @@
 #include <iostream>
 
 int main() {
-    MainApp app;
-    app.run();
+    try {
+        MainApp app;
+        app.run();
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
 }
