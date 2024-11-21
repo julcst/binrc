@@ -194,6 +194,8 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
             vertexDatas[geometryID] = vertexData;
             meshToGeometries[i].emplace_back(handle, gasBuffer, geometryID);
             geometryID++;
+
+            std::cout << "Loaded geometry " << geometryID << " with " << nVertices << " vertices and " << nTriangles << " triangles" << std::endl;
         }
     }
 
@@ -229,10 +231,12 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
         }
     }
 
+    check(cudaDeviceSynchronize());
     params->handle = buildIAS(ctx);
     sbt.hitgroupRecordBase = reinterpret_cast<CUdeviceptr>(hitRecords);
     sbt.hitgroupRecordStrideInBytes = sizeof(HitRecord);
     sbt.hitgroupRecordCount = nGeometries;
+    check(cudaDeviceSynchronize());
 }
 
 OptixTraversableHandle Scene::buildIAS(OptixDeviceContext ctx) {
@@ -257,12 +261,16 @@ OptixTraversableHandle Scene::buildIAS(OptixDeviceContext ctx) {
     check(cudaMalloc(reinterpret_cast<void**>(&tempBuffer), bufferSizes.tempSizeInBytes));
     check(cudaMalloc(reinterpret_cast<void**>(&iasBuffer), bufferSizes.outputSizeInBytes));
 
+    check(cudaDeviceSynchronize());
+
     OptixTraversableHandle handle;
     optixAccelBuild(ctx, nullptr, &accelOptions, &buildInput, 1, tempBuffer, bufferSizes.tempSizeInBytes, iasBuffer, bufferSizes.outputSizeInBytes, &handle, nullptr, 0);
 
     // TODO: Compact
 
     check(cudaFree(reinterpret_cast<void*>(tempBuffer)));
+
+    check(cudaDeviceSynchronize());
 
     return handle;
 }

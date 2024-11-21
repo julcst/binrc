@@ -22,6 +22,7 @@ public:
     OptixRenderer(OptixRenderer&&) = delete;
     OptixRenderer& operator=(OptixRenderer&&) = delete;
 
+    void reset();
     void render(vec4* image, uvec2 dim);
     void setCamera(const mat4& clipToWorld);
     void loadGLTF(const std::filesystem::path& path);
@@ -38,7 +39,6 @@ private:
     MissRecord* missRecord;
     Scene scene;
 
-    void reset();
     void generateSobol(uint offset, uint n);
     void ensureSobol(uint sample);
 };

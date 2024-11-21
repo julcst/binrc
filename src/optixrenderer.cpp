@@ -126,6 +126,11 @@ OptixRenderer::OptixRenderer() {
     params->randSequence = nullptr;
     params->rotationTable = nullptr;
     params->russianRouletteWeight = 3.0f;
+    params->sample = 0;
+    params->weight = 1.0f;
+    params->dim = make_uint2(0, 0);
+    params->clipToWorld = glmToCuda(mat4(1.0f));
+    params->handle = 0;
 }
 
 OptixRenderer::~OptixRenderer() {
@@ -139,22 +144,25 @@ OptixRenderer::~OptixRenderer() {
 }
 
 void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
+    check(cudaDeviceSynchronize());
     scene.loadGLTF(context, params, programGroups[2], sbt, path);
-    reset();
+    check(cudaDeviceSynchronize());
 }
 
 void OptixRenderer::setCamera(const mat4& clipToWorld) {
+    check(cudaDeviceSynchronize());
     params->clipToWorld = glmToCuda(clipToWorld);
-    reset();
 }
 
 void OptixRenderer::render(vec4* image, uvec2 dim) {
+    check(cudaDeviceSynchronize());
     params->image = reinterpret_cast<float4*>(image);
     params->dim = make_uint2(dim.x, dim.y);
 
+    check(cudaDeviceSynchronize());
     ensureSobol(params->sample);
     check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params), sizeof(Params), &sbt, dim.x, dim.y, 1));
-
+    check(cudaDeviceSynchronize());
     params->sample++;
     params->weight = 1.0f / static_cast<float>(params->sample);
 }
@@ -190,10 +198,10 @@ void OptixRenderer::resize(uvec2 dim) {
     check(cudaMalloc(reinterpret_cast<void**>(&params->rotationTable), n * sizeof(float)));
     check(curandGenerateUniform(generator, reinterpret_cast<float*>(params->rotationTable), n));
     check(curandDestroyGenerator(generator));
-    reset();
 }
 
 void OptixRenderer::reset() {
+    check(cudaDeviceSynchronize());
     params->sample = 0;
     params->weight = 1.0f;
 }

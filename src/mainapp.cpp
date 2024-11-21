@@ -62,6 +62,7 @@ void MainApp::resizeCallback(const vec2& res) {
     blitTexture.bindTextureUnit(0);
     camera.resize(res.x / res.y);
     renderer.resize(uvec2(res));
+    renderer.reset();
 }
 
 void MainApp::keyCallback(Key key, Action action, Modifier modifier) {
@@ -93,7 +94,10 @@ void MainApp::render() {
     check(cudaGraphicsResourceGetMappedPointer(reinterpret_cast<void**>(&image), &size, cudaPboResource));
     const auto dim = uvec2(resolution);
 
-    if(camera.updateIfChanged()) renderer.setCamera(inverse(camera.projectionMatrix * camera.viewMatrix));
+    if(camera.updateIfChanged()) {
+        renderer.setCamera(inverse(camera.projectionMatrix * camera.viewMatrix));
+        renderer.reset();
+    }
 
     renderer.render(image, dim);
 
