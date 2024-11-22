@@ -26,24 +26,14 @@ using namespace glm;
 #include "optixparams.cuh"
 #include "cudaglm.cuh"
 
-Scene::~Scene() {
-    free();
+Geometry::~Geometry() {
+    check(cudaFree(reinterpret_cast<void*>(gasBuffer)));
+    check(cudaFree(reinterpret_cast<void*>(indexBuffer)));
+    check(cudaFree(reinterpret_cast<void*>(vertexData)));
 }
 
-void Scene::free() {
-    check(cudaFree(reinterpret_cast<void*>(hitRecords)));
-    for (const auto& geometries : meshToGeometries) {
-        for (const auto& geometry : geometries) {
-            check(cudaFree(reinterpret_cast<void*>(geometry.gasBuffer)));
-        }
-    }
+Scene::~Scene() {
     check(cudaFree(reinterpret_cast<void*>(iasBuffer)));
-    for (auto indexBuffer : indexBuffers) {
-        check(cudaFree(reinterpret_cast<void*>(indexBuffer)));
-    }
-    for (auto vertexData : vertexDatas) {
-        check(cudaFree(reinterpret_cast<void*>(vertexData)));
-    }
 }
 
 std::tuple<OptixTraversableHandle, CUdeviceptr> buildGAS(OptixDeviceContext ctx, const std::vector<OptixBuildInput>& buildInputs) {
@@ -152,9 +142,6 @@ float3 toVec3(const fastgltf::math::fvec4& v) {
 }
 
 void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& program, OptixShaderBindingTable& sbt, const std::filesystem::path& path) {
-    // Free previous scene
-    free();
-
     // Parse GLTF file
     auto parser = fastgltf::Parser(fastgltf::Extensions::None);
     auto data = fastgltf::GltfDataBuffer::FromPath(path);
@@ -171,15 +158,15 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
     }
 
     // Count number of geometries
-    nGeometries = 0;
+    uint nGeometries = 0;
     for (const auto& mesh : asset->meshes) {
         nGeometries += mesh.primitives.size();
     }
-    check(cudaMallocManaged(reinterpret_cast<void**>(&hitRecords), nGeometries * sizeof(HitRecord)));
+    std::vector<HitRecord> hitRecords(nGeometries);
 
     // Create materials
-    nMaterials = asset->materials.size();
-    check(cudaMallocManaged(reinterpret_cast<void**>(&materials), nMaterials * sizeof(Material)));
+    uint nMaterials = asset->materials.size();
+    std::vector<Material> materials(nMaterials);
     for (uint i = 0; i < nMaterials; i++) {
         const auto& material = asset->materials[i];
         materials[i] = Material {
@@ -189,10 +176,8 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
         };
     }
 
-    // Build geometry
-    meshToGeometries = std::vector<std::vector<Geometry>>(asset->meshes.size());
-    indexBuffers = std::vector<uint3*>(nGeometries);
-    vertexDatas = std::vector<VertexData*>(nGeometries);
+    // Build geometry and free previous geometry buffers
+    geometryTable = std::vector<std::vector<Geometry>>(asset->meshes.size());
 
     uint geometryID = 0;
     for (uint i = 0; i < asset->meshes.size(); i++) {
@@ -210,9 +195,9 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
                 indices[i] = index;
             });
 
-            VertexData* vertexData;
-            check(cudaMallocManaged(reinterpret_cast<void**>(&vertexData), vertices.size() * sizeof(VertexData)));
+            const auto [handle, gasBuffer, indexBuffer] = buildGAS(ctx, vertices, indices);
 
+            std::vector<VertexData> vertexData(vertices.size());
             auto& normalAcc = asset->accessors[primitive.findAttribute("NORMAL")->accessorIndex];
             fastgltf::iterateAccessorWithIndex<vec3>(asset.get(), normalAcc, [&](const vec3& normal, auto i) {
                 vertexData[i].normal = glmToCuda(normal);
@@ -226,19 +211,19 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
                 vertexData[i].tangent = glmToCuda(tangent);
             });
 
-            const auto [handle, gasBuffer, indexBuffer] = buildGAS(ctx, vertices, indices);
+            CUdeviceptr vertexDataBuffer;
+            check(cudaMalloc(reinterpret_cast<void**>(&vertexDataBuffer), vertexData.size() * sizeof(VertexData)));
+            check(cudaMemcpy(reinterpret_cast<void*>(vertexDataBuffer), vertexData.data(), vertexData.size() * sizeof(VertexData), cudaMemcpyHostToDevice));
 
-            uint materialIdx = primitive.materialIndex.value_or(0);
-            optixSbtRecordPackHeader(program, reinterpret_cast<void*>(&hitRecords[geometryID]));
+            check(optixSbtRecordPackHeader(program, &hitRecords[geometryID]));
+            uint materialID = primitive.materialIndex.value_or(0);
             hitRecords[geometryID].data = HitData {
                 .indexBuffer = reinterpret_cast<uint3*>(indexBuffer),
-                .vertexData = reinterpret_cast<VertexData*>(vertexData),
-                .material = &materials[materialIdx],
+                .vertexData = reinterpret_cast<VertexData*>(vertexDataBuffer),
+                .materialID = materialID,
             };
 
-            indexBuffers[geometryID] = reinterpret_cast<uint3*>(indexBuffer);
-            vertexDatas[geometryID] = vertexData;
-            meshToGeometries[i].emplace_back(handle, gasBuffer, geometryID);
+            geometryTable[i].emplace_back(handle, gasBuffer, vertexDataBuffer, indexBuffer, geometryID);
             geometryID++;
 
             std::cout << "Loaded geometry " << geometryID << " with " << vertices.size() << " vertices and " << indices.size() / 3 << " triangles" << std::endl;
@@ -260,7 +245,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
             }
             for (uint j = 0; j < mesh.primitives.size(); j++) {
                 const auto& primitive = mesh.primitives[j];
-                auto& geometry = meshToGeometries[m.value()][j];
+                auto& geometry = geometryTable[m.value()][j];
                 instances[i] = OptixInstance {
                     .transform = {
                         mat.row(0)[0], mat.row(0)[1], mat.row(0)[2], mat.row(0)[3],
@@ -278,11 +263,25 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
         }
     }
 
-    const auto [handle, iasBuffer] = buildIAS(ctx, instances);
+    const auto [handle, newIASBuffer] = buildIAS(ctx, instances);
 
     params->handle = handle;
-    this->iasBuffer = iasBuffer;
-    sbt.hitgroupRecordBase = reinterpret_cast<CUdeviceptr>(hitRecords);
+    check(cudaFree(reinterpret_cast<void*>(iasBuffer)));
+    iasBuffer = newIASBuffer;
+
+    Material* materialBuffer;
+    check(cudaMalloc(reinterpret_cast<void**>(&materialBuffer), materials.size() * sizeof(Material)));
+    check(cudaMemcpy(reinterpret_cast<void*>(materialBuffer), materials.data(), materials.size() * sizeof(Material), cudaMemcpyHostToDevice));
+
+    check(cudaFree(reinterpret_cast<void*>(params->materials))); // Free previous materials buffer
+    params->materials = materialBuffer;
+
+    HitRecord* hitRecordBuffer;
+    check(cudaMalloc(reinterpret_cast<void**>(&hitRecordBuffer), hitRecords.size() * sizeof(HitRecord)));
+    check(cudaMemcpy(reinterpret_cast<void*>(hitRecordBuffer), hitRecords.data(), hitRecords.size() * sizeof(HitRecord), cudaMemcpyHostToDevice));
+
+    check(cudaFree(reinterpret_cast<void*>(sbt.hitgroupRecordBase))); // Free previous hitgroup record buffer
+    sbt.hitgroupRecordBase = reinterpret_cast<CUdeviceptr>(hitRecordBuffer);
     sbt.hitgroupRecordStrideInBytes = sizeof(HitRecord);
-    sbt.hitgroupRecordCount = nGeometries;
+    sbt.hitgroupRecordCount = hitRecords.size();
 }

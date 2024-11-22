@@ -13,31 +13,6 @@ constexpr uint RANDS_PER_BOUNCE = 4;
 constexpr uint RAND_SEQUENCE_DIMS = RANDS_PER_PIXEL + RANDS_PER_BOUNCE * MAX_BOUNCES;
 constexpr uint RAND_SEQUENCE_CACHE_SIZE = 1024;
 
-// NOTE: Because this includes pointers this should be zero-initialized using cudaMemset
-struct Params {
-    float4* image; // A copied pointer to the image buffer
-    float* randSequence; // Quasi-random Sobol sequence             // NOTE: This is owned memory and must be freed
-    float4* rotationTable; // Cranley-Patterson-Rotation per pixel    // NOTE: This is owned memory and must be freed
-    uint2 dim;
-    OptixTraversableHandle handle;
-    float4x4 clipToWorld;
-    uint sequenceOffset; // Offset into the Sobol sequence
-    uint sequenceStride; // Stride between different dimensions
-    uint sample; // Current sample
-    float weight; // Weight of the current sample (= 1 / (sample + 1))
-    float russianRouletteWeight; // Weight for Russian Roulette
-};
-extern "C" __constant__ Params params;
-
-__device__ inline float getRand(uint dim) {
-    const uint i = params.sample - params.sequenceOffset + params.sequenceStride * dim;
-    return params.randSequence[i];
-}
-
-__device__ inline float getRand(uint depth, uint i) {
-    return getRand(RANDS_PER_PIXEL + depth * RANDS_PER_BOUNCE + i);
-}
-
 struct VertexData {
     float3 normal;
     float4 tangent;
@@ -50,12 +25,44 @@ struct Material {
     float metallic;
 };
 
+// NOTE: Because this includes pointers this should be zero-initialized using cudaMemset
+struct Params {
+    float4* image; // A copied pointer to the image buffer
+    uint2 dim;
+    OptixTraversableHandle handle;
+    float4x4 clipToWorld;
+    uint sequenceOffset; // Offset into the Sobol sequence
+    uint sequenceStride; // Stride between different dimensions
+    uint sample; // Current sample
+    float weight; // Weight of the current sample (= 1 / (sample + 1))
+    float russianRouletteWeight; // Weight for Russian Roulette
+
+////////////////// OWNED MEMORY //////////////////
+// NOTE: This is owned memory and must be freed //
+//////////////////////////////////////////////////
+    float* randSequence; // Quasi-random Sobol sequence
+    float4* rotationTable; // Cranley-Patterson-Rotation per pixel
+    Material* materials; // materials
+//////////////////////////////////////////////////
+
+};
+extern "C" __constant__ Params params;
+
+__device__ inline float getRand(uint dim) {
+    const uint i = params.sample - params.sequenceOffset + params.sequenceStride * dim;
+    return params.randSequence[i];
+}
+
+__device__ inline float getRand(uint depth, uint i) {
+    return getRand(RANDS_PER_PIXEL + depth * RANDS_PER_BOUNCE + i);
+}
+
 struct RaygenData {};
 struct MissData {};
 struct HitData {
     uint3* indexBuffer;      // Pointer to triangle indices         // NOTE: This is owned memory and must be freed
     VertexData* vertexData;  // Pointer to vertex data              // NOTE: This is owned memory and must be freed
-    Material* material;      // Pointer to material data
+    uint materialID;         // Index into the materials array
 };
 
 template <typename T>

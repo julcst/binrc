@@ -28,15 +28,13 @@ public:
     void loadGLTF(const std::filesystem::path& path);
     void resize(uvec2 dim);
     
-    Params* params;
+    Params* params; // NOTE: This is owned memory and must be properly freed
 
 private:
     OptixDeviceContext context;
     OptixPipeline pipeline;
-    OptixShaderBindingTable sbt;
+    OptixShaderBindingTable sbt; // NOTE: This contains owned memory and must be properly freed
     std::array<OptixProgramGroup, 3> programGroups;
-    RaygenRecord* raygenRecord;
-    MissRecord* missRecord;
     Scene scene;
 
     void generateSobol(uint offset, uint n);

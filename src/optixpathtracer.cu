@@ -176,13 +176,13 @@ extern "C" __global__ void __closesthit__ch() {
     //const auto tangentOrientation = objectSpaceTangent.w; // Used for MikkTSpace normal mapping
 
     // Get material
-    const auto material = data->material;
+    const auto material = params.materials[data->materialID];
 
-    setColor(material->color);
+    setColor(material.color);
     setNormal(normalize(worldSpaceNormal));
     setTangent(worldSpaceTangent);
-    setRoughness(material->roughness);
-    setMetallic(material->metallic);
+    setRoughness(material.roughness);
+    setMetallic(material.metallic);
     setT(optixGetRayTmax());
 }
 
@@ -190,7 +190,7 @@ extern "C" __global__ void __miss__ms() {
     const auto dir = optixGetWorldRayDirection();
     auto sky = make_float3(0.1f);
     const auto sundir = normalize(make_float3(0.5f, 0.5f, 0.5f));
-    sky += min(powf(max(dot(dir, sundir), 0.0f), 100.0f), 1.0f) * make_float3(0.8f, 0.9f, 1.0f) * 5.0f;
+    sky += min(powf(max(dot(dir, sundir), 0.0f), 32.0f), 1.0f) * make_float3(0.8f, 0.9f, 1.0f) * 5.0f;
 
     setColor(sky);
     setT(INFINITY);

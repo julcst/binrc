@@ -105,15 +105,21 @@ OptixRenderer::OptixRenderer() {
     check(optixPipelineCreate(context, &pipelineCompileOptions, &pipelineLinkOptions, programGroups.data(), programGroups.size(), nullptr, nullptr, &pipeline));
 
     // Set up shader binding table
-    check(cudaMallocManaged(reinterpret_cast<void**>(&raygenRecord), sizeof(RaygenRecord)));
-    check(optixSbtRecordPackHeader(programGroups[0], reinterpret_cast<void*>(raygenRecord)));
+    RaygenRecord raygenRecord;
+    check(optixSbtRecordPackHeader(programGroups[0], &raygenRecord));
+    CUdeviceptr raygenRecordDevice;
+    check(cudaMalloc(reinterpret_cast<void**>(&raygenRecordDevice), sizeof(RaygenRecord)));
+    check(cudaMemcpy(reinterpret_cast<void*>(raygenRecordDevice), &raygenRecord, sizeof(RaygenRecord), cudaMemcpyHostToDevice));
 
-    check(cudaMallocManaged(reinterpret_cast<void**>(&missRecord), sizeof(MissRecord)));
-    check(optixSbtRecordPackHeader(programGroups[1], reinterpret_cast<void*>(missRecord)));
+    MissRecord missRecord;
+    check(optixSbtRecordPackHeader(programGroups[1], &missRecord));
+    CUdeviceptr missRecordDevice;
+    check(cudaMalloc(reinterpret_cast<void**>(&missRecordDevice), sizeof(MissRecord)));
+    check(cudaMemcpy(reinterpret_cast<void*>(missRecordDevice), &missRecord, sizeof(MissRecord), cudaMemcpyHostToDevice));
 
     sbt = {
-        .raygenRecord = reinterpret_cast<CUdeviceptr>(raygenRecord),
-        .missRecordBase = reinterpret_cast<CUdeviceptr>(missRecord),
+        .raygenRecord = raygenRecordDevice,
+        .missRecordBase = missRecordDevice,
         .missRecordStrideInBytes = sizeof(MissRecord),
         .missRecordCount = 1,
         .hitgroupRecordBase = 0,
@@ -134,10 +140,12 @@ OptixRenderer::OptixRenderer() {
 }
 
 OptixRenderer::~OptixRenderer() {
-    check(cudaFree(reinterpret_cast<void*>(raygenRecord)));
-    check(cudaFree(reinterpret_cast<void*>(missRecord)));
+    check(cudaFree(reinterpret_cast<void*>(sbt.raygenRecord)));
+    check(cudaFree(reinterpret_cast<void*>(sbt.missRecordBase)));
+    check(cudaFree(reinterpret_cast<void*>(sbt.hitgroupRecordBase)));
     check(cudaFree(reinterpret_cast<void*>(params->randSequence)));
     check(cudaFree(reinterpret_cast<void*>(params->rotationTable)));
+    check(cudaFree(reinterpret_cast<void*>(params->materials)));
     check(cudaFree(reinterpret_cast<void*>(params)));
     check(optixPipelineDestroy(pipeline));
     check(optixDeviceContextDestroy(context));
