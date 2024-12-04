@@ -26,6 +26,8 @@ struct Scene {
     // Buffers managed by the scene
     CUdeviceptr iasBuffer = 0;
     std::vector<std::vector<Geometry>> geometryTable;
+    std::vector<cudaArray_t> images;
+    std::vector<cudaTextureObject_t> textures;
 
     Scene() = default;
     ~Scene();

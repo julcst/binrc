@@ -23,6 +23,9 @@ struct Material {
     float3 color;
     float roughness;
     float metallic;
+    cudaTextureObject_t baseMap;
+    cudaTextureObject_t normalMap;
+    cudaTextureObject_t mrMap;
 };
 
 // NOTE: Because this includes pointers this should be zero-initialized using cudaMemset

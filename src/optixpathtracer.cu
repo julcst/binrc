@@ -173,16 +173,39 @@ extern "C" __global__ void __closesthit__ch() {
     // Interpolate tangent
     const auto objectSpaceTangent = bary.x * v0.tangent + bary.y * v1.tangent + bary.z * v2.tangent;
     const auto worldSpaceTangent = optixTransformVectorFromObjectToWorldSpace(make_float3(objectSpaceTangent));
-    //const auto tangentOrientation = objectSpaceTangent.w; // Used for MikkTSpace normal mapping
+
+    const auto texCoord = bary.x * v0.texCoord + bary.y * v1.texCoord + bary.z * v2.texCoord;
 
     // Get material
     const auto material = params.materials[data->materialID];
+    
+    auto albedo = material.color;
+    if (material.baseMap) albedo *= make_float3(tex2D<float4>(material.baseMap, texCoord.x, texCoord.y));
 
-    setColor(material.color);
-    setNormal(normalize(worldSpaceNormal));
+    auto mr = make_float2(material.metallic, material.roughness);
+    if (material.mrMap) mr *= make_float2(tex2D<float4>(material.mrMap, texCoord.x, texCoord.y));
+
+    if (material.normalMap) { // MikkTSpace normal mapping
+        const auto tangentOrientation = objectSpaceTangent.w;
+        const auto tangentSpaceNormal = normalize(make_float3(tex2D<float4>(material.normalMap, texCoord.x, texCoord.y)) * 2.0f - 1.0f);
+        const auto worldSpaceBitangent = cross(worldSpaceNormal, worldSpaceTangent) * tangentOrientation;
+        //setNormal(normalize(tangentSpaceNormal.x * worldSpaceTangent + tangentSpaceNormal.y * worldSpaceBitangent + tangentSpaceNormal.z * worldSpaceNormal));
+        setNormal(normalize(worldSpaceNormal));
+        //setColor(tangentSpaceNormal * 0.5f + 0.5f);
+        //setColor(normalize(tangentSpaceNormal.x * worldSpaceTangent + tangentSpaceNormal.y * worldSpaceBitangent + tangentSpaceNormal.z * worldSpaceNormal) * 0.5f + 0.5f);
+        //setColor(make_float3(objectSpaceTangent.w));
+        //setColor(normalize(worldSpaceNormal) * 0.5f + 0.5f);
+        //setColor(normalize(worldSpaceTangent) * 0.5f + 0.5f);
+        //setColor(normalize(worldSpaceBitangent) * 0.5f + 0.5f);
+    } else {
+        setNormal(normalize(worldSpaceNormal));
+        //setColor(normalize(worldSpaceTangent) * 0.5f + 0.5f);
+    }
+    
+    setColor(albedo);
     setTangent(worldSpaceTangent);
-    setRoughness(material.roughness);
-    setMetallic(material.metallic);
+    setMetallic(mr.x);
+    setRoughness(mr.y);
     setT(optixGetRayTmax());
 }
 

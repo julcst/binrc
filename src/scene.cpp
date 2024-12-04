@@ -12,6 +12,8 @@
 #include <optix_stubs.h>
 #include <optix_types.h>
 
+#include <stb_image.h>
+
 #include <glm/glm.hpp>
 using namespace glm;
 
@@ -34,6 +36,12 @@ Geometry::~Geometry() {
 
 Scene::~Scene() {
     check(cudaFree(reinterpret_cast<void*>(iasBuffer)));
+    for (auto& image : images) {
+        check(cudaFreeArray(image));
+    }
+    for (auto& texture : textures) {
+        check(cudaDestroyTextureObject(texture));
+    }
 }
 
 std::tuple<OptixTraversableHandle, CUdeviceptr> buildGAS(OptixDeviceContext ctx, const std::vector<OptixBuildInput>& buildInputs) {
@@ -141,6 +149,31 @@ float3 toVec3(const fastgltf::math::fvec4& v) {
     return make_float3(v.x(), v.y(), v.z());
 }
 
+cudaTextureObject_t createTextureObject(cudaArray_t image, int srgb) {
+    cudaResourceDesc resDesc = {
+        .resType = cudaResourceTypeArray,
+        .res = { .array = image },
+    };
+    cudaTextureDesc texDesc = {
+        .addressMode = { cudaAddressModeWrap, cudaAddressModeWrap, cudaAddressModeWrap },
+        .filterMode = cudaFilterModeLinear,
+        .readMode = cudaReadModeNormalizedFloat,
+        .sRGB = srgb,
+        .borderColor = { 0, 0, 0, 0 },
+        .normalizedCoords = 1,
+        .maxAnisotropy = 0,
+        .mipmapFilterMode = cudaFilterModePoint,
+        .mipmapLevelBias = 0,
+        .minMipmapLevelClamp = 0.0f,
+        .maxMipmapLevelClamp = 0.0f,
+        .disableTrilinearOptimization = 0,
+        .seamlessCubemap = 0,
+    };
+    cudaTextureObject_t texObj;
+    check(cudaCreateTextureObject(&texObj, &resDesc, &texDesc, nullptr));
+    return texObj;
+}
+
 void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& program, OptixShaderBindingTable& sbt, const std::filesystem::path& path) {
     // Parse GLTF file
     auto parser = fastgltf::Parser(fastgltf::Extensions::None);
@@ -148,6 +181,29 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
     if (auto e = data.error(); e != fastgltf::Error::None) throw std::runtime_error(std::format("Error: {}", fastgltf::getErrorMessage(e)));
     auto asset = parser.loadGltf(data.get(), path.parent_path(), fastgltf::Options::GenerateMeshIndices);
     if (auto e = asset.error(); e != fastgltf::Error::None) throw std::runtime_error(std::format("Error: {}", fastgltf::getErrorMessage(e)));
+
+    images.reserve(asset->images.size());
+    for (const auto& image : asset->images) {
+        const auto& data = std::get<fastgltf::sources::BufferView>(image.data);
+        const auto& bufferView = asset->bufferViews.at(data.bufferViewIndex);
+        const auto& buffer = asset->buffers.at(bufferView.bufferIndex);
+        const auto& array = std::get<fastgltf::sources::Array>(buffer.data);
+        int width, height, channels;
+        auto* imageData = stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(array.bytes.data() + bufferView.byteOffset), bufferView.byteLength, &width, &height, &channels, STBI_rgb_alpha);
+        std::cout << "Loaded image: " << image.name << " (" << width << "x" << height << "x" << channels << ")" << std::endl;
+
+        cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(8, 8, 8, 8, cudaChannelFormatKindUnsigned);
+
+        cudaArray_t cuArray;
+        check(cudaMallocArray(&cuArray, &channelDesc, width, height));
+        const size_t spitch = width * sizeof(uchar4);
+        check(cudaMemcpy2DToArray(cuArray, 0, 0, imageData, spitch, spitch, height, cudaMemcpyHostToDevice));
+
+        stbi_image_free(imageData);
+        images.push_back(cuArray);
+    }
+
+    textures.reserve(asset->textures.size());
 
     // Count number of instances
     uint nInstances = 0;
@@ -169,11 +225,39 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
     std::vector<Material> materials(nMaterials);
     for (uint i = 0; i < nMaterials; i++) {
         const auto& material = asset->materials[i];
+
         materials[i] = Material {
             .color = toVec3(material.pbrData.baseColorFactor),
             .roughness = material.pbrData.roughnessFactor,
             .metallic = material.pbrData.metallicFactor,
+            .baseMap = 0,
+            .normalMap = 0,
+            .mrMap = 0,
         };
+
+        if (auto& tex = material.pbrData.baseColorTexture; tex.has_value()) {
+            const auto imageIdx = asset->textures.at(tex.value().textureIndex).imageIndex;
+            if (!imageIdx.has_value()) throw std::runtime_error("Texture has no image index");
+            const auto& image = images.at(imageIdx.value());
+            materials[i].baseMap = createTextureObject(image, 1);
+            textures.push_back(materials[i].baseMap);
+        }
+
+        if (auto& tex = material.normalTexture; tex.has_value()) {
+            const auto imageIdx = asset->textures.at(tex.value().textureIndex).imageIndex;
+            if (!imageIdx.has_value()) throw std::runtime_error("Texture has no image index");
+            const auto& image = images.at(imageIdx.value());
+            materials[i].normalMap = createTextureObject(image, 0);
+            textures.push_back(materials[i].normalMap);
+        }
+
+        if (auto& tex = material.pbrData.metallicRoughnessTexture; tex.has_value()) {
+            const auto imageIdx = asset->textures.at(tex.value().textureIndex).imageIndex;
+            if (!imageIdx.has_value()) throw std::runtime_error("Texture has no image index");
+            const auto& image = images.at(imageIdx.value());
+            materials[i].mrMap = createTextureObject(image, 0);
+            textures.push_back(materials[i].mrMap);
+        }
     }
 
     // Build geometry and free previous geometry buffers
@@ -198,15 +282,15 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
             const auto [handle, gasBuffer, indexBuffer] = buildGAS(ctx, vertices, indices);
 
             std::vector<VertexData> vertexData(vertices.size());
-            auto& normalAcc = asset->accessors[primitive.findAttribute("NORMAL")->accessorIndex];
+            auto& normalAcc = asset->accessors.at(primitive.findAttribute("NORMAL")->accessorIndex);
             fastgltf::iterateAccessorWithIndex<vec3>(asset.get(), normalAcc, [&](const vec3& normal, auto i) {
                 vertexData[i].normal = glmToCuda(normal);
             });
-            auto& texCoordAcc = asset->accessors[primitive.findAttribute("TEXCOORD_0")->accessorIndex];
+            auto& texCoordAcc = asset->accessors.at(primitive.findAttribute("TEXCOORD_0")->accessorIndex);
             fastgltf::iterateAccessorWithIndex<vec2>(asset.get(), texCoordAcc, [&](const vec2& texCoord, auto i) {
                 vertexData[i].texCoord = glmToCuda(texCoord);
             });
-            auto& tangentAcc = asset->accessors[primitive.findAttribute("TANGENT")->accessorIndex];
+            auto& tangentAcc = asset->accessors.at(primitive.findAttribute("TANGENT")->accessorIndex);
             fastgltf::iterateAccessorWithIndex<vec4>(asset.get(), tangentAcc, [&](const vec4& tangent, auto i) {
                 vertexData[i].tangent = glmToCuda(tangent);
             });
