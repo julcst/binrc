@@ -182,6 +182,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
     auto asset = parser.loadGltf(data.get(), path.parent_path(), fastgltf::Options::GenerateMeshIndices);
     if (auto e = asset.error(); e != fastgltf::Error::None) throw std::runtime_error(std::format("Error: {}", fastgltf::getErrorMessage(e)));
 
+    // NOTE: Images are not freed before loading new images -> Potential memory leak
     images.reserve(asset->images.size());
     for (const auto& image : asset->images) {
         const auto& data = std::get<fastgltf::sources::BufferView>(image.data);
@@ -203,6 +204,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
         images.push_back(cuArray);
     }
 
+    // NOTE: Textures are not freed before loading new textures -> Potential memory leak
     textures.reserve(asset->textures.size());
 
     // Count number of instances

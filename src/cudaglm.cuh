@@ -100,7 +100,7 @@ __host__ __device__ constexpr glm::uvec4 cudaToGlm(const uint4& v) {
 __host__ __device__ inline glm::mat3 buildTBN(const glm::vec3& n, const glm::vec3& t) {
     const auto nt = glm::normalize(t - dot(t, n) * n);
     const auto b = glm::cross(n, nt);
-    return glm::mat3(nt, b, n);
+    return {nt, b, n};
 }
 
 /**

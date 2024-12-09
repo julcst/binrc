@@ -24,7 +24,7 @@ std::vector<char> readBinaryFile(const std::filesystem::path& filepath) {
     std::ifstream stream{filepath, std::ios::binary};
     std::cout << "Loading " << std::filesystem::absolute(filepath) << std::endl;
     if (stream.fail()) throw std::runtime_error("Could not open file: " + std::filesystem::absolute(filepath).string());
-    return std::vector<char>(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
+    return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
 }
 
 OptixRenderer::OptixRenderer() {
@@ -131,7 +131,7 @@ OptixRenderer::OptixRenderer() {
     params->image = nullptr;
     params->randSequence = nullptr;
     params->rotationTable = nullptr;
-    params->russianRouletteWeight = 3.0f;
+    params->russianRouletteWeight = 10.0f;
     params->sample = 0;
     params->weight = 1.0f;
     params->dim = make_uint2(0, 0);

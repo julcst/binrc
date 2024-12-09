@@ -319,6 +319,10 @@ __host__ __device__ constexpr float3 reflect(const float3& i, const float3& n) {
     return 2.0f * dot(n, i) * n - i;
 }
 
+__host__ __device__ constexpr bool isfinite(const float3& v) {
+    return isfinite(v.x) && isfinite(v.y) && isfinite(v.z);
+}
+
 // Operators on CUDA float4
 
 __host__ __device__ constexpr float4 make_float4(float x) {

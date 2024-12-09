@@ -148,10 +148,11 @@ extern "C" __global__ void __raygen__rg() {
         }
         throughput /= pContinue;
 
-        ray.origin = hitPoint + 1e-2f * n;
+        ray.origin = hitPoint + 1e-4f * n;
     }
 
-    params.image[i] = mix(params.image[i], make_float4(throughput, 1.0f), params.weight);
+    // NOTE: We simply ignore NaNs and Infs to avoid propagation
+    if (isfinite(throughput)) params.image[i] = mix(params.image[i], make_float4(throughput, 1.0f), params.weight);
 }
 
 extern "C" __global__ void __closesthit__ch() {
@@ -168,11 +169,11 @@ extern "C" __global__ void __closesthit__ch() {
 
     // Interpolate normal
     const auto objectSpaceNormal = bary.x * v0.normal + bary.y * v1.normal + bary.z * v2.normal;
-    const auto worldSpaceNormal = optixTransformNormalFromObjectToWorldSpace(objectSpaceNormal);
 
     // Interpolate tangent
-    const auto objectSpaceTangent = bary.x * v0.tangent + bary.y * v1.tangent + bary.z * v2.tangent;
-    const auto worldSpaceTangent = optixTransformVectorFromObjectToWorldSpace(make_float3(objectSpaceTangent));
+    const auto objectSpaceTangentWithOrientation = bary.x * v0.tangent + bary.y * v1.tangent + bary.z * v2.tangent;
+    const auto objectSpaceTangent = make_float3(objectSpaceTangentWithOrientation);
+    const auto worldSpaceTangent = optixTransformVectorFromObjectToWorldSpace(objectSpaceTangent);
 
     const auto texCoord = bary.x * v0.texCoord + bary.y * v1.texCoord + bary.z * v2.texCoord;
 
@@ -185,21 +186,14 @@ extern "C" __global__ void __closesthit__ch() {
     auto mr = make_float2(material.metallic, material.roughness);
     if (material.mrMap) mr *= make_float2(tex2D<float4>(material.mrMap, texCoord.x, texCoord.y));
 
+    // NOTE: Normal mapping produces artifacts with pathtracing: See Microfacet-based Normal Mapping for Robust Monte Carlo Path Tracing by Schüssler et al. 2017 for a solution
     if (material.normalMap) { // MikkTSpace normal mapping
-        const auto tangentOrientation = objectSpaceTangent.w;
-        const auto tangentSpaceNormal = normalize(make_float3(tex2D<float4>(material.normalMap, texCoord.x, texCoord.y)) * 2.0f - 1.0f);
-        const auto worldSpaceBitangent = cross(worldSpaceNormal, worldSpaceTangent) * tangentOrientation;
-        //setNormal(normalize(tangentSpaceNormal.x * worldSpaceTangent + tangentSpaceNormal.y * worldSpaceBitangent + tangentSpaceNormal.z * worldSpaceNormal));
-        setNormal(normalize(worldSpaceNormal));
-        //setColor(tangentSpaceNormal * 0.5f + 0.5f);
-        //setColor(normalize(tangentSpaceNormal.x * worldSpaceTangent + tangentSpaceNormal.y * worldSpaceBitangent + tangentSpaceNormal.z * worldSpaceNormal) * 0.5f + 0.5f);
-        //setColor(make_float3(objectSpaceTangent.w));
-        //setColor(normalize(worldSpaceNormal) * 0.5f + 0.5f);
-        //setColor(normalize(worldSpaceTangent) * 0.5f + 0.5f);
-        //setColor(normalize(worldSpaceBitangent) * 0.5f + 0.5f);
+        const auto tangentOrientation = objectSpaceTangentWithOrientation.w;
+        const auto tangentSpaceNormal = make_float3(tex2D<float4>(material.normalMap, texCoord.x, texCoord.y)) * 2.0f - 1.0f;
+        const auto objectSpaceBitangent = cross(objectSpaceNormal, objectSpaceTangent) * tangentOrientation;
+        setNormal(normalize(optixTransformNormalFromObjectToWorldSpace(tangentSpaceNormal.x * objectSpaceTangent + tangentSpaceNormal.y * objectSpaceBitangent + tangentSpaceNormal.z * objectSpaceNormal)));
     } else {
-        setNormal(normalize(worldSpaceNormal));
-        //setColor(normalize(worldSpaceTangent) * 0.5f + 0.5f);
+        setNormal(normalize(optixTransformNormalFromObjectToWorldSpace(objectSpaceNormal)));
     }
     
     setColor(albedo);
