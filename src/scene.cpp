@@ -176,7 +176,7 @@ cudaTextureObject_t createTextureObject(cudaArray_t image, int srgb) {
 
 void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& program, OptixShaderBindingTable& sbt, const std::filesystem::path& path) {
     // Parse GLTF file
-    auto parser = fastgltf::Parser(fastgltf::Extensions::None);
+    auto parser = fastgltf::Parser(fastgltf::Extensions::KHR_materials_transmission);
     auto data = fastgltf::GltfDataBuffer::FromPath(path);
     if (auto e = data.error(); e != fastgltf::Error::None) throw std::runtime_error(std::format("Error: {}", fastgltf::getErrorMessage(e)));
     auto asset = parser.loadGltf(data.get(), path.parent_path(), fastgltf::Options::GenerateMeshIndices);
@@ -232,10 +232,16 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
             .color = toVec3(material.pbrData.baseColorFactor),
             .roughness = material.pbrData.roughnessFactor,
             .metallic = material.pbrData.metallicFactor,
+            .transmission = 0.0f,
             .baseMap = 0,
             .normalMap = 0,
             .mrMap = 0,
         };
+
+        if (material.transmission) {
+            materials[i].transmission = material.transmission->transmissionFactor;
+            std::cout << "Transmission factor: " << material.transmission->transmissionFactor;
+        }
 
         if (auto& tex = material.pbrData.baseColorTexture; tex.has_value()) {
             const auto imageIdx = asset->textures.at(tex.value().textureIndex).imageIndex;
@@ -247,6 +253,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
 
         if (auto& tex = material.normalTexture; tex.has_value()) {
             const auto imageIdx = asset->textures.at(tex.value().textureIndex).imageIndex;
+            std::cout << "Ignored normal texture scale: " << tex.value().scale << "\n";
             if (!imageIdx.has_value()) throw std::runtime_error("Texture has no image index");
             const auto& image = images.at(imageIdx.value());
             materials[i].normalMap = createTextureObject(image, 0);

@@ -25,7 +25,8 @@ struct Payload {
     float3 tangent; // World space tenagent, not normalized
     float roughness;
     float metallic;
-    float t; // Distonce of intersection on ray, set to INFINITY if no intersection
+    float transmission;
+    float t; // Distance of intersection on ray, set to INFINITY if no intersection
 };
 
 __device__ void setColor(const float3& value) {
@@ -54,23 +55,28 @@ __device__ void setMetallic(const float value) {
     optixSetPayload_10(__float_as_uint(value));
 }
 
-__device__ void setT(const float value) {
+__device__ void setTransmission(const float value) {
     optixSetPayload_11(__float_as_uint(value));
 }
 
-__device__ Payload getPayload(uint a, uint b, uint c, uint d, uint e, uint f, uint g, uint h, uint i, uint j, uint k, uint l) {
+__device__ void setT(const float value) {
+    optixSetPayload_12(__float_as_uint(value));
+}
+
+__device__ Payload getPayload(uint a, uint b, uint c, uint d, uint e, uint f, uint g, uint h, uint i, uint j, uint k, uint l, uint m) {
     return Payload{
         make_float3(__uint_as_float(a), __uint_as_float(b), __uint_as_float(c)),
         make_float3(__uint_as_float(d), __uint_as_float(e), __uint_as_float(f)),
         make_float3(__uint_as_float(g), __uint_as_float(h), __uint_as_float(i)),
         __uint_as_float(j),
         __uint_as_float(k),
-        __uint_as_float(l)
+        __uint_as_float(l),
+        __uint_as_float(m),
     };
 }
 
 __device__ Payload trace(const Ray& ray) {
-    uint a, b, c, d, e, f, g, h, i, j, k, l;
+    uint a, b, c, d, e, f, g, h, i, j, k, l, m;
     optixTraverse(
         params.handle,
         ray.origin, ray.direction,
@@ -78,11 +84,11 @@ __device__ Payload trace(const Ray& ray) {
         0.0f, // rayTime
         OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
         0, 1, 0, // SBT offset, stride, miss index
-        a, b, c, d, e, f, g, h, i, j, k, l // Payload
+        a, b, c, d, e, f, g, h, i, j, k, l, m // Payload
     );
     //optixReorder(); // TODO: Provide coherence hints
-    optixInvoke(a, b, c, d, e, f, g, h, i, j, k, l);
-    return getPayload(a, b, c, d, e, f, g, h, i, j, k, l);
+    optixInvoke(a, b, c, d, e, f, g, h, i, j, k, l, m);
+    return getPayload(a, b, c, d, e, f, g, h, i, j, k, l, m);
 }
 
 __device__ float luminance(const float3& linearRGB) {
@@ -114,8 +120,10 @@ extern "C" __global__ void __raygen__rg() {
         const auto metallic = payload.metallic;
         const auto albedo = payload.color;
 
-        const auto n = payload.normal;
+        auto n = payload.normal;
         const auto wo = -ray.direction;
+        const auto side = dot(n, wo) > 0.0f ? 1.0f : -1.0f;
+        n *= side;
         const auto cosThetaO = dot(wo, n);
         const auto baseSpecular = mix(make_float3(0.04f), albedo, metallic);
         const auto baseDiffuse = (1.0f - metallic) * albedo;
@@ -130,14 +138,21 @@ extern "C" __global__ void __raygen__rg() {
             const auto rand = fract(make_float2(getRand(depth, 1) + rotation.x, getRand(depth, 2) + rotation.y));
             const auto sample = sampleTrowbridgeReitz(rand, wo, cosThetaO, n, alpha, baseSpecular);
             ray.direction = sample.direction;
+            ray.origin = hitPoint + 1e-4f * n; // Prevent self intersection, only works for outer
             throughput *= sample.throughput / pSpecular;
         } else {
-            // Sample Brent-Burley diffuse
-            const auto rand = fract(make_float2(getRand(depth, 1) + rotation.z, getRand(depth, 2) + rotation.w)); 
-            const auto tangentToWorld = buildTBN(n, payload.tangent);
-            const auto sample = sampleBrentBurley(rand, wo, cosThetaO, n, alpha, tangentToWorld, baseDiffuse);
-            ray.direction = sample.direction;
-            throughput *= sample.throughput / (1.0f - pSpecular);
+            if (payload.transmission < 0.5f) { // Sample Brent-Burley diffuse
+                const auto rand = fract(make_float2(getRand(depth, 1) + rotation.z, getRand(depth, 2) + rotation.w)); 
+                const auto tangentToWorld = buildTBN(n, payload.tangent);
+                const auto sample = sampleBrentBurley(rand, wo, cosThetaO, n, alpha, tangentToWorld, baseDiffuse);
+                ray.direction = sample.direction;
+                ray.origin = hitPoint + 1e-4f * n; // Prevent self intersection
+                throughput *= sample.throughput / (1.0f - pSpecular);
+            } else {
+                ray.direction = ray.direction;
+                ray.origin = hitPoint + 1e-4f * ray.direction; // Prevent self intersection
+                throughput *= (1.0f - F_SchlickApprox(cosThetaO, baseSpecular)) * albedo / (1.0f - pSpecular);
+            }
         }
 
         // Russian roulette
@@ -147,8 +162,6 @@ extern "C" __global__ void __raygen__rg() {
             break;
         }
         throughput /= pContinue;
-
-        ray.origin = hitPoint + 1e-4f * n;
     }
 
     // NOTE: We simply ignore NaNs and Infs to avoid propagation
@@ -200,6 +213,7 @@ extern "C" __global__ void __closesthit__ch() {
     setTangent(worldSpaceTangent);
     setMetallic(mr.x);
     setRoughness(mr.y);
+    setTransmission(material.transmission);
     setT(optixGetRayTmax());
 }
 

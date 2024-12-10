@@ -5,7 +5,7 @@
 
 #include "cudamathtypes.cuh"
 
-constexpr int PAYLOAD_SIZE = 12;
+constexpr int PAYLOAD_SIZE = 13;
 constexpr float MAX_T = 1e32f;
 constexpr uint MAX_BOUNCES = 16;
 constexpr uint RANDS_PER_PIXEL = 2;
@@ -23,6 +23,7 @@ struct Material {
     float3 color;
     float roughness;
     float metallic;
+    float transmission;
     cudaTextureObject_t baseMap;
     cudaTextureObject_t normalMap;
     cudaTextureObject_t mrMap;
