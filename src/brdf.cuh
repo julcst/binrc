@@ -132,17 +132,24 @@ __device__ constexpr SampleResult sampleTrowbridgeReitz(const float2& rand, cons
     return {wi, specular};
 }
 
-__device__ constexpr SampleResult sampleTrowbridgeReitzTransmission(const float2& rand, const float3& wo, float cosThetaO, const float3& n, float alpha, const float3& F0, const float3& albedo) {
+__device__ constexpr SampleResult sampleTrowbridgeReitzTransmission(const float2& rand, const float3& wo, float cosThetaO, const float3& n, float alpha, const float3& F0, const float3& albedo, bool inside) {
     const auto wm = sampleVNDFTrowbridgeReitz(rand, wo, n, alpha);
-    const auto wi = refract(wo, wm);
+    const auto wi = refract(wo, wm, inside ? 1.0f / 1.5f : 1.5f / 1.0f);
     const auto cosThetaD = dot(wo, wm); // = dot(wi, wm)
-    const auto cosThetaI = dot(wi, n);
+    const auto cosThetaI = dot(wo, n);
     const auto F = F_SchlickApprox(cosThetaD, F0);
     const auto alpha2 = alpha * alpha;
     const auto LambdaL = Lambda_TrowbridgeReitz(cosThetaI, alpha2);
     const auto LambdaV = Lambda_TrowbridgeReitz(cosThetaO, alpha2);
-    const auto specular = albedo * (1.0f - F) * (1.0f + LambdaV) / (1.0f + LambdaL + LambdaV); // = F * (G2 / G1)
-    return {wi, specular};
+    const auto transmission = albedo * (1.0f - F) * (1.0f + LambdaV) / (1.0f + LambdaL + LambdaV); // = (1 - F) * (G2 / G1)
+    return {wi, transmission};
+}
+
+__device__ constexpr SampleResult samplePerfectTransmission(const float3& wo, const float3& n, const float3& albedo, bool inside) {
+    const auto wm = n;
+    const auto wi = refract(wo, wm, inside ? 1.0f / 1.5f : 1.5f / 1.0f);
+    const auto transmission = albedo;
+    return {wi, transmission};
 }
 
 __device__ constexpr SampleResult sampleBrentBurley(const float2& rand, const float3& wo, float cosThetaO, const float3& n, float alpha, const float3x3& tangentToWorld, const float3& albedo) {

@@ -86,7 +86,8 @@ __device__ Payload trace(const Ray& ray) {
         0, 1, 0, // SBT offset, stride, miss index
         a, b, c, d, e, f, g, h, i, j, k, l, m // Payload
     );
-    //optixReorder(); // TODO: Provide coherence hints
+    const auto data = reinterpret_cast<HitData*>(optixGetSbtDataPointer());
+    optixReorder(0, 0); // TODO: Provide coherence hints
     optixInvoke(a, b, c, d, e, f, g, h, i, j, k, l, m);
     return getPayload(a, b, c, d, e, f, g, h, i, j, k, l, m);
 }
@@ -122,8 +123,8 @@ extern "C" __global__ void __raygen__rg() {
 
         auto n = payload.normal;
         const auto wo = -ray.direction;
-        const auto side = dot(n, wo) > 0.0f ? 1.0f : -1.0f;
-        n *= side;
+        const auto inside = dot(n, wo) < 0.0f;
+        n = inside ? -n : n;
         const auto cosThetaO = dot(wo, n);
         const auto baseSpecular = mix(make_float3(0.04f), albedo, metallic);
         const auto baseDiffuse = (1.0f - metallic) * albedo;
@@ -138,7 +139,7 @@ extern "C" __global__ void __raygen__rg() {
             const auto rand = fract(make_float2(getRand(depth, 1) + rotation.x, getRand(depth, 2) + rotation.y));
             const auto sample = sampleTrowbridgeReitz(rand, wo, cosThetaO, n, alpha, baseSpecular);
             ray.direction = sample.direction;
-            ray.origin = hitPoint + 1e-4f * n; // Prevent self intersection, only works for outer
+            ray.origin = hitPoint + 1e-4f * n; // Prevent self intersection
             throughput *= sample.throughput / pSpecular;
         } else {
             if (payload.transmission < 0.5f) { // Sample Brent-Burley diffuse
@@ -149,9 +150,15 @@ extern "C" __global__ void __raygen__rg() {
                 ray.origin = hitPoint + 1e-4f * n; // Prevent self intersection
                 throughput *= sample.throughput / (1.0f - pSpecular);
             } else {
-                ray.direction = ray.direction;
+                // ray.direction = ray.direction;
+                // ray.origin = hitPoint + 1e-4f * ray.direction; // Prevent self intersection
+                // throughput *= (1.0f - F_SchlickApprox(cosThetaO, baseSpecular)) * albedo / (1.0f - pSpecular);
+                const auto rand = fract(make_float2(getRand(depth, 1) + rotation.x, getRand(depth, 2) + rotation.y));
+                const auto sample = sampleTrowbridgeReitzTransmission(rand, wo, cosThetaO, n, alpha, baseSpecular, albedo, inside);
+                //const auto sample = samplePerfectTransmission(wo, n, albedo, inside);
+                ray.direction = sample.direction;
                 ray.origin = hitPoint + 1e-4f * ray.direction; // Prevent self intersection
-                throughput *= (1.0f - F_SchlickApprox(cosThetaO, baseSpecular)) * albedo / (1.0f - pSpecular);
+                throughput *= sample.throughput / (1.0f - pSpecular);
             }
         }
 

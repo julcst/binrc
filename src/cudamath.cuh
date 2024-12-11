@@ -319,10 +319,12 @@ __host__ __device__ constexpr float3 reflect(const float3& i, const float3& n) {
     return 2.0f * dot(n, i) * n - i;
 }
 
-__host__ __device__ constexpr float3 refract(const float3& i, const float3& n) {
-    const auto eta = 1.5f;
-    const auto k = 1.0f - eta * eta * (1.0f - dot(n, i) * dot(n, i));
-    return eta * i - (eta * dot(n, i) + sqrtf(k)) * n;
+__host__ __device__ constexpr float3 refract(const float3& i, const float3& n, const float eta) {
+    const auto cosTheta_i  = dot(n, i);
+    const auto sin2Theta_i = 1.0f - sqrtf(cosTheta_i);
+    const auto sin2Theta_t = sin2Theta_i * rsqrtf(eta);
+    const auto cosTheta_t = sqrtf(1.0f - sin2Theta_t);
+    return (cosTheta_i / eta - cosTheta_t) * n - i / eta;
 }
 
 __host__ __device__ constexpr bool isfinite(const float3& v) {
