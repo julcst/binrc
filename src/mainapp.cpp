@@ -44,7 +44,7 @@ MainApp::MainApp() : App(800, 600) {
     blitProgram.use();
     blitProgram.set(1, exposure);
     
-    renderer.loadGLTF("../test3.glb");
+    renderer.loadGLTF("../cornell.glb");
 
     setVSync(false);
 }

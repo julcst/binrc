@@ -315,6 +315,10 @@ __host__ __device__ constexpr float3 mix(const float3& a, const float3& b, float
     return a + (b - a) * t;
 }
 
+__host__ __device__ constexpr float3 min(const float3& a, const float3& b) {
+    return {min(a.x, b.x), min(a.y, b.y), min(a.z, b.z)};
+}
+
 __host__ __device__ constexpr float3 reflect(const float3& i, const float3& n) {
     return 2.0f * dot(n, i) * n - i;
 }

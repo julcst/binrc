@@ -107,12 +107,13 @@ extern "C" __global__ void __raygen__rg() {
     auto ray = makeCameraRay(uv);
 
     Payload payload;
+    auto color = make_float3(0.0f);
     auto throughput = make_float3(1.0f);
     for (uint depth = 0; depth < MAX_BOUNCES; depth++) {
         payload = trace(ray);
 
         if (isinf(payload.t)) {
-            throughput *= payload.color;
+            color = min(throughput, make_float3(1.0f)) * payload.color; // FIXME: Is clamping still unbiased?
             break;
         }
 
@@ -164,15 +165,12 @@ extern "C" __global__ void __raygen__rg() {
 
         // Russian roulette
         const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
-        if (fract(getRand(depth, 3) + rotation.z) >= pContinue) {
-            throughput = make_float3(0.0f);
-            break;
-        }
+        if (fract(getRand(depth, 3) + rotation.z) >= pContinue) break;
         throughput /= pContinue;
     }
 
     // NOTE: We simply ignore NaNs and Infs to avoid propagation
-    if (isfinite(throughput)) params.image[i] = mix(params.image[i], make_float4(throughput, 1.0f), params.weight);
+    if (isfinite(throughput)) params.image[i] = mix(params.image[i], make_float4(color, 1.0f), params.weight);
 }
 
 extern "C" __global__ void __closesthit__ch() {
@@ -226,7 +224,7 @@ extern "C" __global__ void __closesthit__ch() {
 
 extern "C" __global__ void __miss__ms() {
     const auto dir = optixGetWorldRayDirection();
-    auto sky = make_float3(0.1f);
+    auto sky = make_float3(0.01f);
     const auto sundir = normalize(make_float3(0.5f, 0.5f, 0.5f));
     sky += min(powf(max(dot(dir, sundir), 0.0f), 32.0f), 1.0f) * make_float3(0.8f, 0.9f, 1.0f) * 5.0f;
 
