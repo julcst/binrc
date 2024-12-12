@@ -149,6 +149,10 @@ float3 toVec3(const fastgltf::math::fvec4& v) {
     return make_float3(v.x(), v.y(), v.z());
 }
 
+float3 toVec3(const fastgltf::math::nvec3& v, const fastgltf::num factor) {
+    return make_float3(v.x() * factor, v.y() * factor, v.z() * factor);
+}
+
 cudaTextureObject_t createTextureObject(cudaArray_t image, int srgb) {
     cudaResourceDesc resDesc = {
         .resType = cudaResourceTypeArray,
@@ -176,7 +180,8 @@ cudaTextureObject_t createTextureObject(cudaArray_t image, int srgb) {
 
 void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& program, OptixShaderBindingTable& sbt, const std::filesystem::path& path) {
     // Parse GLTF file
-    auto parser = fastgltf::Parser(fastgltf::Extensions::KHR_materials_transmission);
+    auto parser = fastgltf::Parser(fastgltf::Extensions::KHR_materials_transmission
+                                | fastgltf::Extensions::KHR_materials_emissive_strength);
     auto data = fastgltf::GltfDataBuffer::FromPath(path);
     if (auto e = data.error(); e != fastgltf::Error::None) throw std::runtime_error(std::format("Error: {}", fastgltf::getErrorMessage(e)));
     auto asset = parser.loadGltf(data.get(), path.parent_path(), fastgltf::Options::GenerateMeshIndices);
@@ -229,7 +234,8 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
         const auto& material = asset->materials[i];
 
         materials[i] = Material {
-            .color = toVec3(material.pbrData.baseColorFactor),
+            .albedo = toVec3(material.pbrData.baseColorFactor),
+            .emission = toVec3(material.emissiveFactor, material.emissiveStrength),
             .roughness = material.pbrData.roughnessFactor,
             .metallic = material.pbrData.metallicFactor,
             .transmission = 0.0f,

@@ -5,7 +5,7 @@
 
 #include "cudamathtypes.cuh"
 
-constexpr int PAYLOAD_SIZE = 13;
+constexpr int PAYLOAD_SIZE = 16;
 constexpr float MAX_T = 1e32f;
 constexpr uint MAX_BOUNCES = 31;
 constexpr uint RANDS_PER_PIXEL = 2;
@@ -20,7 +20,8 @@ struct VertexData {
 };
 
 struct Material {
-    float3 color;
+    float3 albedo;
+    float3 emission;
     float roughness;
     float metallic;
     float transmission;
