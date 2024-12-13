@@ -35,6 +35,10 @@ Geometry::~Geometry() {
 }
 
 Scene::~Scene() {
+    free();
+}
+
+void Scene::free() {
     check(cudaFree(reinterpret_cast<void*>(iasBuffer)));
     for (auto& image : images) {
         check(cudaFreeArray(image));
@@ -179,6 +183,8 @@ cudaTextureObject_t createTextureObject(cudaArray_t image, int srgb) {
 }
 
 void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& program, OptixShaderBindingTable& sbt, const std::filesystem::path& path) {
+    // NOTE: If we free here we leave OptiX with dangling pointers
+
     // Parse GLTF file
     auto parser = fastgltf::Parser(fastgltf::Extensions::KHR_materials_transmission
                                 | fastgltf::Extensions::KHR_materials_emissive_strength);
@@ -186,9 +192,10 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
     if (auto e = data.error(); e != fastgltf::Error::None) throw std::runtime_error(std::format("Error: {}", fastgltf::getErrorMessage(e)));
     auto asset = parser.loadGltf(data.get(), path.parent_path(), fastgltf::Options::GenerateMeshIndices);
     if (auto e = asset.error(); e != fastgltf::Error::None) throw std::runtime_error(std::format("Error: {}", fastgltf::getErrorMessage(e)));
+    
+    std::vector<cudaArray_t> newImages;
+    newImages.reserve(asset->images.size());
 
-    // NOTE: Images are not freed before loading new images -> Potential memory leak
-    images.reserve(asset->images.size());
     for (const auto& image : asset->images) {
         const auto& data = std::get<fastgltf::sources::BufferView>(image.data);
         const auto& bufferView = asset->bufferViews.at(data.bufferViewIndex);
@@ -206,11 +213,11 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
         check(cudaMemcpy2DToArray(cuArray, 0, 0, imageData, spitch, spitch, height, cudaMemcpyHostToDevice));
 
         stbi_image_free(imageData);
-        images.push_back(cuArray);
+        newImages.push_back(cuArray);
     }
 
-    // NOTE: Textures are not freed before loading new textures -> Potential memory leak
-    textures.reserve(asset->textures.size());
+    std::vector<cudaTextureObject_t> newTextures;
+    newTextures.reserve(asset->textures.size());
 
     // Count number of instances
     uint nInstances = 0;
@@ -230,6 +237,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
     // Create materials
     uint nMaterials = asset->materials.size();
     std::vector<Material> materials(nMaterials);
+
     for (uint i = 0; i < nMaterials; i++) {
         const auto& material = asset->materials[i];
 
@@ -246,37 +254,37 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
 
         if (material.transmission) {
             materials[i].transmission = material.transmission->transmissionFactor;
-            std::cout << "Transmission factor: " << material.transmission->transmissionFactor;
+            std::cout << "Transmission factor: " << material.transmission->transmissionFactor << "\n";
         }
 
         if (auto& tex = material.pbrData.baseColorTexture; tex.has_value()) {
             const auto imageIdx = asset->textures.at(tex.value().textureIndex).imageIndex;
             if (!imageIdx.has_value()) throw std::runtime_error("Texture has no image index");
-            const auto& image = images.at(imageIdx.value());
+            const auto& image = newImages.at(imageIdx.value());
             materials[i].baseMap = createTextureObject(image, 1);
-            textures.push_back(materials[i].baseMap);
+            newTextures.push_back(materials[i].baseMap);
         }
 
         if (auto& tex = material.normalTexture; tex.has_value()) {
             const auto imageIdx = asset->textures.at(tex.value().textureIndex).imageIndex;
             std::cout << "Ignored normal texture scale: " << tex.value().scale << "\n";
             if (!imageIdx.has_value()) throw std::runtime_error("Texture has no image index");
-            const auto& image = images.at(imageIdx.value());
+            const auto& image = newImages.at(imageIdx.value());
             materials[i].normalMap = createTextureObject(image, 0);
-            textures.push_back(materials[i].normalMap);
+            newTextures.push_back(materials[i].normalMap);
         }
 
         if (auto& tex = material.pbrData.metallicRoughnessTexture; tex.has_value()) {
             const auto imageIdx = asset->textures.at(tex.value().textureIndex).imageIndex;
             if (!imageIdx.has_value()) throw std::runtime_error("Texture has no image index");
-            const auto& image = images.at(imageIdx.value());
+            const auto& image = newImages.at(imageIdx.value());
             materials[i].mrMap = createTextureObject(image, 0);
-            textures.push_back(materials[i].mrMap);
+            newTextures.push_back(materials[i].mrMap);
         }
     }
 
     // Build geometry and free previous geometry buffers
-    geometryTable = std::vector<std::vector<Geometry>>(asset->meshes.size());
+    std::vector<std::vector<Geometry>> newGeometryTable(asset->meshes.size());
 
     uint geometryID = 0;
     for (uint i = 0; i < asset->meshes.size(); i++) {
@@ -322,7 +330,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
                 .materialID = materialID,
             };
 
-            geometryTable[i].emplace_back(handle, gasBuffer, vertexDataBuffer, indexBuffer, geometryID);
+            newGeometryTable[i].emplace_back(handle, gasBuffer, vertexDataBuffer, indexBuffer, geometryID);
             geometryID++;
 
             std::cout << "Loaded geometry " << geometryID << " with " << vertices.size() << " vertices and " << indices.size() / 3 << " triangles" << std::endl;
@@ -344,7 +352,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
             }
             for (uint j = 0; j < mesh.primitives.size(); j++) {
                 const auto& primitive = mesh.primitives[j];
-                auto& geometry = geometryTable[m.value()][j];
+                auto& geometry = newGeometryTable[m.value()][j];
                 instances[i] = OptixInstance {
                     .transform = {
                         mat.row(0)[0], mat.row(0)[1], mat.row(0)[2], mat.row(0)[3],
@@ -364,23 +372,29 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
 
     const auto [handle, newIASBuffer] = buildIAS(ctx, instances);
 
-    params->handle = handle;
-    check(cudaFree(reinterpret_cast<void*>(iasBuffer)));
-    iasBuffer = newIASBuffer;
-
-    Material* materialBuffer;
-    check(cudaMalloc(reinterpret_cast<void**>(&materialBuffer), materials.size() * sizeof(Material)));
-    check(cudaMemcpy(reinterpret_cast<void*>(materialBuffer), materials.data(), materials.size() * sizeof(Material), cudaMemcpyHostToDevice));
-
-    check(cudaFree(reinterpret_cast<void*>(params->materials))); // Free previous materials buffer
-    params->materials = materialBuffer;
+    void* previousMaterialBuffer = reinterpret_cast<void*>(params->materials);
+    void* previousHitgroup = reinterpret_cast<void*>(sbt.hitgroupRecordBase);
 
     HitRecord* hitRecordBuffer;
     check(cudaMalloc(reinterpret_cast<void**>(&hitRecordBuffer), hitRecords.size() * sizeof(HitRecord)));
     check(cudaMemcpy(reinterpret_cast<void*>(hitRecordBuffer), hitRecords.data(), hitRecords.size() * sizeof(HitRecord), cudaMemcpyHostToDevice));
 
-    check(cudaFree(reinterpret_cast<void*>(sbt.hitgroupRecordBase))); // Free previous hitgroup record buffer
     sbt.hitgroupRecordBase = reinterpret_cast<CUdeviceptr>(hitRecordBuffer);
     sbt.hitgroupRecordStrideInBytes = sizeof(HitRecord);
     sbt.hitgroupRecordCount = hitRecords.size();
+
+    Material* materialBuffer;
+    check(cudaMalloc(reinterpret_cast<void**>(&materialBuffer), materials.size() * sizeof(Material)));
+    check(cudaMemcpy(reinterpret_cast<void*>(materialBuffer), materials.data(), materials.size() * sizeof(Material), cudaMemcpyHostToDevice));
+
+    params->handle = handle;
+    params->materials = materialBuffer;
+
+    check(cudaFree(previousHitgroup)); // Free previous hitgroup record buffer
+    check(cudaFree(previousMaterialBuffer)); // Free previous materials buffer
+    free();
+    iasBuffer = std::move(newIASBuffer);
+    geometryTable = std::move(newGeometryTable);
+    textures = std::move(newTextures);
+    images = std::move(newImages);
 }

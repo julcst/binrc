@@ -12,9 +12,11 @@
 using namespace glm;
 
 #include <imgui.h>
+#include <misc/cpp/imgui_stdlib.h>
 
 #include <iostream>
 #include <format>
+#include <filesystem>
 
 #include "cudautil.hpp"
 
@@ -35,6 +37,30 @@ void main() {
     fragColor = texture(tex, texCoord) * exposure;
 })";
 
+std::vector<std::filesystem::path> scanFolder(const std::filesystem::path& folder) {
+    std::vector<std::filesystem::path> files;
+    try {
+        for (auto& f : std::filesystem::directory_iterator(folder)) {
+            if (f.path().extension() == ".glb"|| f.path().extension() == ".gltf") files.push_back(f.path());
+        }
+        return files;
+    } catch (const std::filesystem::filesystem_error& e) {
+        // Return empty
+        return files;
+    }
+}
+
+bool FileCombo(const char* label, size_t* curr, const std::vector<std::filesystem::path>& items) {
+    return ImGui::Combo(
+        label, reinterpret_cast<int*>(curr),
+        [](void* data, int idx, const char** out_text) {
+            auto items = reinterpret_cast<const std::vector<std::filesystem::path>*>(data);
+            *out_text = items->at(idx).c_str();
+            return true;
+        },
+        const_cast<void*>(reinterpret_cast<const void*>(&items)), items.size());
+}
+
 MainApp::MainApp() : App(800, 600) {
     printCudaDevices();
 
@@ -43,8 +69,9 @@ MainApp::MainApp() : App(800, 600) {
     blitProgram.loadSource(vs, fs);
     blitProgram.use();
     blitProgram.set(1, exposure);
-    
-    renderer.loadGLTF("../cornell.glb");
+
+    folder = std::filesystem::current_path().parent_path().string();
+    scenes = scanFolder(folder);
 
     setVSync(false);
 }
@@ -80,6 +107,15 @@ void MainApp::moveCallback(const vec2& movement, bool leftButton, bool rightButt
 void MainApp::buildImGui() {
     ImGui::StatisticsWindow(delta, resolution);
     ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+    std::string folder_str = folder.string();
+    if (ImGui::InputText("Folder", &folder_str)) {
+        folder = folder_str;
+        scenes = scanFolder(folder);
+        sceneID = 0;
+    }
+    if (FileCombo("Scene", &sceneID, scenes)) {
+        renderer.loadGLTF(scenes.at(sceneID));
+    }
     ImGui::Text("Sample: %d", renderer.params->sample);
     if (ImGui::SliderFloat("Exposure", &exposure, 0.1f, 10.0f, "%.1f", ImGuiSliderFlags_Logarithmic)) blitProgram.set(1, exposure);
     ImGui::SliderFloat("Russian Roulette", &renderer.params->russianRouletteWeight, 1.0f, 10.0f, "%.1f");

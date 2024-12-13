@@ -36,5 +36,6 @@ struct Scene {
     Scene(Scene&&) = delete;
     Scene& operator=(Scene&&) = delete;
 
+    void free();
     void loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& o, OptixShaderBindingTable& sbt, const std::filesystem::path& path);
 };

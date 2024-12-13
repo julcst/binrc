@@ -12,6 +12,10 @@
 #include <glm/glm.hpp>
 using namespace glm;
 
+#include <string>
+#include <filesystem>
+#include <vector>
+
 #include "optixrenderer.hpp"
 
 class MainApp : public App {
@@ -31,7 +35,7 @@ class MainApp : public App {
     void moveCallback(const vec2& movement, bool leftButton, bool rightButton, bool middleButton) override;
     void resizeCallback(const vec2& resolution) override;
   private:
-  void resize(int width, int height);
+    void resize(int width, int height);
     Buffer<GL_PIXEL_UNPACK_BUFFER> pbo;
     Texture<GL_TEXTURE_2D> blitTexture;
     Mesh fullscreenTriangle;
@@ -40,4 +44,7 @@ class MainApp : public App {
     OptixRenderer renderer;
     Camera camera;
     float exposure = 1.0f;
+    std::filesystem::path folder;
+    std::vector<std::filesystem::path> scenes;
+    size_t sceneID;
 };

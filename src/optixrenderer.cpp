@@ -124,7 +124,7 @@ OptixRenderer::OptixRenderer() {
         .missRecordCount = 1,
         .hitgroupRecordBase = 0,
         .hitgroupRecordStrideInBytes = sizeof(HitRecord),
-        .hitgroupRecordCount = 1,
+        .hitgroupRecordCount = 0,
     };
 
     check(cudaMallocManaged(reinterpret_cast<void**>(&params), sizeof(Params)));
@@ -153,6 +153,7 @@ OptixRenderer::~OptixRenderer() {
 
 void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
     scene.loadGLTF(context, params, programGroups[2], sbt, path);
+    reset();
 }
 
 void OptixRenderer::setCamera(const mat4& clipToWorld) {
