@@ -120,12 +120,9 @@ extern "C" __global__ void __raygen__rg() {
     for (uint depth = 0; depth < MAX_BOUNCES; depth++) {
         payload = trace(ray);
 
-        if (isinf(payload.t)) {
-            color += min(throughput, make_float3(1.0f)) * payload.albedo; // FIXME: Is clamping still unbiased?
-            break;
-        }
+        color += min(throughput, make_float3(1.0f)) * payload.emission; // FIXME: Is clamping still unbiased?
 
-        color += min(throughput, make_float3(1.0f)) * payload.emission;
+        if (isinf(payload.t)) break; // Skybox
 
         const auto hitPoint = ray.origin + payload.t * ray.direction;
         const auto alpha = payload.roughness * payload.roughness;
@@ -236,9 +233,9 @@ extern "C" __global__ void __closesthit__ch() {
 extern "C" __global__ void __miss__ms() {
     const auto dir = optixGetWorldRayDirection();
     auto sky = make_float3(0.01f);
-    const auto sundir = normalize(make_float3(0.5f, 0.5f, 0.5f));
+    //const auto sundir = normalize(make_float3(0.5f, 0.5f, 0.5f));
     //sky += min(powf(max(dot(dir, sundir), 0.0f), 32.0f), 1.0f) * make_float3(0.8f, 0.9f, 1.0f) * 5.0f;
 
-    setAlbedo(sky);
+    setEmission(sky);
     setT(INFINITY);
 }
