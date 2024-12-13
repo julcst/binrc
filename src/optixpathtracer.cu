@@ -121,7 +121,7 @@ extern "C" __global__ void __raygen__rg() {
         payload = trace(ray);
 
         if (isinf(payload.t)) {
-            color = min(throughput, make_float3(1.0f)) * payload.albedo; // FIXME: Is clamping still unbiased?
+            color += min(throughput, make_float3(1.0f)) * payload.albedo; // FIXME: Is clamping still unbiased?
             break;
         }
 
