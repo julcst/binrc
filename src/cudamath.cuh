@@ -339,6 +339,10 @@ __host__ __device__ constexpr bool isfinite(const float3& v) {
     return isfinite(v.x) && isfinite(v.y) && isfinite(v.z);
 }
 
+__host__ __device__ float luminance(const float3& linearRGB) {
+    return dot(make_float3(0.2126f, 0.7152f, 0.0722f), linearRGB);
+}
+
 // Operators on CUDA float4
 
 __host__ __device__ constexpr float4 make_float4(float x) {
@@ -1162,12 +1166,15 @@ __host__ __device__ constexpr float3x3 buildTBN(const float3& n, const float3& t
 }
 
 /**
- * Builds an orthogonal tangent space to world space matrix from a normalized normal
+ * Builds an orthonormal basis from a normalized normal
+ * See: https://graphics.pixar.com/library/OrthonormalB/paper.pdf
+ * "Building an Orthonormal Basis, Revisited"
  */
 __host__ __device__ constexpr float3x3 buildTBN(const float3& n) {
-    if (n.x == 0.0f) {
-        return buildTBN(n, {1.0f, 0.0f, 0.0f});
-    } else {
-        return buildTBN(n, {0.0f, 1.0f, 0.0f});
-    }
+    float sign = copysignf(1.0f, n.z);
+    const float a = -1.0f / (sign + n.z);
+    const float b = n.x * n.y * a;
+    const auto b1 = make_float3(1.0f + sign * n.x * n.x * a, sign * b, -sign * n.x);
+    const auto b2 = make_float3(b, sign + n.y * n.y * a, -n.y);
+    return make_float3x3(b1, b2, n);
 }
