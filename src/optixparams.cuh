@@ -11,7 +11,7 @@ constexpr uint MAX_BOUNCES = 31;
 constexpr uint RANDS_PER_PIXEL = 2;
 constexpr uint RANDS_PER_BOUNCE = 4;
 constexpr uint RAND_SEQUENCE_DIMS = RANDS_PER_PIXEL + RANDS_PER_BOUNCE * MAX_BOUNCES;
-constexpr uint RAND_SEQUENCE_CACHE_SIZE = 1024;
+constexpr uint RAND_SEQUENCE_CACHE_SIZE = 4096;
 
 struct VertexData {
     float3 normal;

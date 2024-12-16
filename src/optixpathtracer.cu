@@ -94,8 +94,8 @@ __device__ Payload trace(const Ray& ray) {
         0, 1, 0, // SBT offset, stride, miss index
         a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p // Payload
     );
-    const auto data = reinterpret_cast<HitData*>(optixGetSbtDataPointer());
-    optixReorder(0, 0); // TODO: Provide coherence hints
+    //const auto data = reinterpret_cast<HitData*>(optixGetSbtDataPointer());
+    //optixReorder(data->materialID, 3); // TODO: Provide coherence hints
     optixInvoke(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p);
     return getPayload(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p);
 }
@@ -120,7 +120,7 @@ extern "C" __global__ void __raygen__rg() {
     for (uint depth = 0; depth < MAX_BOUNCES; depth++) {
         payload = trace(ray);
 
-        color += min(throughput, make_float3(1.0f)) * payload.emission; // FIXME: Is clamping still unbiased?
+        color += throughput * payload.emission;
 
         if (isinf(payload.t)) break; // Skybox
 
@@ -158,12 +158,8 @@ extern "C" __global__ void __raygen__rg() {
                 ray.origin = hitPoint + 1e-4f * n; // Prevent self intersection
                 throughput *= sample.throughput / (1.0f - pSpecular);
             } else {
-                // ray.direction = ray.direction;
-                // ray.origin = hitPoint + 1e-4f * ray.direction; // Prevent self intersection
-                // throughput *= (1.0f - F_SchlickApprox(cosThetaO, baseSpecular)) * albedo / (1.0f - pSpecular);
                 const auto rand = fract(make_float2(getRand(depth, 1) + rotation.x, getRand(depth, 2) + rotation.y));
                 const auto sample = sampleTrowbridgeReitzTransmission(rand, wo, cosThetaO, n, alpha, baseSpecular, albedo, inside);
-                //const auto sample = samplePerfectTransmission(wo, n, albedo, inside);
                 ray.direction = sample.direction;
                 ray.origin = hitPoint + 1e-4f * ray.direction; // Prevent self intersection
                 throughput *= sample.throughput / (1.0f - pSpecular);
@@ -176,8 +172,9 @@ extern "C" __global__ void __raygen__rg() {
         throughput /= pContinue;
     }
 
-    // NOTE: We simply ignore NaNs and Infs to avoid propagation
-    if (isfinite(throughput)) params.image[i] = mix(params.image[i], make_float4(color, 1.0f), params.weight);
+    // NOTE: We should not need to prevent NaNs
+    // if (isfinite(throughput))
+    params.image[i] = mix(params.image[i], make_float4(color, 1.0f), params.weight);
 }
 
 extern "C" __global__ void __closesthit__ch() {

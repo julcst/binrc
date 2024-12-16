@@ -62,7 +62,7 @@ __device__ constexpr float3 sampleVNDFTrowbridgeReitz(const float2& u, const flo
     const auto wiStd_z = dot(wiStd, n);
     const auto phi = (2.0f * u.x - 1.0f) * PI;
     const auto z = (1.0f - u.y) * (1.0f + wiStd_z) - wiStd_z;
-    const auto sinTheta = sqrtf(max(1.0f - z * z, 0.0f)); // Is this clamping necessary?
+    const auto sinTheta = sqrtf(1.0f - z * z);
     const auto x = sinTheta * cosf(phi);
     const auto y = sinTheta * sinf(phi);
     const auto cStd = make_float3(x, y, z);
@@ -70,7 +70,7 @@ __device__ constexpr float3 sampleVNDFTrowbridgeReitz(const float2& u, const flo
     const auto up = make_float3(0.0f, 0.0f, 1.0f);
     const auto wr = n + up;
     // prevent division by zero
-    const auto wrz_safe = max(wr.z, 1e-32f);
+    const auto wrz_safe = max(wr.z, 1e-10f); // NOTE: Important for the case when wr.z is close to zero
     const auto c = dot(wr, cStd) * wr / wrz_safe - cStd;
     // compute halfway direction as standard normal
     const auto wmStd = c + wiStd;
