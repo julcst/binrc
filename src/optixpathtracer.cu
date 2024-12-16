@@ -230,8 +230,8 @@ extern "C" __global__ void __closesthit__ch() {
 extern "C" __global__ void __miss__ms() {
     const auto dir = optixGetWorldRayDirection();
     auto sky = make_float3(0.01f);
-    //const auto sundir = normalize(make_float3(0.5f, 0.5f, 0.5f));
-    //sky += min(powf(max(dot(dir, sundir), 0.0f), 32.0f), 1.0f) * make_float3(0.8f, 0.9f, 1.0f) * 5.0f;
+    const auto sundir = normalize(make_float3(0.5f, 0.5f, 0.5f));
+    sky += min(powf(max(dot(dir, sundir), 0.0f), 32.0f), 1.0f) * make_float3(0.8f, 0.9f, 1.0f) * 5.0f;
 
     setEmission(sky);
     setT(INFINITY);

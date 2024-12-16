@@ -329,7 +329,7 @@ __host__ __device__ constexpr float3 reflect(const float3& i, const float3& n) {
 
 __host__ __device__ constexpr float3 refract(const float3& i, const float3& n, const float eta) {
     const auto cosTheta_i  = dot(n, i);
-    const auto sin2Theta_i = 1.0f - sqrtf(cosTheta_i);
+    const auto sin2Theta_i = 1.0f - safesqrt(cosTheta_i);
     const auto sin2Theta_t = sin2Theta_i * rsqrtf(eta);
     const auto cosTheta_t = safesqrt(1.0f - sin2Theta_t); // NOTE: Important to prevent NaNs
     return (cosTheta_i / eta - cosTheta_t) * n - i / eta;
