@@ -15,6 +15,19 @@ __device__ constexpr float3 F_SchlickApprox(float HdotV, const float3& R0) {
 }
 
 /**
+ * Trowbridge-Reitz normal distribution function
+ * See: PBR Book by Matt Pharr and Greg Humphreys
+ * See: Physically Based Shading at Disney by Brent Burley
+ * See: Microfacet Models for Refraction through Rough Surfaces by Bruce Walter et al.
+ */
+__device__ constexpr float D_TrowbridgeReitz(float NdotH, float alpha2) {
+    const auto cosTheta = NdotH;
+    const auto cos2Theta = cosTheta * cosTheta;
+    const auto sin2Theta = 1.0f - cos2Theta;
+    return alpha2 / (PI * pow2(alpha2 * cos2Theta + sin2Theta));
+}
+
+/**
  * Lambda for the Trowbridge-Reitz NDF
  * Measures invisible masked microfacet area per visible microfacet area.
  */
@@ -41,6 +54,27 @@ __device__ constexpr float G2_TrowbridgeReitz(float NdotL, float NdotV, float al
 __device__ constexpr float G1_TrowbridgeReitz(float NdotV, float alpha2) {
     const auto lambdaV = Lambda_TrowbridgeReitz(NdotV, alpha2);
     return 1.0f / (1.0f + lambdaV);
+}
+
+__device__ constexpr float3 disneyBRDF(const float3& wo, const float3& wi, const float3& n, const float3& albedo, float metallic, float alpha) {
+    const auto F0 = mix(make_float3(0.04f), albedo, metallic);
+    const auto alpha2 = alpha * alpha;
+    const auto H = normalize(wo + wi);
+    const auto NdotH = dot(n, H);
+    const auto NdotV = dot(n, wo);
+    const auto NdotL = dot(n, wi);
+    const auto HdotV = dot(H, wo);
+
+    const auto F = F_SchlickApprox(HdotV, F0);
+    const auto D = D_TrowbridgeReitz(NdotH, alpha2);
+    const auto G = G2_TrowbridgeReitz(NdotL, NdotV, alpha2);
+    const auto specular = F * D * G / (4.0f * NdotV * NdotL);
+
+    const auto FD90 = 0.5f + 2.0f * alpha * HdotV * HdotV;
+    const auto response = (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotL)) * (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotV));
+    const auto diffuse = albedo * response;
+
+    return specular + diffuse;
 }
 
 /**
@@ -162,4 +196,47 @@ __device__ constexpr SampleResult sampleBrentBurley(const float2& rand, const fl
     // NOTE: We drop the 1.0 / PI prefactor
     const auto diffuse = albedo * response;
     return {wi, diffuse};
+}
+
+struct LightSample {
+    float3 position;
+    float3 emission;
+    float3 n;
+};
+
+// Binary search for the index of the light source
+__device__ inline EmissiveTriangle sampleLightTable(float r) {
+    uint left = 0;
+    uint right = params.lightTableSize;
+    while (left < right) {
+        const uint mid = (left + right) / 2;
+        if (params.lightTable[mid].cdf < r) {
+            left = mid + 1;
+        } else {
+            right = mid;
+        }
+    }
+    return params.lightTable[left];
+}
+
+__device__ inline EmissiveTriangle sampleLightTableUniform(float r) {
+    const uint index = r * params.lightTableSize;
+    auto light = params.lightTable[index];
+    light.weight = 1.0f / params.lightTableSize;
+    return light;
+}
+
+__device__ inline LightSample sampleLightSource(const EmissiveTriangle& light, const float2& rand) {
+    const auto s = sqrtf(rand.y);
+    const auto u = 1.0f - s;
+    const auto v = rand.x * s;
+    const auto w = 1.0f - u - v;
+    const auto position = u * light.v0 + v * light.v1 + w * light.v2;
+    const auto n = normalize(u * light.n0 + v * light.n1 + w * light.n2);
+    return {position, params.materials[light.materialID].emission / light.weight, n}; // TODO: Add cosine distance weight to the light
+}
+
+__device__ inline LightSample sampleLight(const float3& rand) {
+    const auto light = sampleLightTable(rand.x);
+    return sampleLightSource(light, make_float2(rand.y, rand.z));
 }

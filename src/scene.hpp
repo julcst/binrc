@@ -5,11 +5,19 @@
 
 #include <vector>
 #include <filesystem>
+#include <optional>
 
 #include <glm/glm.hpp>
 using namespace glm;
 
 #include "optixparams.cuh"
+
+struct Emitter {
+    float emission;
+    std::vector<vec4> vertices;
+    std::vector<uint> indices;
+    std::vector<VertexData> vertexData;
+};
 
 struct Geometry {
     OptixTraversableHandle handle;
@@ -17,6 +25,7 @@ struct Geometry {
     CUdeviceptr indexBuffer; // NOTE: This is owned memory and must be freed
     CUdeviceptr vertexData; // NOTE: This is owned memory and must be freed
     uint sbtOffset;
+    std::optional<Emitter> emitter;
     ~Geometry();
 };
 

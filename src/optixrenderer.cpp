@@ -146,6 +146,7 @@ OptixRenderer::~OptixRenderer() {
     check(cudaFree(reinterpret_cast<void*>(params->randSequence)));
     check(cudaFree(reinterpret_cast<void*>(params->rotationTable)));
     check(cudaFree(reinterpret_cast<void*>(params->materials)));
+    check(cudaFree(reinterpret_cast<void*>(params->lightTable)));
     check(cudaFree(reinterpret_cast<void*>(params)));
     check(optixPipelineDestroy(pipeline));
     check(optixDeviceContextDestroy(context));

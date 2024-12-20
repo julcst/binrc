@@ -11,12 +11,24 @@ struct Ray {
 };
 
 __device__ Ray makeCameraRay(const float2& uv) {
-    const float4 origin = params.clipToWorld[3]; // = params.clipToWorld[3] * make_float4(0.0f, 0.0f, 0.0f, 1.0f);
+    const float4 origin = params.clipToWorld[3]; // = params.clipToWorld * make_float4(0.0f, 0.0f, 0.0f, 1.0f);
     const float4 clipTarget = make_float4(-2.0f * uv + 1.0f, -1.0f, 1.0f);
     const float4 target = params.clipToWorld * clipTarget;
     const float3 origin3 = make_float3(origin) / origin.w;
     const float3 dir3 = normalize(origin3 - make_float3(target) / target.w);
     return Ray{origin3, dir3};
+}
+
+__device__ inline float getRand(uint depth, uint offset, float rotation) {
+    return fract(getRand(depth, offset) + rotation);
+}
+
+__device__ inline float2 getRand(uint depth, uint offset, float r0, float r1) {
+    return fract(make_float2(getRand(depth, offset + 0) + r0, getRand(depth, offset + 1) + r1));
+}
+
+__device__ inline float3 getRand(uint depth, uint offset, float r0, float r1, float r2) {
+    return fract(make_float3(getRand(depth, offset + 0) + r0, getRand(depth, offset + 1) + r1, getRand(depth, offset + 2) + r2));
 }
 
 struct Payload {
@@ -100,8 +112,16 @@ __device__ Payload trace(const Ray& ray) {
     return getPayload(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p);
 }
 
-__device__ float luminance(const float3& linearRGB) {
-    return dot(make_float3(0.2126f, 0.7152f, 0.0722f), linearRGB);
+__device__ bool traceOcclusion(const Ray& ray, float dist) {
+    optixTraverse(
+        params.handle,
+        ray.origin, ray.direction,
+        0.0f, dist - 1e-4f, // tmin, tmax
+        0.0f, // rayTime
+        OptixVisibilityMask(255), OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT | OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+        0, 1, 0 // SBT offset, stride, miss index
+    );
+    return optixHitObjectIsHit();
 }
 
 extern "C" __global__ void __raygen__rg() {
@@ -117,10 +137,13 @@ extern "C" __global__ void __raygen__rg() {
     Payload payload;
     auto color = make_float3(0.0f);
     auto throughput = make_float3(1.0f);
-    for (uint depth = 0; depth < MAX_BOUNCES; depth++) {
+    
+    for (uint depth = 1; depth < MAX_BOUNCES; depth++) {
         payload = trace(ray);
 
-        color += throughput * payload.emission;
+        const auto nee = !isinf(payload.t) && depth > 1 && params.lightTableSize > 0;
+        
+        if (!nee) color += throughput * payload.emission * 0.5f; // FIXME: * dot(payload.normal, -ray.direction);
 
         if (isinf(payload.t)) break; // Skybox
 
@@ -142,23 +165,25 @@ extern "C" __global__ void __raygen__rg() {
         const auto wDiffuse = luminance(baseDiffuse);
         const auto pSpecular = wSpecular / (wSpecular + wDiffuse);
 
-        if (fract(getRand(depth, 0) + rotation.w) < pSpecular) { 
+        // TODO: Move sampling into closesthit to benefit from reordering
+        if (getRand(depth, 0, rotation.w) < pSpecular) { 
             // Sample Trowbridge-Reitz specular
-            const auto rand = fract(make_float2(getRand(depth, 1) + rotation.x, getRand(depth, 2) + rotation.y));
+            const auto rand = getRand(depth, 1, rotation.x, rotation.y);
             const auto sample = sampleTrowbridgeReitz(rand, wo, cosThetaO, n, alpha, baseSpecular);
             ray.direction = sample.direction;
             ray.origin = hitPoint + 1e-4f * n; // Prevent self intersection
             throughput *= sample.throughput / pSpecular;
         } else {
-            if (payload.transmission < 0.5f) { // Sample Brent-Burley diffuse
-                const auto rand = fract(make_float2(getRand(depth, 1) + rotation.z, getRand(depth, 2) + rotation.w)); 
+            // TODO: Reenable
+            if (payload.transmission < 1.5f) { // Sample Brent-Burley diffuse
+                const auto rand = getRand(depth, 1, rotation.z, rotation.w); 
                 const auto tangentToWorld = buildTBN(n, payload.tangent);
                 const auto sample = sampleBrentBurley(rand, wo, cosThetaO, n, alpha, tangentToWorld, baseDiffuse);
                 ray.direction = sample.direction;
                 ray.origin = hitPoint + 1e-4f * n; // Prevent self intersection
                 throughput *= sample.throughput / (1.0f - pSpecular);
             } else {
-                const auto rand = fract(make_float2(getRand(depth, 1) + rotation.x, getRand(depth, 2) + rotation.y));
+                const auto rand = getRand(depth, 1, rotation.x, rotation.y);
                 const auto sample = sampleTrowbridgeReitzTransmission(rand, wo, cosThetaO, n, alpha, baseSpecular, albedo, inside);
                 ray.direction = sample.direction;
                 ray.origin = hitPoint + 1e-4f * ray.direction; // Prevent self intersection
@@ -170,6 +195,20 @@ extern "C" __global__ void __raygen__rg() {
         const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
         if (fract(getRand(depth, 3) + rotation.z) >= pContinue) break;
         throughput /= pContinue;
+
+        // Next event estimation
+        if (params.lightTableSize > 0) {
+            const auto sample = sampleLight(getRand(depth, 0, rotation.w, rotation.x, rotation.y));
+            const auto dir = sample.position - hitPoint;
+            const auto dist2 = dot(dir, dir);
+            const auto dist = sqrtf(dist2);
+            const auto wi = dir / dist;
+            const auto shadowRay = Ray{hitPoint + 1e-4f * ray.direction, wi};
+            if (dist2 > 1e-4f && dot(n, wi) > 0.0f && !traceOcclusion(shadowRay, dist)) {
+                const auto brdf = disneyBRDF(wo, wi, n, albedo, metallic, alpha);
+                color += (throughput * sample.emission * brdf * dot(-wi, sample.n) * dot(wi, n)) / (dist2 * PI);
+            }
+        }
     }
 
     // NOTE: We should not need to prevent NaNs

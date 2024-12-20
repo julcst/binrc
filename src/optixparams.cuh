@@ -30,6 +30,18 @@ struct Material {
     cudaTextureObject_t mrMap;
 };
 
+struct EmissiveTriangle {
+    float3 v0;
+    float cdf;
+    float3 v1;
+    float weight;
+    float3 v2;
+    uint materialID;
+    float3 n0;
+    float3 n1;
+    float3 n2;
+};
+
 // NOTE: Because this includes pointers this should be zero-initialized using cudaMemset
 struct Params {
     float4* image; // A copied pointer to the image buffer
@@ -48,6 +60,8 @@ struct Params {
     float* randSequence; // Quasi-random Sobol sequence
     float4* rotationTable; // Cranley-Patterson-Rotation per pixel
     Material* materials; // materials
+    EmissiveTriangle* lightTable; // lightTable
+    uint lightTableSize; // lightTableSize
 //////////////////////////////////////////////////
 
 };

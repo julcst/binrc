@@ -65,7 +65,7 @@ std::tuple<OptixTraversableHandle, CUdeviceptr> buildGAS(OptixDeviceContext ctx,
     check(cudaMalloc(reinterpret_cast<void**>(&gasBuffer), bufferSizes.outputSizeInBytes));
 
     OptixTraversableHandle handle;
-    optixAccelBuild(ctx, nullptr, &accelOptions, buildInputs.data(), buildInputs.size(), tempBuffer, bufferSizes.tempSizeInBytes, gasBuffer, bufferSizes.outputSizeInBytes, &handle, nullptr, 0);
+    check(optixAccelBuild(ctx, nullptr, &accelOptions, buildInputs.data(), buildInputs.size(), tempBuffer, bufferSizes.tempSizeInBytes, gasBuffer, bufferSizes.outputSizeInBytes, &handle, nullptr, 0));
 
     // TODO: Compact
 
@@ -139,7 +139,7 @@ std::tuple<OptixTraversableHandle, CUdeviceptr> buildIAS(OptixDeviceContext ctx,
     check(cudaMalloc(reinterpret_cast<void**>(&iasBuffer), bufferSizes.outputSizeInBytes));
 
     OptixTraversableHandle handle;
-    optixAccelBuild(ctx, nullptr, &accelOptions, &buildInput, 1, tempBuffer, bufferSizes.tempSizeInBytes, iasBuffer, bufferSizes.outputSizeInBytes, &handle, nullptr, 0);
+    check(optixAccelBuild(ctx, nullptr, &accelOptions, &buildInput, 1, tempBuffer, bufferSizes.tempSizeInBytes, iasBuffer, bufferSizes.outputSizeInBytes, &handle, nullptr, 0));
 
     // TODO: Compact
 
@@ -149,12 +149,25 @@ std::tuple<OptixTraversableHandle, CUdeviceptr> buildIAS(OptixDeviceContext ctx,
     return {handle, iasBuffer};
 }
 
-float3 toVec3(const fastgltf::math::fvec4& v) {
+vec4 toVec4(const fastgltf::math::fvec4& v) {
+    return vec4(v.x(), v.y(), v.z(), v.w());
+}
+
+float3 toFloat3(const fastgltf::math::fvec4& v) {
     return make_float3(v.x(), v.y(), v.z());
 }
 
-float3 toVec3(const fastgltf::math::nvec3& v, const fastgltf::num factor) {
+float3 toFloat3(const fastgltf::math::nvec3& v, const fastgltf::num factor) {
     return make_float3(v.x() * factor, v.y() * factor, v.z() * factor);
+}
+
+float luminance(const float3& v) {
+    return 0.2126f * v.x + 0.7152f * v.y + 0.0722f * v.z;
+}
+
+std::ostream& operator<<(std::ostream& os, const float3& v) {
+    os << "(" << v.x << ", " << v.y << ", " << v.z << ")";
+    return os;
 }
 
 cudaTextureObject_t createTextureObject(cudaArray_t image, int srgb) {
@@ -242,8 +255,8 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
         const auto& material = asset->materials[i];
 
         materials[i] = Material {
-            .albedo = toVec3(material.pbrData.baseColorFactor),
-            .emission = toVec3(material.emissiveFactor, material.emissiveStrength),
+            .albedo = toFloat3(material.pbrData.baseColorFactor),
+            .emission = toFloat3(material.emissiveFactor, material.emissiveStrength),
             .roughness = material.pbrData.roughnessFactor,
             .metallic = material.pbrData.metallicFactor,
             .transmission = 0.0f,
@@ -287,9 +300,12 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
     std::vector<std::vector<Geometry>> newGeometryTable(asset->meshes.size());
 
     uint geometryID = 0;
+    float lightTableSum = 0.0f;
     for (uint i = 0; i < asset->meshes.size(); i++) {
         const auto& mesh = asset->meshes[i];
         for (const auto& primitive : mesh.primitives) {
+            if (!primitive.materialIndex.has_value()) throw std::runtime_error("Primitive has no material index");
+
             auto& posAcc = asset->accessors[primitive.findAttribute("POSITION")->accessorIndex];
             std::vector<vec4> vertices(posAcc.count);
             fastgltf::iterateAccessorWithIndex<vec3>(asset.get(), posAcc, [&](const vec3& vertex, auto i) {
@@ -322,21 +338,27 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
             check(cudaMalloc(reinterpret_cast<void**>(&vertexDataBuffer), vertexData.size() * sizeof(VertexData)));
             check(cudaMemcpy(reinterpret_cast<void*>(vertexDataBuffer), vertexData.data(), vertexData.size() * sizeof(VertexData), cudaMemcpyHostToDevice));
 
+            uint materialID = primitive.materialIndex.value();
+
             check(optixSbtRecordPackHeader(program, &hitRecords[geometryID]));
-            uint materialID = primitive.materialIndex.value_or(0);
             hitRecords[geometryID].data = HitData {
                 .indexBuffer = reinterpret_cast<uint3*>(indexBuffer),
                 .vertexData = reinterpret_cast<VertexData*>(vertexDataBuffer),
                 .materialID = materialID,
             };
 
-            newGeometryTable[i].emplace_back(handle, gasBuffer, vertexDataBuffer, indexBuffer, geometryID);
-            geometryID++;
-
             std::cout << "Loaded geometry " << geometryID << " with " << vertices.size() << " vertices and " << indices.size() / 3 << " triangles" << std::endl;
+
+            float emission = luminance(materials.at(materialID).emission);
+            bool isEmissive = emission > 0.0f;
+            const auto emitter = isEmissive ? std::optional<Emitter>(Emitter { emission, std::move(vertices), std::move(indices), std::move(vertexData) }) : std::nullopt;
+
+            newGeometryTable[i].emplace_back(handle, gasBuffer, vertexDataBuffer, indexBuffer, geometryID, emitter);
+            geometryID++;
         }
     }
 
+    std::vector<EmissiveTriangle> lightTable;
     std::vector<OptixInstance> instances(nInstances);
     uint i = 0;
     for (const auto& node : asset->nodes) {
@@ -365,15 +387,56 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
                     .flags = OPTIX_INSTANCE_FLAG_NONE,
                     .traversableHandle = geometry.handle,
                 };
+
+                if (geometry.emitter.has_value()) {
+                    auto emitter = geometry.emitter.value();
+                    const auto transform = mat4(toVec4(mat.col(0)), toVec4(mat.col(1)), toVec4(mat.col(2)), toVec4(mat.col(3)));
+                    const auto normalTransform = transpose(inverse(mat3(transform)));
+                    lightTable.reserve(lightTable.size() + emitter.indices.size() / 3);
+                    for (uint j = 0; j < emitter.indices.size(); j += 3) {
+                        const auto i0 = emitter.indices[j + 0];
+                        const auto i1 = emitter.indices[j + 1];
+                        const auto i2 = emitter.indices[j + 2];
+                        const auto v0 = vec3(transform * emitter.vertices[i0]);
+                        const auto v1 = vec3(transform * emitter.vertices[i1]);
+                        const auto v2 = vec3(transform * emitter.vertices[i2]);
+                        const auto n0 = normalTransform * cudaToGlm(emitter.vertexData[i0].normal);
+                        const auto n1 = normalTransform * cudaToGlm(emitter.vertexData[i1].normal);
+                        const auto n2 = normalTransform * cudaToGlm(emitter.vertexData[i2].normal);
+                        float area = 0.5f * length(cross(v1 - v0, v2 - v0));
+                        float weight = area * emitter.emission;
+                        lightTableSum += weight;
+                        lightTable.push_back(EmissiveTriangle {
+                            .v0 = glmToCuda(v0),
+                            .cdf = lightTableSum,
+                            .v1 = glmToCuda(v1),
+                            .weight = weight,
+                            .v2 = glmToCuda(v2),
+                            .materialID = static_cast<uint>(primitive.materialIndex.value()),
+                            .n0 = glmToCuda(n0),
+                            .n1 = glmToCuda(n1),
+                            .n2 = glmToCuda(n2),
+                        });
+                    }
+                }
                 i++;
             }
         }
+    }
+
+    // Normalize light table
+    const auto norm = 1.0f / lightTableSum;
+    for (auto& light : lightTable) {
+        light.cdf *= norm;
+        light.weight *= norm;
+        std::cout << "Light: " << light.v0 << " " << light.v1 << " " << light.v2 << " " << light.weight << " -- " << light.cdf << std::endl;
     }
 
     const auto [handle, newIASBuffer] = buildIAS(ctx, instances);
 
     void* previousMaterialBuffer = reinterpret_cast<void*>(params->materials);
     void* previousHitgroup = reinterpret_cast<void*>(sbt.hitgroupRecordBase);
+    void* previousLightTable = reinterpret_cast<void*>(params->lightTable);
 
     HitRecord* hitRecordBuffer;
     check(cudaMalloc(reinterpret_cast<void**>(&hitRecordBuffer), hitRecords.size() * sizeof(HitRecord)));
@@ -387,13 +450,21 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
     check(cudaMalloc(reinterpret_cast<void**>(&materialBuffer), materials.size() * sizeof(Material)));
     check(cudaMemcpy(reinterpret_cast<void*>(materialBuffer), materials.data(), materials.size() * sizeof(Material), cudaMemcpyHostToDevice));
 
+    EmissiveTriangle* lightTableBuffer;
+    check(cudaMalloc(reinterpret_cast<void**>(&lightTableBuffer), lightTable.size() * sizeof(EmissiveTriangle)));
+    check(cudaMemcpy(reinterpret_cast<void*>(lightTableBuffer), lightTable.data(), lightTable.size() * sizeof(EmissiveTriangle), cudaMemcpyHostToDevice));
+
     params->handle = handle;
     params->materials = materialBuffer;
+    params->lightTable = lightTableBuffer;
+    params->lightTableSize = lightTable.size();
 
     check(cudaFree(previousHitgroup)); // Free previous hitgroup record buffer
     check(cudaFree(previousMaterialBuffer)); // Free previous materials buffer
+    check(cudaFree(previousLightTable)); // Free previous light table
     free();
-    iasBuffer = std::move(newIASBuffer);
+
+    iasBuffer = newIASBuffer;
     geometryTable = std::move(newGeometryTable);
     textures = std::move(newTextures);
     images = std::move(newImages);
