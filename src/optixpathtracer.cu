@@ -175,7 +175,7 @@ extern "C" __global__ void __raygen__rg() {
             throughput *= sample.throughput / pSpecular;
         } else {
             // TODO: Reenable
-            if (payload.transmission < 1.5f) { // Sample Brent-Burley diffuse
+            if (payload.transmission < 0.5f) { // Sample Brent-Burley diffuse
                 const auto rand = getRand(depth, 1, rotation.z, rotation.w); 
                 const auto tangentToWorld = buildTBN(n, payload.tangent);
                 const auto sample = sampleBrentBurley(rand, wo, cosThetaO, n, alpha, tangentToWorld, baseDiffuse);
@@ -205,9 +205,11 @@ extern "C" __global__ void __raygen__rg() {
             const auto dist = sqrtf(dist2);
             const auto wi = dir / dist;
             const auto shadowRay = Ray{hitPoint + 1e-4f * ray.direction, wi};
-            if (dist2 > 1e-4f && dot(n, wi) > 0.0f && !traceOcclusion(shadowRay, dist)) {
+            const auto cosThetaS = dot(wi, n);
+            const auto cosThetaL = dot(-wi, sample.n);
+            if (cosThetaS > 0.0f && cosThetaL > 0.0f && !traceOcclusion(shadowRay, dist)) {
                 const auto brdf = disneyBRDF(wo, wi, n, albedo, metallic, alpha);
-                color += (throughput * sample.emission * brdf * dot(-wi, sample.n) * dot(wi, n)) / (dist2 * PI);
+                color += (throughput * sample.emission * brdf * cosThetaS * cosThetaL) / (dist2 * PI);
             }
         }
     }
@@ -270,9 +272,7 @@ extern "C" __global__ void __closesthit__ch() {
 
 extern "C" __global__ void __miss__ms() {
     const auto dir = optixGetWorldRayDirection();
-    auto sky = make_float3(0.01f);
-    const auto sundir = normalize(make_float3(0.5f, 0.5f, 0.5f));
-    sky += min(powf(max(dot(dir, sundir), 0.0f), 32.0f), 1.0f) * make_float3(0.8f, 0.9f, 1.0f) * 5.0f;
+    auto sky = make_float3(0.05f);
 
     setEmission(sky);
     setT(INFINITY);
