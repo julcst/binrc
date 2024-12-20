@@ -197,7 +197,6 @@ extern "C" __global__ void __raygen__rg() {
         throughput /= pContinue;
 
         // Next event estimation
-        // FIXME: Too bright
         // TODO: MIS
         if (params.lightTableSize > 0) {
             const auto sample = sampleLight(getRand(depth, 0, rotation.w, rotation.x, rotation.y));

@@ -347,10 +347,11 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
                 .materialID = materialID,
             };
 
-            std::cout << "Loaded geometry " << geometryID << " with " << vertices.size() << " vertices and " << indices.size() / 3 << " triangles" << std::endl;
-
             float emission = luminance(materials.at(materialID).emission);
             bool isEmissive = emission > 0.0f;
+
+            std::cout << (isEmissive ? "Loaded emissive geometry " : "Loaded geometry ") << geometryID << " with " << vertices.size() << " vertices and " << indices.size() / 3 << " triangles" << std::endl;
+
             const auto emitter = isEmissive ? std::optional<Emitter>(Emitter { emission, std::move(vertices), std::move(indices), std::move(vertexData) }) : std::nullopt;
 
             newGeometryTable[i].emplace_back(handle, gasBuffer, vertexDataBuffer, indexBuffer, geometryID, emitter);
@@ -375,7 +376,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
             }
             for (uint j = 0; j < mesh.primitives.size(); j++) {
                 const auto& primitive = mesh.primitives[j];
-                auto& geometry = newGeometryTable[m.value()][j];
+                const auto& geometry = newGeometryTable[m.value()][j];
                 instances[i] = OptixInstance {
                     .transform = {
                         mat.row(0)[0], mat.row(0)[1], mat.row(0)[2], mat.row(0)[3],
@@ -390,7 +391,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
                 };
 
                 if (geometry.emitter.has_value()) {
-                    auto emitter = geometry.emitter.value();
+                    const auto& emitter = geometry.emitter.value();
                     const auto transform = mat4(toVec4(mat.col(0)), toVec4(mat.col(1)), toVec4(mat.col(2)), toVec4(mat.col(3)));
                     const auto normalTransform = transpose(inverse(mat3(transform)));
                     lightTable.reserve(lightTable.size() + emitter.indices.size() / 3);
@@ -415,6 +416,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
                             .v2 = glmToCuda(v2),
                             .materialID = static_cast<uint>(primitive.materialIndex.value()),
                             .n0 = glmToCuda(n0),
+                            .area = area,
                             .n1 = glmToCuda(n1),
                             .n2 = glmToCuda(n2),
                         });

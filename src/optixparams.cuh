@@ -38,6 +38,7 @@ struct EmissiveTriangle {
     float3 v2;
     uint materialID;
     float3 n0;
+    float area;
     float3 n1;
     float3 n2;
 };

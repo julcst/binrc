@@ -234,7 +234,7 @@ __device__ inline LightSample sampleLightSource(const EmissiveTriangle& light, c
     const auto w = 1.0f - u - v;
     const auto position = u * light.v0 + v * light.v1 + w * light.v2;
     const auto n = normalize(u * light.n0 + v * light.n1 + w * light.n2);
-    return {position, params.materials[light.materialID].emission / light.weight, n}; // TODO: Add cosine distance weight to the light
+    return {position, params.materials[light.materialID].emission * light.area / light.weight, n}; // TODO: Add cosine distance weight to the light
 }
 
 __device__ inline LightSample sampleLight(const float3& rand) {
