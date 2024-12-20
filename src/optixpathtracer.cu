@@ -174,7 +174,8 @@ extern "C" __global__ void __raygen__rg() {
             ray.origin = hitPoint + 1e-4f * n; // Prevent self intersection
             throughput *= sample.throughput / pSpecular;
         } else {
-            // TODO: Reenable
+            // TODO: Fix Caustics with NEE
+            // TODO: Proper weighting
             if (payload.transmission < 0.5f) { // Sample Brent-Burley diffuse
                 const auto rand = getRand(depth, 1, rotation.z, rotation.w); 
                 const auto tangentToWorld = buildTBN(n, payload.tangent);
