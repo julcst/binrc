@@ -143,7 +143,7 @@ extern "C" __global__ void __raygen__rg() {
 
         const auto nee = !isinf(payload.t) && depth > 1 && params.lightTableSize > 0;
         
-        if (!nee) color += throughput * payload.emission * 0.5f; // FIXME: * dot(payload.normal, -ray.direction);
+        if (!nee) color += throughput * payload.emission; // FIXME: * dot(payload.normal, -ray.direction); ???
 
         if (isinf(payload.t)) break; // Skybox
 
@@ -197,6 +197,8 @@ extern "C" __global__ void __raygen__rg() {
         throughput /= pContinue;
 
         // Next event estimation
+        // FIXME: Too bright
+        // TODO: MIS
         if (params.lightTableSize > 0) {
             const auto sample = sampleLight(getRand(depth, 0, rotation.w, rotation.x, rotation.y));
             const auto dir = sample.position - hitPoint;
@@ -212,6 +214,7 @@ extern "C" __global__ void __raygen__rg() {
     }
 
     // NOTE: We should not need to prevent NaNs
+    // FIXME: NaNs
     // if (isfinite(throughput))
     params.image[i] = mix(params.image[i], make_float4(color, 1.0f), params.weight);
 }

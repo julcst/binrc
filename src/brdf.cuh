@@ -205,6 +205,7 @@ struct LightSample {
 };
 
 // Binary search for the index of the light source
+// FIXME: Fix cudaInvalidMemoryAccess
 __device__ inline EmissiveTriangle sampleLightTable(float r) {
     uint left = 0;
     uint right = params.lightTableSize;
@@ -237,6 +238,6 @@ __device__ inline LightSample sampleLightSource(const EmissiveTriangle& light, c
 }
 
 __device__ inline LightSample sampleLight(const float3& rand) {
-    const auto light = sampleLightTable(rand.x);
+    const auto light = sampleLightTableUniform(rand.x);
     return sampleLightSource(light, make_float2(rand.y, rand.z));
 }
