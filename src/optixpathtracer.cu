@@ -137,13 +137,14 @@ extern "C" __global__ void __raygen__rg() {
     Payload payload;
     auto color = make_float3(0.0f);
     auto throughput = make_float3(1.0f);
+    auto isGlossy = false;
     
     for (uint depth = 1; depth < MAX_BOUNCES; depth++) {
         payload = trace(ray);
 
-        const auto nee = !isinf(payload.t) && depth > 1 && params.lightTableSize > 0;
+        const auto nee = !isinf(payload.t) && depth > 1 && params.lightTable;
         
-        if (!nee) color += throughput * payload.emission; // FIXME: * dot(payload.normal, -ray.direction); ???
+        if (!nee || isGlossy) color += throughput * payload.emission; // FIXME: * dot(payload.normal, -ray.direction); ???
 
         if (isinf(payload.t)) break; // Skybox
 
@@ -168,6 +169,7 @@ extern "C" __global__ void __raygen__rg() {
         // TODO: Move sampling into closesthit to benefit from reordering
         if (getRand(depth, 0, rotation.w) < pSpecular) { 
             // Sample Trowbridge-Reitz specular
+            isGlossy = true;
             const auto rand = getRand(depth, 1, rotation.x, rotation.y);
             const auto sample = sampleTrowbridgeReitz(rand, wo, cosThetaO, n, alpha, baseSpecular);
             ray.direction = sample.direction;
@@ -177,6 +179,7 @@ extern "C" __global__ void __raygen__rg() {
             // TODO: Fix Caustics with NEE
             // TODO: Proper weighting
             if (payload.transmission < 0.5f) { // Sample Brent-Burley diffuse
+                isGlossy = false;
                 const auto rand = getRand(depth, 1, rotation.z, rotation.w); 
                 const auto tangentToWorld = buildTBN(n, payload.tangent);
                 const auto sample = sampleBrentBurley(rand, wo, cosThetaO, n, alpha, tangentToWorld, baseDiffuse);
@@ -184,6 +187,7 @@ extern "C" __global__ void __raygen__rg() {
                 ray.origin = hitPoint + 1e-4f * n; // Prevent self intersection
                 throughput *= sample.throughput / (1.0f - pSpecular);
             } else {
+                isGlossy = true;
                 const auto rand = getRand(depth, 1, rotation.x, rotation.y);
                 const auto sample = sampleTrowbridgeReitzTransmission(rand, wo, cosThetaO, n, alpha, baseSpecular, albedo, inside);
                 ray.direction = sample.direction;
@@ -199,7 +203,7 @@ extern "C" __global__ void __raygen__rg() {
 
         // Next event estimation
         // TODO: MIS
-        if (params.lightTableSize > 0) {
+        if (params.lightTable) {
             const auto sample = sampleLight(getRand(depth, 0, rotation.w, rotation.x, rotation.y));
             const auto dir = sample.position - hitPoint;
             const auto dist2 = dot(dir, dir);
@@ -210,7 +214,7 @@ extern "C" __global__ void __raygen__rg() {
             const auto cosThetaL = dot(-wi, sample.n);
             if (cosThetaS > 0.0f && cosThetaL > 0.0f && !traceOcclusion(shadowRay, dist)) {
                 const auto brdf = disneyBRDF(wo, wi, n, albedo, metallic, alpha);
-                color += (throughput * sample.emission * brdf * cosThetaS * cosThetaL) / (dist2 * PI);
+                color += throughput * brdf * cosThetaS * cosThetaL * INV_PI * sample.emission / dist2;
             }
         }
     }

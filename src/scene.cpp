@@ -441,7 +441,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
     void* previousHitgroup = reinterpret_cast<void*>(sbt.hitgroupRecordBase);
     void* previousLightTable = reinterpret_cast<void*>(params->lightTable);
 
-    HitRecord* hitRecordBuffer;
+    HitRecord* hitRecordBuffer = nullptr;
     check(cudaMalloc(reinterpret_cast<void**>(&hitRecordBuffer), hitRecords.size() * sizeof(HitRecord)));
     check(cudaMemcpy(reinterpret_cast<void*>(hitRecordBuffer), hitRecords.data(), hitRecords.size() * sizeof(HitRecord), cudaMemcpyHostToDevice));
 
@@ -449,13 +449,15 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
     sbt.hitgroupRecordStrideInBytes = sizeof(HitRecord);
     sbt.hitgroupRecordCount = hitRecords.size();
 
-    Material* materialBuffer;
+    Material* materialBuffer = nullptr;
     check(cudaMalloc(reinterpret_cast<void**>(&materialBuffer), materials.size() * sizeof(Material)));
     check(cudaMemcpy(reinterpret_cast<void*>(materialBuffer), materials.data(), materials.size() * sizeof(Material), cudaMemcpyHostToDevice));
 
-    EmissiveTriangle* lightTableBuffer;
-    check(cudaMalloc(reinterpret_cast<void**>(&lightTableBuffer), lightTable.size() * sizeof(EmissiveTriangle)));
-    check(cudaMemcpy(reinterpret_cast<void*>(lightTableBuffer), lightTable.data(), lightTable.size() * sizeof(EmissiveTriangle), cudaMemcpyHostToDevice));
+    EmissiveTriangle* lightTableBuffer = nullptr;
+    if (!lightTable.empty()) {
+        check(cudaMalloc(reinterpret_cast<void**>(&lightTableBuffer), lightTable.size() * sizeof(EmissiveTriangle)));
+        check(cudaMemcpy(reinterpret_cast<void*>(lightTableBuffer), lightTable.data(), lightTable.size() * sizeof(EmissiveTriangle), cudaMemcpyHostToDevice));
+    }
 
     params->handle = handle;
     params->materials = materialBuffer;

@@ -131,6 +131,8 @@ OptixRenderer::OptixRenderer() {
     params->image = nullptr;
     params->randSequence = nullptr;
     params->rotationTable = nullptr;
+    params->lightTable = nullptr;
+    params->lightTableSize = 0;
     params->russianRouletteWeight = 10.0f;
     params->sample = 0;
     params->weight = 1.0f;

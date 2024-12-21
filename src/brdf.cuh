@@ -208,7 +208,7 @@ struct LightSample {
 // FIXME: Fix cudaInvalidMemoryAccess
 __device__ inline EmissiveTriangle sampleLightTable(float r) {
     uint left = 0;
-    uint right = params.lightTableSize;
+    uint right = params.lightTableSize - 1;
     while (left < right) {
         const uint mid = (left + right) / 2;
         if (params.lightTable[mid].cdf < r) {
@@ -238,6 +238,6 @@ __device__ inline LightSample sampleLightSource(const EmissiveTriangle& light, c
 }
 
 __device__ inline LightSample sampleLight(const float3& rand) {
-    const auto light = sampleLightTableUniform(rand.x);
+    const auto light = sampleLightTable(rand.x);
     return sampleLightSource(light, make_float2(rand.y, rand.z));
 }

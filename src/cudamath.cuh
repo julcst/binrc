@@ -7,6 +7,7 @@
 using uint = unsigned int;
 
 constexpr float PI = 3.14159265358979323846f;
+constexpr float INV_PI = 0.3183098861837906715377f;
 constexpr float TWO_PI = 6.28318530717958647692f;
 
 // Operators on float
