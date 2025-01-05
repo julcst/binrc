@@ -121,9 +121,9 @@ __device__ constexpr float3 sampleVNDFTrowbridgeReitz(const float2& u, const flo
  * from "Sampling Visible GGX Normals with Spherical Caps" by Dupuy et al. 2023.
  * https://cdrdv2-public.intel.com/782052/sampling-visible-ggx-normals.pdf
  * Implementation from https://gist.github.com/jdupuy/4c6e782b62c92b9cb3d13fbb0a5bd7a0
- * @note Tangent space version
+ * @note Anisotropic tangent space version
  */
-__device__ constexpr float3 sampleVndfTrowbridgeReitz(const float2& rand, const float3& wi, const float2& alpha) {
+__device__ constexpr float3 sampleVNDFTrowbridgeReitz(const float2& rand, const float3& wi, const float2& alpha) {
     // warp to the hemisphere configuration
     const auto wiStd = normalize(make_float3(make_float2(wi) * alpha, wi.z));
     // sample a spherical cap in (-wi.z, 1]
@@ -139,6 +139,21 @@ __device__ constexpr float3 sampleVndfTrowbridgeReitz(const float2& rand, const 
     const auto wm = normalize(make_float3(make_float2(wmStd) * alpha, wmStd.z));
     // return final normal
     return wm;
+}
+
+/**
+ * PDF for the visible normal distribution function.
+ * From: https://auzaiffe.wordpress.com/2024/04/15/vndf-importance-sampling-an-isotropic-distribution/
+ */
+__device__ float VNDFPDFIsotropic(float3 wo, float3 wi, float alpha2, float3 n) {
+    float3 wm = normalize(wo + wi);
+    float zm = dot(wm, n);
+    float zi = dot(wi, n);
+    float nrm = rsqrt((zi * zi) * (1.0f - alpha2) + alpha2);
+    float sigmaStd = (zi * nrm) * 0.5f + 0.5f;
+    float sigmaI = sigmaStd / nrm;
+    float nrmN = (zm * zm) * (alpha2 - 1.0f) + 1.0f;
+    return alpha2 / (M_PI * 4.0f * nrmN * nrmN * sigmaI);
 }
 
 __device__ constexpr float3 sampleCosineHemisphere(const float2& rand) {
@@ -199,9 +214,11 @@ __device__ constexpr SampleResult sampleBrentBurley(const float2& rand, const fl
 }
 
 struct LightSample {
-    float3 position;
     float3 emission;
-    float3 n;
+    float3 wi;
+    float cosThetaL;
+    float dist;
+    float pdf;
 };
 
 // Binary search for the index of the light source
@@ -227,17 +244,36 @@ __device__ inline EmissiveTriangle sampleLightTableUniform(float r) {
     return light;
 }
 
-__device__ inline LightSample sampleLightSource(const EmissiveTriangle& light, const float2& rand) {
+__device__ inline LightSample sampleLightSource(const EmissiveTriangle& light, const float2& rand, const float3& x) {
+    // Sample a barycentric coordinate on the triangle uniformly
     const auto s = sqrtf(rand.y);
     const auto u = 1.0f - s;
     const auto v = rand.x * s;
     const auto w = 1.0f - u - v;
+
+    // Get light point information
     const auto position = u * light.v0 + v * light.v1 + w * light.v2;
     const auto n = normalize(u * light.n0 + v * light.n1 + w * light.n2);
-    return {position, params.materials[light.materialID].emission * light.area / light.weight, n};
+    const auto emission = params.materials[light.materialID].emission;
+
+    const auto dir = position - x;
+    const auto dist2 = dot(dir, dir);
+    const auto dist = sqrtf(dist2);
+    const auto wi = dir / dist;
+    const auto cosThetaL = dot(-wi, n);
+
+    // PDF of sampling the triangle and the point on the triangle
+    // const auto pdfPoint = light.weight / light.area; // In area measure
+    // TODO: Optimize away one division
+    const auto pdf = (light.weight * dist2) / (light.area * cosThetaL); // In solid angle measure
+
+    return {emission, wi, cosThetaL, dist, pdf};
 }
 
-__device__ inline LightSample sampleLight(const float3& rand) {
+__device__ inline LightSample sampleLight(const float3& rand, const float3& x) {
     const auto light = sampleLightTable(rand.x);
-    return sampleLightSource(light, make_float2(rand.y, rand.z));
+    return sampleLightSource(light, make_float2(rand.y, rand.z), x);
+}
+
+__device__ inline float lightPDF(const LightSample& light) {
 }

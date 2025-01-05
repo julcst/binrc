@@ -176,7 +176,6 @@ extern "C" __global__ void __raygen__rg() {
             ray.origin = hitPoint + 1e-4f * n; // Prevent self intersection
             throughput *= sample.throughput / pSpecular;
         } else {
-            // TODO: Fix Caustics with NEE
             // TODO: Proper weighting
             if (payload.transmission < 0.5f) { // Sample Brent-Burley diffuse
                 isGlossy = false;
@@ -204,17 +203,12 @@ extern "C" __global__ void __raygen__rg() {
         // Next event estimation
         // TODO: MIS
         if (params.lightTable) {
-            const auto sample = sampleLight(getRand(depth, 0, rotation.w, rotation.x, rotation.y));
-            const auto dir = sample.position - hitPoint;
-            const auto dist2 = dot(dir, dir);
-            const auto dist = sqrtf(dist2);
-            const auto wi = dir / dist;
-            const auto shadowRay = Ray{hitPoint + 1e-4f * ray.direction, wi};
-            const auto cosThetaS = dot(wi, n);
-            const auto cosThetaL = dot(-wi, sample.n);
-            if (cosThetaS > 0.0f && cosThetaL > 0.0f && !traceOcclusion(shadowRay, dist)) {
-                const auto brdf = disneyBRDF(wo, wi, n, albedo, metallic, alpha);
-                color += throughput * brdf * cosThetaS * cosThetaL * INV_PI * sample.emission / dist2;
+            const auto sample = sampleLight(getRand(depth, 0, rotation.w, rotation.x, rotation.y), hitPoint);
+            const auto cosThetaS = dot(sample.wi, n);
+            const auto shadowRay = Ray{hitPoint + 1e-4f * ray.direction, sample.wi};
+            if (cosThetaS > 0.0f && sample.cosThetaL > 0.0f && !traceOcclusion(shadowRay, sample.dist)) {
+                const auto brdf = disneyBRDF(wo, sample.wi, n, albedo, metallic, alpha);
+                color += throughput * brdf * cosThetaS * INV_PI * sample.emission / sample.pdf;
             }
         }
     }
