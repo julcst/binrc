@@ -3,7 +3,7 @@
 
 #include "optixparams.cuh"
 #include "cudamath.cuh"
-#include "brdf.cuh"
+#include "sampling.cuh"
 
 struct Ray {
     float3 origin;
@@ -142,16 +142,16 @@ extern "C" __global__ void __raygen__rg() {
     for (uint depth = 1; depth < MAX_BOUNCES; depth++) {
         payload = trace(ray);
 
-        const auto nee = !isinf(payload.t) && depth > 1 && params.lightTable;
-        
-        if (!nee || isGlossy) color += throughput * payload.emission; // FIXME: * dot(payload.normal, -ray.direction); ???
+        const auto nee = !isinf(payload.t) && params.lightTable;
+
+        if (!nee || depth == 1 || isGlossy) color += throughput * payload.emission; // FIXME: * dot(payload.normal, -ray.direction); ???
 
         if (isinf(payload.t)) break; // Skybox
 
         const auto hitPoint = ray.origin + payload.t * ray.direction;
         const auto alpha = payload.roughness * payload.roughness;
         const auto metallic = payload.metallic;
-        const auto albedo = payload.albedo;
+        const auto albedo = payload.albedo; // baseColor
 
         auto n = payload.normal;
         const auto wo = -ray.direction;
@@ -159,7 +159,7 @@ extern "C" __global__ void __raygen__rg() {
         n = inside ? -n : n;
         const auto cosThetaO = dot(wo, n);
         const auto baseSpecular = mix(make_float3(0.04f), albedo, metallic);
-        const auto baseDiffuse = (1.0f - metallic) * albedo;
+        const auto baseDiffuse = (1.0f - metallic) * albedo; // albedo
 
         // Importance sampling weights // TODO: Use precomputed
         const auto wSpecular = luminance(F_SchlickApprox(cosThetaO, baseSpecular));
@@ -202,13 +202,17 @@ extern "C" __global__ void __raygen__rg() {
 
         // Next event estimation
         // TODO: MIS
-        if (params.lightTable) {
+        if (nee) {
             const auto sample = sampleLight(getRand(depth, 0, rotation.w, rotation.x, rotation.y), hitPoint);
             const auto cosThetaS = dot(sample.wi, n);
             const auto shadowRay = Ray{hitPoint + 1e-4f * ray.direction, sample.wi};
-            if (cosThetaS > 0.0f && sample.cosThetaL > 0.0f && !traceOcclusion(shadowRay, sample.dist)) {
-                const auto brdf = disneyBRDF(wo, sample.wi, n, albedo, metallic, alpha);
-                color += throughput * brdf * cosThetaS * INV_PI * sample.emission / sample.pdf;
+            if (cosThetaS > 0.0f && sample.cosThetaL > 0.0f) {
+                const auto brdf = evalDisney(wo, sample.wi, n, albedo, metallic, alpha);
+                if (brdf.pdf > 0.0f && !traceOcclusion(shadowRay, sample.dist)) {
+                    const auto weight = powerHeuristic(sample.pdf, brdf.pdf); // With MIS
+                    //const auto weight = isGlossy ? 0.0f : 1.0f; // Without MIS
+                    color += throughput * brdf.throughput * sample.emission * weight / sample.pdf;
+                }  
             }
         }
     }

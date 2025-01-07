@@ -56,25 +56,11 @@ __device__ constexpr float G1_TrowbridgeReitz(float NdotV, float alpha2) {
     return 1.0f / (1.0f + lambdaV);
 }
 
-__device__ constexpr float3 disneyBRDF(const float3& wo, const float3& wi, const float3& n, const float3& albedo, float metallic, float alpha) {
-    const auto F0 = mix(make_float3(0.04f), albedo, metallic);
-    const auto alpha2 = alpha * alpha;
-    const auto H = normalize(wo + wi);
-    const auto NdotH = dot(n, H);
-    const auto NdotV = dot(n, wo);
-    const auto NdotL = dot(n, wi);
-    const auto HdotV = dot(H, wo);
-
-    const auto F = F_SchlickApprox(HdotV, F0);
+__device__ constexpr float VNDF_TrowbridgeReitz(float NdotV, float NdotH, float HdotV, float alpha2) {
+    const auto G1 = G1_TrowbridgeReitz(NdotV, alpha2);
+    const auto cosTheta = NdotV;
     const auto D = D_TrowbridgeReitz(NdotH, alpha2);
-    const auto G = G2_TrowbridgeReitz(NdotL, NdotV, alpha2);
-    const auto specular = F * D * G / (4.0f * NdotV * NdotL);
-
-    const auto FD90 = 0.5f + 2.0f * alpha * HdotV * HdotV;
-    const auto response = (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotL)) * (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotV));
-    const auto diffuse = albedo * response;
-
-    return specular + diffuse;
+    return G1 * D * HdotV / cosTheta;
 }
 
 /**
@@ -145,7 +131,7 @@ __device__ constexpr float3 sampleVNDFTrowbridgeReitz(const float2& rand, const 
  * PDF for the visible normal distribution function.
  * From: https://auzaiffe.wordpress.com/2024/04/15/vndf-importance-sampling-an-isotropic-distribution/
  */
-__device__ float VNDFPDFIsotropic(float3 wo, float3 wi, float alpha2, float3 n) {
+__device__ float isoVNDFPDF(float3 wo, float3 wi, float alpha2, float3 n) {
     float3 wm = normalize(wo + wi);
     float zm = dot(wm, n);
     float zi = dot(wi, n);
@@ -161,6 +147,10 @@ __device__ constexpr float3 sampleCosineHemisphere(const float2& rand) {
     const auto sinTheta = sqrtf(1.0f - rand.y);
     const auto cosTheta = sqrtf(rand.y);
     return make_float3(cosf(phi) * sinTheta, sinf(phi) * sinTheta, cosTheta);
+}
+
+__device__ constexpr float cosineHemispherePDF(float cosTheta) {
+    return cosTheta * INV_PI;
 }
 
 struct SampleResult {
@@ -211,6 +201,64 @@ __device__ constexpr SampleResult sampleBrentBurley(const float2& rand, const fl
     // NOTE: We drop the 1.0 / PI prefactor
     const auto diffuse = albedo * response;
     return {wi, diffuse};
+}
+
+__device__ constexpr float3 disneyBRDF(const float3& wo, const float3& wi, const float3& n, const float3& albedo, float metallic, float alpha) {
+    const auto F0 = mix(make_float3(0.04f), albedo, metallic);
+    const auto alpha2 = alpha * alpha;
+    const auto H = normalize(wo + wi);
+    const auto NdotH = dot(n, H);
+    const auto NdotV = dot(n, wo);
+    const auto NdotL = dot(n, wi);
+    const auto HdotV = dot(H, wo);
+
+    const auto F = F_SchlickApprox(HdotV, F0);
+    const auto D = D_TrowbridgeReitz(NdotH, alpha2);
+    const auto G = G2_TrowbridgeReitz(NdotL, NdotV, alpha2);
+    const auto specular = F * D * G / (4.0f * NdotV);
+
+    const auto FD90 = 0.5f + 2.0f * alpha * HdotV * HdotV;
+    const auto response = (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotL)) * (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotV));
+    const auto diffuse = albedo * response * NdotL * INV_PI; // Include NdotL
+
+    return specular + diffuse;
+}
+
+struct BRDFResult {
+    float3 throughput;
+    float pdf;
+};
+
+__device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, const float3& n, const float3& albedo, float metallic, float alpha) {
+    const auto F0 = mix(make_float3(0.04f), albedo, metallic);
+    const auto alpha2 = alpha * alpha;
+    const auto H = normalize(wo + wi);
+    const auto NdotH = dot(n, H);
+    const auto NdotV = dot(n, wo);
+    const auto NdotL = dot(n, wi);
+    const auto HdotV = dot(H, wo);
+
+    const auto F = F_SchlickApprox(HdotV, F0);
+    const auto D = D_TrowbridgeReitz(NdotH, alpha2);
+    const auto lambdaL = Lambda_TrowbridgeReitz(NdotL, alpha2);
+    const auto lambdaV = Lambda_TrowbridgeReitz(NdotV, alpha2);
+    const auto G1 = 1.0f / (1.0f + lambdaV);
+    const auto G = 1.0f / (1.0f + lambdaL + lambdaV);
+    const auto specular = F * D * G / (4.0f * NdotV);
+    const auto pdfSpecular = G1 * D / (4.0f * NdotV);
+
+    const auto FD90 = 0.5f + 2.0f * alpha * HdotV * HdotV;
+    const auto response = (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotL)) * (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotV));
+    const auto diffuse = (1.0f - metallic) * albedo * response * NdotL * INV_PI;
+    const auto pdfDiffuse = NdotL * INV_PI;
+
+    const auto wSpecular = luminance(F);
+    const auto wDiffuse = (1.0f - metallic) * luminance(albedo);
+    const auto pSpecular = wSpecular / (wSpecular + wDiffuse);
+    const auto pDiffuse = 1.0f - pSpecular;
+    const auto pdf = pSpecular * pdfSpecular + pDiffuse * pdfDiffuse;
+
+    return {specular + diffuse, pdf};
 }
 
 struct LightSample {
@@ -270,10 +318,22 @@ __device__ inline LightSample sampleLightSource(const EmissiveTriangle& light, c
     return {emission, wi, cosThetaL, dist, pdf};
 }
 
+__device__ inline float lightPDFUniform(const float3& wi, const float dist, const float3& lightNormal, const float area) {
+    const auto cosThetaL = dot(-wi, lightNormal);
+    return (dist * dist) / (area * cosThetaL * params.lightTableSize); // In solid angle measure
+}
+
 __device__ inline LightSample sampleLight(const float3& rand, const float3& x) {
     const auto light = sampleLightTable(rand.x);
     return sampleLightSource(light, make_float2(rand.y, rand.z), x);
 }
 
-__device__ inline float lightPDF(const LightSample& light) {
+__device__ inline float balanceHeuristic(float pdf1, float pdf2) {
+    return pdf1 / (pdf1 + pdf2);
+}
+
+__device__ inline float powerHeuristic(float pdf1, float pdf2) {
+    const auto f1 = pdf1 * pdf1;
+    const auto f2 = pdf2 * pdf2;
+    return f1 / (f1 + f2);
 }

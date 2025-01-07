@@ -265,7 +265,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
             .mrMap = 0,
         };
 
-        if (material.transmission) {
+        if (material.transmission && ENABLE_TRANSMISSION) {
             materials[i].transmission = material.transmission->transmissionFactor;
             std::cout << "Transmission factor: " << material.transmission->transmissionFactor << "\n";
         }
