@@ -127,21 +127,6 @@ __device__ constexpr float3 sampleVNDFTrowbridgeReitz(const float2& rand, const 
     return wm;
 }
 
-/**
- * PDF for the visible normal distribution function.
- * From: https://auzaiffe.wordpress.com/2024/04/15/vndf-importance-sampling-an-isotropic-distribution/
- */
-__device__ float isoVNDFPDF(float3 wo, float3 wi, float alpha2, float3 n) {
-    float3 wm = normalize(wo + wi);
-    float zm = dot(wm, n);
-    float zi = dot(wi, n);
-    float nrm = rsqrt((zi * zi) * (1.0f - alpha2) + alpha2);
-    float sigmaStd = (zi * nrm) * 0.5f + 0.5f;
-    float sigmaI = sigmaStd / nrm;
-    float nrmN = (zm * zm) * (alpha2 - 1.0f) + 1.0f;
-    return alpha2 / (M_PI * 4.0f * nrmN * nrmN * sigmaI);
-}
-
 __device__ constexpr float3 sampleCosineHemisphere(const float2& rand) {
     const auto phi = TWO_PI * rand.x;
     const auto sinTheta = sqrtf(1.0f - rand.y);
@@ -167,6 +152,7 @@ __device__ constexpr SampleResult sampleTrowbridgeReitz(const float2& rand, cons
     const auto alpha2 = alpha * alpha;
     const auto LambdaL = Lambda_TrowbridgeReitz(cosThetaI, alpha2);
     const auto LambdaV = Lambda_TrowbridgeReitz(cosThetaO, alpha2);
+    // NOTE: cosThetaI is included in the VNDF sampling pdf
     const auto specular = F * (1.0f + LambdaV) / (1.0f + LambdaL + LambdaV); // = F * (G2 / G1)
     return {wi, specular};
 }
@@ -175,7 +161,7 @@ __device__ constexpr SampleResult sampleTrowbridgeReitzTransmission(const float2
     const auto wm = sampleVNDFTrowbridgeReitz(rand, wo, n, alpha);
     const auto wi = refract(wo, wm, inside ? 1.0f / 1.5f : 1.5f / 1.0f);
     const auto cosThetaD = dot(wo, wm); // = dot(wi, wm)
-    const auto cosThetaI = dot(wo, n);
+    const auto cosThetaI = dot(wo, n); // TODO: Check if this is correct
     const auto F = F_SchlickApprox(cosThetaD, F0);
     const auto alpha2 = alpha * alpha;
     const auto LambdaL = Lambda_TrowbridgeReitz(cosThetaI, alpha2);
@@ -198,9 +184,78 @@ __device__ constexpr SampleResult sampleBrentBurley(const float2& rand, const fl
     const auto cosThetaI = dot(wi, n);
     const auto FD90 = 0.5f + 2.0f * alpha * cosThetaD * cosThetaD;
     const auto response = (1.0f + (FD90 - 1.0f) * pow5(1.0f - cosThetaI)) * (1.0f + (FD90 - 1.0f) * pow5(1.0f - cosThetaO));
-    // NOTE: We drop the 1.0 / PI prefactor
+    // NOTE: We drop the 1.0 / PI  and the NdotL prefactor because we are sampling the hemisphere
     const auto diffuse = albedo * response;
     return {wi, diffuse};
+}
+
+struct LightContext {
+    float3 F;
+    float3 albedo;
+    float alpha2;
+    float NdotH;
+    float NdotV;
+    float NdotL;
+    float pSpecular;
+    float pDiffuse;
+    float lambdaV;
+};
+
+__device__ constexpr float disneyPdf(const LightContext& ctx) {
+    const auto D = D_TrowbridgeReitz(ctx.NdotH, ctx.alpha2);
+    const auto lambdaV = Lambda_TrowbridgeReitz(ctx.NdotV, ctx.alpha2);
+    const auto G1 = 1.0f / (1.0f + lambdaV);
+    const auto pdfSpecular = G1 * D / (4.0f * ctx.NdotV);
+
+    const auto pdfDiffuse = ctx.NdotL * INV_PI;
+
+    const auto pdf = ctx.pSpecular * pdfSpecular + ctx.pDiffuse * pdfDiffuse;
+
+    return pdf;
+}
+
+struct MISSampleResult {
+    float3 direction;
+    float3 throughput;
+    float pdf;
+};
+
+__device__ constexpr MISSampleResult sampleDisney(const float rType, const float2& rMicrofacet, const float2& rDiffuse, const float3& wo, const float3& n, const bool inside, const float3& baseColor, const float metallic, const float alpha, const float transmission) {
+    const auto F0 = mix(make_float3(0.04f), baseColor, metallic); // Specular base
+    const auto albedo = (1.0f - metallic) * baseColor; // Diffuse base
+
+    const auto NdotV = dot(n, wo);
+
+    // Importance sampling weights
+    const auto wSpecular = luminance(F_SchlickApprox(NdotV, F0));
+    const auto wDiffuse = luminance(albedo);
+    const auto pSpecular = wSpecular / (wSpecular + wDiffuse);
+
+    auto throughput = make_float3(0.0f);
+    auto wi = make_float3(0.0f);
+
+    if (rType < pSpecular) { 
+        // Sample Trowbridge-Reitz specular
+        const auto sample = sampleTrowbridgeReitz(rMicrofacet, wo, NdotV, n, alpha, F0);
+        throughput = sample.throughput / pSpecular;
+        wi = sample.direction;
+    } else {
+        // TODO: Proper weighting
+        if (transmission < 0.5f) { // Sample Brent-Burley diffuse
+            const auto tangentToWorld = buildTBN(n);
+            const auto sample = sampleBrentBurley(rMicrofacet, wo, NdotV, n, alpha, tangentToWorld, albedo);
+            throughput = sample.throughput / (1.0f - pSpecular);
+            wi = sample.direction;
+        } else {
+            const auto sample = sampleTrowbridgeReitzTransmission(rMicrofacet, wo, NdotV, n, alpha, F0, baseColor, inside);
+            throughput = sample.throughput / (1.0f - pSpecular);
+            wi = sample.direction;
+        }
+    }
+
+    const auto pdf = disneyPdf({F0, albedo, alpha, dot(n, normalize(wo + wi)), NdotV, dot(n, wi), pSpecular, 1.0f - pSpecular, Lambda_TrowbridgeReitz(dot(n, wi), alpha * alpha)});
+
+    return {wi, throughput, pdf};
 }
 
 __device__ constexpr float3 disneyBRDF(const float3& wo, const float3& wi, const float3& n, const float3& albedo, float metallic, float alpha) {
@@ -229,8 +284,9 @@ struct BRDFResult {
     float pdf;
 };
 
-__device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, const float3& n, const float3& albedo, float metallic, float alpha) {
-    const auto F0 = mix(make_float3(0.04f), albedo, metallic);
+__device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, const float3& n, const float3& baseColor, float metallic, float alpha) {
+    const auto F0 = mix(make_float3(0.04f), baseColor, metallic);
+    const auto albedo = (1.0f - metallic) * baseColor;
     const auto alpha2 = alpha * alpha;
     const auto H = normalize(wo + wi);
     const auto NdotH = dot(n, H);
@@ -249,11 +305,11 @@ __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, c
 
     const auto FD90 = 0.5f + 2.0f * alpha * HdotV * HdotV;
     const auto response = (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotL)) * (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotV));
-    const auto diffuse = (1.0f - metallic) * albedo * response * NdotL * INV_PI;
+    const auto diffuse = albedo * response * NdotL * INV_PI;
     const auto pdfDiffuse = NdotL * INV_PI;
 
-    const auto wSpecular = luminance(F);
-    const auto wDiffuse = (1.0f - metallic) * luminance(albedo);
+    const auto wSpecular = luminance(F_SchlickApprox(NdotV, F0));
+    const auto wDiffuse = luminance(albedo);
     const auto pSpecular = wSpecular / (wSpecular + wDiffuse);
     const auto pDiffuse = 1.0f - pSpecular;
     const auto pdf = pSpecular * pdfSpecular + pDiffuse * pdfDiffuse;
@@ -311,14 +367,13 @@ __device__ inline LightSample sampleLightSource(const EmissiveTriangle& light, c
     const auto cosThetaL = dot(-wi, n);
 
     // PDF of sampling the triangle and the point on the triangle
-    // const auto pdfPoint = light.weight / light.area; // In area measure
-    // TODO: Optimize away one division
+    // const auto pdfPoint = light.weight / light.area; // In area measure // TODO: Precalculate
     const auto pdf = (light.weight * dist2) / (light.area * cosThetaL); // In solid angle measure
 
     return {emission, wi, cosThetaL, dist, pdf};
 }
 
-__device__ inline float lightPDFUniform(const float3& wi, const float dist, const float3& lightNormal, const float area) {
+__device__ inline float lightPdfUniform(const float3& wi, const float dist, const float3& lightNormal, const float area) {
     const auto cosThetaL = dot(-wi, lightNormal);
     return (dist * dist) / (area * cosThetaL * params.lightTableSize); // In solid angle measure
 }
@@ -328,11 +383,11 @@ __device__ inline LightSample sampleLight(const float3& rand, const float3& x) {
     return sampleLightSource(light, make_float2(rand.y, rand.z), x);
 }
 
-__device__ inline float balanceHeuristic(float pdf1, float pdf2) {
+__device__ constexpr float balanceHeuristic(float pdf1, float pdf2) {
     return pdf1 / (pdf1 + pdf2);
 }
 
-__device__ inline float powerHeuristic(float pdf1, float pdf2) {
+__device__ constexpr float powerHeuristic(float pdf1, float pdf2) {
     const auto f1 = pdf1 * pdf1;
     const auto f2 = pdf2 * pdf2;
     return f1 / (f1 + f2);

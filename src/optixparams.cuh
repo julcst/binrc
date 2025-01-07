@@ -5,23 +5,24 @@
 
 #include "cudamathtypes.cuh"
 
-constexpr int PAYLOAD_SIZE = 16;
+constexpr int PAYLOAD_SIZE = 17;
 constexpr float MAX_T = 1e32f;
 constexpr uint MAX_BOUNCES = 31;
 constexpr uint RANDS_PER_PIXEL = 2;
 constexpr uint RANDS_PER_BOUNCE = 4;
 constexpr uint RAND_SEQUENCE_DIMS = RANDS_PER_PIXEL + RANDS_PER_BOUNCE * MAX_BOUNCES;
 constexpr uint RAND_SEQUENCE_CACHE_SIZE = 4096;
-constexpr bool ENABLE_TRANSMISSION = true;
+constexpr bool ENABLE_TRANSMISSION = false;
 
 struct VertexData {
+    float3 position;
     float3 normal;
     float4 tangent;
     float2 texCoord;
 };
 
 struct Material {
-    float3 albedo;
+    float3 baseColor;
     float3 emission;
     float roughness;
     float metallic;

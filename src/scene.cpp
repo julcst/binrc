@@ -255,7 +255,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
         const auto& material = asset->materials[i];
 
         materials[i] = Material {
-            .albedo = toFloat3(material.pbrData.baseColorFactor),
+            .baseColor = toFloat3(material.pbrData.baseColorFactor),
             .emission = toFloat3(material.emissiveFactor, material.emissiveStrength),
             .roughness = material.pbrData.roughnessFactor,
             .metallic = material.pbrData.metallicFactor,
@@ -308,19 +308,11 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
 
             auto& posAcc = asset->accessors[primitive.findAttribute("POSITION")->accessorIndex];
             std::vector<vec4> vertices(posAcc.count);
+            std::vector<VertexData> vertexData(vertices.size());
             fastgltf::iterateAccessorWithIndex<vec3>(asset.get(), posAcc, [&](const vec3& vertex, auto i) {
                 vertices[i] = vec4(vertex, 1.0f);
+                vertexData[i].position = glmToCuda(vertex);
             });
-
-            auto& indexAcc = asset->accessors[primitive.indicesAccessor.value()];
-            std::vector<uint> indices(indexAcc.count);
-            fastgltf::iterateAccessorWithIndex<uint>(asset.get(), indexAcc, [&](const uint& index, auto i) {
-                indices[i] = index;
-            });
-
-            const auto [handle, gasBuffer, indexBuffer] = buildGAS(ctx, vertices, indices);
-
-            std::vector<VertexData> vertexData(vertices.size());
             auto& normalAcc = asset->accessors.at(primitive.findAttribute("NORMAL")->accessorIndex);
             fastgltf::iterateAccessorWithIndex<vec3>(asset.get(), normalAcc, [&](const vec3& normal, auto i) {
                 vertexData[i].normal = glmToCuda(normal);
@@ -333,6 +325,14 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
             fastgltf::iterateAccessorWithIndex<vec4>(asset.get(), tangentAcc, [&](const vec4& tangent, auto i) {
                 vertexData[i].tangent = glmToCuda(tangent);
             });
+
+            auto& indexAcc = asset->accessors[primitive.indicesAccessor.value()];
+            std::vector<uint> indices(indexAcc.count);
+            fastgltf::iterateAccessorWithIndex<uint>(asset.get(), indexAcc, [&](const uint& index, auto i) {
+                indices[i] = index;
+            });
+
+            const auto [handle, gasBuffer, indexBuffer] = buildGAS(ctx, vertices, indices);
 
             CUdeviceptr vertexDataBuffer;
             check(cudaMalloc(reinterpret_cast<void**>(&vertexDataBuffer), vertexData.size() * sizeof(VertexData)));

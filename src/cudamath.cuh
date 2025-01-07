@@ -44,6 +44,10 @@ __host__ __device__ constexpr float safesqrt(float x) {
     return sqrtf(max(x, 0.0f));
 }
 
+__host__ __device__ constexpr float sign(float x) {
+    return x < 0.0f ? -1.0f : 1.0f;
+}
+
 // Operators on CUDA float2
 
 __host__ __device__ constexpr float2 make_float2(float x) {
