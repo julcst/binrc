@@ -190,22 +190,22 @@ __device__ constexpr SampleResult sampleBrentBurley(const float2& rand, const fl
 }
 
 struct LightContext {
-    float3 F;
-    float3 albedo;
     float alpha2;
     float NdotH;
     float NdotV;
     float NdotL;
     float pSpecular;
     float pDiffuse;
-    float lambdaV;
 };
 
 __device__ constexpr float disneyPdf(const LightContext& ctx) {
-    const auto D = D_TrowbridgeReitz(ctx.NdotH, ctx.alpha2);
+    if (ctx.NdotL < 0.0f) return 0.0f;
+    const auto D = D_TrowbridgeReitz(ctx.NdotH, ctx.alpha2); // TODO: Why is this necessary?
     const auto lambdaV = Lambda_TrowbridgeReitz(ctx.NdotV, ctx.alpha2);
     const auto G1 = 1.0f / (1.0f + lambdaV);
-    const auto pdfSpecular = G1 * D / (4.0f * ctx.NdotV);
+    const auto VNDF = G1 * D;
+    const auto pdfSpecular = VNDF / (4.0f * ctx.NdotV);
+    //const auto pdfTransmission = VNDF * ctx.HdotL / pow2(ctx.HdotL + ctx.HdotO / ctx.eta);
 
     const auto pdfDiffuse = ctx.NdotL * INV_PI;
 
@@ -218,6 +218,7 @@ struct MISSampleResult {
     float3 direction;
     float3 throughput;
     float pdf;
+    bool isDirac;
 };
 
 __device__ constexpr MISSampleResult sampleDisney(const float rType, const float2& rMicrofacet, const float2& rDiffuse, const float3& wo, const float3& n, const bool inside, const float3& baseColor, const float metallic, const float alpha, const float transmission) {
@@ -243,7 +244,7 @@ __device__ constexpr MISSampleResult sampleDisney(const float rType, const float
         // TODO: Proper weighting
         if (transmission < 0.5f) { // Sample Brent-Burley diffuse
             const auto tangentToWorld = buildTBN(n);
-            const auto sample = sampleBrentBurley(rMicrofacet, wo, NdotV, n, alpha, tangentToWorld, albedo);
+            const auto sample = sampleBrentBurley(rDiffuse, wo, NdotV, n, alpha, tangentToWorld, albedo);
             throughput = sample.throughput / (1.0f - pSpecular);
             wi = sample.direction;
         } else {
@@ -253,9 +254,11 @@ __device__ constexpr MISSampleResult sampleDisney(const float rType, const float
         }
     }
 
-    const auto pdf = disneyPdf({F0, albedo, alpha, dot(n, normalize(wo + wi)), NdotV, dot(n, wi), pSpecular, 1.0f - pSpecular, Lambda_TrowbridgeReitz(dot(n, wi), alpha * alpha)});
+    const auto pdf = disneyPdf({alpha * alpha, dot(n, normalize(wo + wi)), NdotV, dot(n, wi), pSpecular, 1.0f - pSpecular});
 
-    return {wi, throughput, pdf};
+    const auto isDirac = alpha == 0.0f && wDiffuse == 0.0f;
+
+    return {wi, throughput, pdf, isDirac};
 }
 
 __device__ constexpr float3 disneyBRDF(const float3& wo, const float3& wi, const float3& n, const float3& albedo, float metallic, float alpha) {
@@ -293,6 +296,8 @@ __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, c
     const auto NdotV = dot(n, wo);
     const auto NdotL = dot(n, wi);
     const auto HdotV = dot(H, wo);
+
+    //if (NdotL <= 0.0f) return {{0.0f}, 0.0f};
 
     const auto F = F_SchlickApprox(HdotV, F0);
     const auto D = D_TrowbridgeReitz(NdotH, alpha2);
@@ -379,7 +384,7 @@ __device__ inline float lightPdfUniform(const float3& wi, const float dist, cons
 }
 
 __device__ inline LightSample sampleLight(const float3& rand, const float3& x) {
-    const auto light = sampleLightTable(rand.x);
+    const auto light = sampleLightTableUniform(rand.x);
     return sampleLightSource(light, make_float2(rand.y, rand.z), x);
 }
 

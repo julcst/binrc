@@ -265,10 +265,12 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
             .mrMap = 0,
         };
 
-        if (material.transmission && ENABLE_TRANSMISSION) {
+        if (material.transmission) {
             materials[i].transmission = material.transmission->transmissionFactor;
             std::cout << "Transmission factor: " << material.transmission->transmissionFactor << "\n";
         }
+
+        std::cout << "Roughness: " << material.pbrData.roughnessFactor << "\n";
 
         if (auto& tex = material.pbrData.baseColorTexture; tex.has_value()) {
             const auto imageIdx = asset->textures.at(tex.value().textureIndex).imageIndex;

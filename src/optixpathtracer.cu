@@ -144,6 +144,7 @@ extern "C" __global__ void __raygen__rg() {
     auto color = make_float3(0.0f);
     auto throughput = make_float3(1.0f);
     auto prevBrdfPdf = 1.0f;
+    auto diracEvent = false;
     
     for (uint depth = 1; depth < MAX_BOUNCES; depth++) {
         // Russian roulette
@@ -153,7 +154,7 @@ extern "C" __global__ void __raygen__rg() {
 
         payload = trace(ray);
 
-        const auto nee = params.lightTable;
+        const auto nee = params.lightTable && ENABLE_NEE;
 
         if (isinf(payload.t)) {
             color += throughput * payload.emission;
@@ -167,10 +168,10 @@ extern "C" __global__ void __raygen__rg() {
 
         if (luminance(payload.emission) > 0.0f) {
             auto weight = 1.0f;
-            if (nee && depth > 1) {
+            if (nee && depth > 1 && !diracEvent) {
                 // NOTE: Maybe calculating the prevBrdfPdf here only when necessary is faster
                 const auto lightPdf = lightPdfUniform(ray.direction, payload.t, n, payload.area);
-                weight = powerHeuristic(prevBrdfPdf, lightPdf);
+                weight = balanceHeuristic(prevBrdfPdf, lightPdf);
             }
             color += throughput * payload.emission * weight;
         }
@@ -189,7 +190,7 @@ extern "C" __global__ void __raygen__rg() {
             if (cosThetaS > 0.0f && sample.cosThetaL > 0.0f) {
                 const auto brdf = evalDisney(wo, sample.wi, n, baseColor, metallic, alpha);
                 if (brdf.pdf > 0.0f && !traceOcclusion(shadowRay, sample.dist)) {
-                    const auto weight = powerHeuristic(sample.pdf, brdf.pdf);
+                    const auto weight = balanceHeuristic(sample.pdf, brdf.pdf);
                     color += throughput * brdf.throughput * sample.emission * weight / sample.pdf;
                 }
             }
@@ -201,6 +202,7 @@ extern "C" __global__ void __raygen__rg() {
         ray = Ray{hitPoint + n * copysignf(1e-3f, dot(sample.direction, n)), sample.direction};
         throughput *= sample.throughput;
         prevBrdfPdf = sample.pdf;
+        diracEvent = sample.isDirac;
     }
 
     // NOTE: We should not need to prevent NaNs
@@ -257,7 +259,7 @@ extern "C" __global__ void __closesthit__ch() {
     setMetallic(mr.x);
     setEmission(material.emission);
     setRoughness(mr.y);
-    setTransmission(material.transmission);
+    setTransmission(ENABLE_TRANSMISSION ? material.transmission : 0.0f);
     setArea(area);
     setT(optixGetRayTmax());
 }
