@@ -128,17 +128,7 @@ OptixRenderer::OptixRenderer() {
     };
 
     check(cudaMallocManaged(reinterpret_cast<void**>(&params), sizeof(Params)));
-    params->image = nullptr;
-    params->randSequence = nullptr;
-    params->rotationTable = nullptr;
-    params->lightTable = nullptr;
-    params->lightTableSize = 0;
-    params->russianRouletteWeight = 10.0f;
-    params->sample = 0;
-    params->weight = 1.0f;
-    params->dim = make_uint2(0, 0);
-    params->clipToWorld = glmToCuda(mat4(1.0f));
-    params->handle = 0;
+    initParams(params);
 }
 
 OptixRenderer::~OptixRenderer() {

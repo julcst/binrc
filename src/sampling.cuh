@@ -311,7 +311,7 @@ __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, c
     const auto FD90 = 0.5f + 2.0f * alpha * HdotV * HdotV;
     const auto response = (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotL)) * (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotV));
     const auto diffuse = albedo * response * NdotL * INV_PI;
-    const auto pdfDiffuse = NdotL * INV_PI;
+    const auto pdfDiffuse = NdotL * INV_PI; // This coorect?
 
     const auto wSpecular = luminance(F_SchlickApprox(NdotV, F0));
     const auto wDiffuse = luminance(albedo);
@@ -328,6 +328,8 @@ struct LightSample {
     float cosThetaL;
     float dist;
     float pdf;
+    float3 position;
+    float3 n;
 };
 
 // Binary search for the index of the light source
@@ -369,17 +371,17 @@ __device__ inline LightSample sampleLightSource(const EmissiveTriangle& light, c
     const auto dist2 = dot(dir, dir);
     const auto dist = sqrtf(dist2);
     const auto wi = dir / dist;
-    const auto cosThetaL = dot(-wi, n);
+    const auto cosThetaL = dot(wi, n);
 
     // PDF of sampling the triangle and the point on the triangle
     // const auto pdfPoint = light.weight / light.area; // In area measure // TODO: Precalculate
-    const auto pdf = (light.weight * dist2) / (light.area * cosThetaL); // In solid angle measure
+    const auto pdf = (light.weight * dist2) / (light.area * abs(cosThetaL)); // In solid angle measure
 
-    return {emission, wi, cosThetaL, dist, pdf};
+    return {emission, wi, cosThetaL, dist, pdf, position, n};
 }
 
 __device__ inline float lightPdfUniform(const float3& wi, const float dist, const float3& lightNormal, const float area) {
-    const auto cosThetaL = dot(-wi, lightNormal);
+    const auto cosThetaL = abs(dot(wi, lightNormal));
     return (dist * dist) / (area * cosThetaL * params.lightTableSize); // In solid angle measure
 }
 

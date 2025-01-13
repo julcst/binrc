@@ -104,6 +104,16 @@ void MainApp::moveCallback(const vec2& movement, bool leftButton, bool rightButt
     if (leftButton) camera.orbit(movement * 0.01f);
 }
 
+bool FlagCheckbox(const char* label, unsigned int* flags, unsigned int flag) {
+    bool v = *flags & flag;
+    bool changed = ImGui::Checkbox(label, &v);
+    if (changed) {
+        if (v) *flags |= flag;
+        else *flags &= ~flag;
+    }
+    return changed;
+}
+
 void MainApp::buildImGui() {
     ImGui::StatisticsWindow(delta, resolution);
     ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
@@ -119,6 +129,10 @@ void MainApp::buildImGui() {
     ImGui::Text("Sample: %d", renderer.params->sample);
     if (ImGui::SliderFloat("Exposure", &exposure, 0.1f, 10.0f, "%.1f", ImGuiSliderFlags_Logarithmic)) blitProgram.set(1, exposure);
     ImGui::SliderFloat("Russian Roulette", &renderer.params->russianRouletteWeight, 1.0f, 10.0f, "%.1f");
+    ImGui::SliderFloat("Scene Epsilon", &renderer.params->sceneEpsilon, 1e-6f, 1e-1f, "%f", ImGuiSliderFlags_Logarithmic);
+    bool reset = FlagCheckbox("Enable NEE", &renderer.params->flags, NEE_FLAG);
+    reset |= FlagCheckbox("Enable Transmission", &renderer.params->flags, TRANSMISSION_FLAG);
+    if (reset) renderer.reset();
     ImGui::End();
 }
 

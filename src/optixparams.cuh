@@ -12,8 +12,9 @@ constexpr uint RANDS_PER_PIXEL = 2;
 constexpr uint RANDS_PER_BOUNCE = 4;
 constexpr uint RAND_SEQUENCE_DIMS = RANDS_PER_PIXEL + RANDS_PER_BOUNCE * MAX_BOUNCES;
 constexpr uint RAND_SEQUENCE_CACHE_SIZE = 4096;
-constexpr bool ENABLE_TRANSMISSION = false;
-constexpr bool ENABLE_NEE = true;
+
+constexpr uint TRANSMISSION_FLAG = 1 << 0;
+constexpr uint NEE_FLAG = 1 << 1;
 
 struct VertexData {
     float3 position;
@@ -57,6 +58,8 @@ struct Params {
     uint sample; // Current sample
     float weight; // Weight of the current sample (= 1 / (sample + 1))
     float russianRouletteWeight; // Weight for Russian Roulette
+    float sceneEpsilon; // Scene epsilon
+    uint flags;
 
 ////////////////// OWNED MEMORY //////////////////
 // NOTE: This is owned memory and must be freed //
@@ -70,6 +73,28 @@ struct Params {
 
 };
 extern "C" __constant__ Params params;
+
+__host__ inline void initParams(Params* params) {
+    params->image = nullptr;
+    params->dim = make_uint2(0, 0);
+    params->handle = 0;
+    params->clipToWorld = make_float4x4(make_float4(1.0f, 0.0f, 0.0f, 0.0f),
+                                        make_float4(0.0f, 1.0f, 0.0f, 0.0f),
+                                        make_float4(0.0f, 0.0f, 1.0f, 0.0f),
+                                        make_float4(0.0f, 0.0f, 0.0f, 1.0f));
+    params->sequenceOffset = 0;
+    params->sequenceStride = 0;
+    params->sample = 0;
+    params->weight = 1.0f;
+    params->russianRouletteWeight = 1.0f;
+    params->sceneEpsilon = 1e-4f;
+    params->flags = TRANSMISSION_FLAG | NEE_FLAG;
+    params->randSequence = nullptr;
+    params->rotationTable = nullptr;
+    params->materials = nullptr;
+    params->lightTable = nullptr;
+    params->lightTableSize = 0;
+}
 
 __device__ inline float getRand(uint dim) {
     const uint i = params.sample - params.sequenceOffset + params.sequenceStride * dim;

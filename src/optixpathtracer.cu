@@ -118,11 +118,12 @@ __device__ Payload trace(const Ray& ray) {
     return getPayload(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q);
 }
 
-__device__ bool traceOcclusion(const Ray& ray, float dist) {
+__device__ bool traceOcclusion(const float3& a, const float3& b) {
+    const auto dir = b - a;
     optixTraverse(
         params.handle,
-        ray.origin, ray.direction,
-        0.0f, dist - 1e-4f, // tmin, tmax
+        a, dir,
+        0.0f, 1.0f, // tmin, tmax
         0.0f, // rayTime
         OptixVisibilityMask(255), OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT | OPTIX_RAY_FLAG_DISABLE_ANYHIT,
         0, 1, 0 // SBT offset, stride, miss index
@@ -140,21 +141,21 @@ extern "C" __global__ void __raygen__rg() {
     const auto uv = (make_float2(idx.x, idx.y) + jitter) / make_float2(dim.x, dim.y);
     auto ray = makeCameraRay(uv);
 
+    const auto nee = params.lightTable && (params.flags & NEE_FLAG);
+
     Payload payload;
     auto color = make_float3(0.0f);
     auto throughput = make_float3(1.0f);
     auto prevBrdfPdf = 1.0f;
-    auto diracEvent = false;
+    auto diracEvent = true;
     
     for (uint depth = 1; depth < MAX_BOUNCES; depth++) {
         // Russian roulette
         const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
-        if (fract(getRand(depth, 3) + rotation.z) >= pContinue) break;
+        if (getRand(depth, 3, rotation.z) >= pContinue) break;
         throughput /= pContinue;
 
         payload = trace(ray);
-
-        const auto nee = params.lightTable && ENABLE_NEE;
 
         if (isinf(payload.t)) {
             color += throughput * payload.emission;
@@ -168,10 +169,11 @@ extern "C" __global__ void __raygen__rg() {
 
         if (luminance(payload.emission) > 0.0f) {
             auto weight = 1.0f;
-            if (nee && depth > 1 && !diracEvent) {
+            if (nee && !diracEvent) {
                 // NOTE: Maybe calculating the prevBrdfPdf here only when necessary is faster
-                const auto lightPdf = lightPdfUniform(ray.direction, payload.t, n, payload.area);
+                const auto lightPdf = lightPdfUniform(wo, payload.t, n, payload.area);
                 weight = balanceHeuristic(prevBrdfPdf, lightPdf);
+                // printf("Weight: %.3f BRDF: %.3f Light: %.3f\n", weight, prevBrdfPdf, lightPdf);
             }
             color += throughput * payload.emission * weight;
         }
@@ -186,11 +188,13 @@ extern "C" __global__ void __raygen__rg() {
         if (nee) {
             const auto sample = sampleLight(getRand(depth, 0, rotation.w, rotation.x, rotation.y), hitPoint);
             const auto cosThetaS = dot(sample.wi, n);
-            const auto shadowRay = Ray{hitPoint + n * copysignf(1e-3f, cosThetaS), sample.wi};
-            if (cosThetaS > 0.0f && sample.cosThetaL > 0.0f) {
+            if (abs(cosThetaS) > 0.0f && abs(sample.cosThetaL) > 0.0f) {
                 const auto brdf = evalDisney(wo, sample.wi, n, baseColor, metallic, alpha);
-                if (brdf.pdf > 0.0f && !traceOcclusion(shadowRay, sample.dist)) {
+                const auto surfacePoint = hitPoint + n * copysignf(params.sceneEpsilon, cosThetaS);
+                const auto lightPoint = sample.position - sample.n * copysignf(params.sceneEpsilon, dot(sample.wi, sample.n));
+                if (brdf.pdf > 0.0f && !traceOcclusion(surfacePoint, lightPoint)) {
                     const auto weight = balanceHeuristic(sample.pdf, brdf.pdf);
+                    // if (getRand(depth, 0, rotation.y) < 0.001f) printf("\t\t\t\t\t\tNEE We: %.3f BRDF: %.3f Light: %.3f\n", weight, brdf.pdf, sample.pdf);
                     color += throughput * brdf.throughput * sample.emission * weight / sample.pdf;
                 }
             }
@@ -199,7 +203,7 @@ extern "C" __global__ void __raygen__rg() {
         // TODO: Move sampling into closesthit to benefit from reordering
         const auto sample = sampleDisney(getRand(depth, 0, rotation.w), getRand(depth, 1, rotation.x, rotation.y), getRand(depth, 1, rotation.z, rotation.w), wo, n, inside, baseColor, metallic, alpha, payload.transmission);
         
-        ray = Ray{hitPoint + n * copysignf(1e-3f, dot(sample.direction, n)), sample.direction};
+        ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
         throughput *= sample.throughput;
         prevBrdfPdf = sample.pdf;
         diracEvent = sample.isDirac;
@@ -222,6 +226,10 @@ extern "C" __global__ void __closesthit__ch() {
     const auto v0 = data->vertexData[idx.x];
     const auto v1 = data->vertexData[idx.y];
     const auto v2 = data->vertexData[idx.z];
+
+    const auto e0 = v1.position - v0.position;
+    const auto e1 = v2.position - v0.position;
+    const auto area = 0.5f * length(optixTransformVectorFromObjectToWorldSpace(cross(e0, e1)));
 
     // Interpolate normal
     const auto objectSpaceNormal = bary.x * v0.normal + bary.y * v1.normal + bary.z * v2.normal;
@@ -251,15 +259,13 @@ extern "C" __global__ void __closesthit__ch() {
     } else {
         setNormal(normalize(optixTransformNormalFromObjectToWorldSpace(objectSpaceNormal)));
     }
-
-    const auto area = 0.5f * length(cross(v1.position - v0.position, v2.position - v0.position));
     
     setBaseColor(baseColor);
     setTangent(worldSpaceTangent);
     setMetallic(mr.x);
     setEmission(material.emission);
     setRoughness(mr.y);
-    setTransmission(ENABLE_TRANSMISSION ? material.transmission : 0.0f);
+    setTransmission(params.flags & TRANSMISSION_FLAG ? material.transmission : 0.0f);
     setArea(area);
     setT(optixGetRayTmax());
 }
