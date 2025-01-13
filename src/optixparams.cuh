@@ -86,7 +86,7 @@ __host__ inline void initParams(Params* params) {
     params->sequenceStride = 0;
     params->sample = 0;
     params->weight = 1.0f;
-    params->russianRouletteWeight = 1.0f;
+    params->russianRouletteWeight = 10.0f;
     params->sceneEpsilon = 1e-4f;
     params->flags = TRANSMISSION_FLAG | NEE_FLAG;
     params->randSequence = nullptr;
