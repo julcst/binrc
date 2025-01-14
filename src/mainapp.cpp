@@ -61,6 +61,16 @@ bool FileCombo(const char* label, size_t* curr, const std::vector<std::filesyste
         const_cast<void*>(reinterpret_cast<const void*>(&items)), items.size());
 }
 
+bool FlagCheckbox(const char* label, unsigned int* flags, unsigned int flag) {
+    bool v = *flags & flag;
+    bool changed = ImGui::Checkbox(label, &v);
+    if (changed) {
+        if (v) *flags |= flag;
+        else *flags &= ~flag;
+    }
+    return changed;
+}
+
 MainApp::MainApp() : App(800, 600) {
     printCudaDevices();
 
@@ -104,18 +114,9 @@ void MainApp::moveCallback(const vec2& movement, bool leftButton, bool rightButt
     if (leftButton) camera.orbit(movement * 0.01f);
 }
 
-bool FlagCheckbox(const char* label, unsigned int* flags, unsigned int flag) {
-    bool v = *flags & flag;
-    bool changed = ImGui::Checkbox(label, &v);
-    if (changed) {
-        if (v) *flags |= flag;
-        else *flags &= ~flag;
-    }
-    return changed;
-}
-
 void MainApp::buildImGui() {
     ImGui::StatisticsWindow(delta, resolution);
+
     ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
     std::string folder_str = folder.string();
     if (ImGui::InputText("Folder", &folder_str)) {
@@ -132,8 +133,19 @@ void MainApp::buildImGui() {
     ImGui::SliderFloat("Scene Epsilon", &renderer.params->sceneEpsilon, 1e-6f, 1e-1f, "%f", ImGuiSliderFlags_Logarithmic);
     bool reset = FlagCheckbox("Enable NEE", &renderer.params->flags, NEE_FLAG);
     reset |= FlagCheckbox("Enable Transmission", &renderer.params->flags, TRANSMISSION_FLAG);
-    if (reset) renderer.reset();
+    for (size_t i = 0; i < renderer.scene.cameras.size(); i++) {
+        if (ImGui::Button(renderer.scene.cameras[i].first.c_str())) {
+            auto scale = mat4(1.0f);
+            scale[0][0] = camera.aspectRatio;
+            const auto clipToWorld = renderer.scene.cameras[i].second * scale;
+            renderer.setCamera(clipToWorld);
+            reset = true;
+        }
+        ImGui::SameLine();
+    }
     ImGui::End();
+
+    if (reset) renderer.reset();
 }
 
 void MainApp::render() {

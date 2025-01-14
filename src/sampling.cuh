@@ -285,6 +285,7 @@ __device__ constexpr float3 disneyBRDF(const float3& wo, const float3& wi, const
 struct BRDFResult {
     float3 throughput;
     float pdf;
+    bool isDirac;
 };
 
 __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, const float3& n, const float3& baseColor, float metallic, float alpha) {
@@ -319,7 +320,9 @@ __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, c
     const auto pDiffuse = 1.0f - pSpecular;
     const auto pdf = pSpecular * pdfSpecular + pDiffuse * pdfDiffuse;
 
-    return {specular + diffuse, pdf};
+    const auto isDirac = alpha == 0.0f && wDiffuse == 0.0f;
+
+    return {specular + diffuse, pdf, isDirac};
 }
 
 struct LightSample {

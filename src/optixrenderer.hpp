@@ -29,13 +29,13 @@ public:
     void resize(uvec2 dim);
     
     Params* params; // NOTE: This is owned memory and must be properly freed
+    Scene scene;
 
 private:
     OptixDeviceContext context;
     OptixPipeline pipeline;
     OptixShaderBindingTable sbt; // NOTE: This contains owned memory and must be properly freed
     std::array<OptixProgramGroup, 3> programGroups;
-    Scene scene;
 
     void generateSobol(uint offset, uint n);
     void ensureSobol(uint sample);

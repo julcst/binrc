@@ -31,6 +31,7 @@ struct Geometry {
 
 struct Scene {
     std::vector<OptixInstance> instances;
+    std::vector<std::pair<std::string, glm::mat4>> cameras;
 
     // Buffers managed by the scene
     CUdeviceptr iasBuffer = 0;

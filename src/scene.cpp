@@ -15,6 +15,7 @@
 #include <stb_image.h>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 using namespace glm;
 
 #include <vector>
@@ -195,6 +196,9 @@ cudaTextureObject_t createTextureObject(cudaArray_t image, int srgb) {
     return texObj;
 }
 
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
 void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& program, OptixShaderBindingTable& sbt, const std::filesystem::path& path) {
     // NOTE: If we free here we leave OptiX with dangling pointers
 
@@ -366,16 +370,18 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
     uint i = 0;
     // FIXME: Loading scenes with multiple primitves per mesh
     for (const auto& node : asset->nodes) {
+        auto mat = fastgltf::math::fmat4x4(1.0f);
+        auto* trs = std::get_if<fastgltf::TRS>(&node.transform);
+        auto* matrix = std::get_if<fastgltf::math::fmat4x4>(&node.transform);
+        if (trs) {
+            mat = fastgltf::math::scale(fastgltf::math::rotate(fastgltf::math::translate(mat, trs->translation), trs->rotation), trs->scale);
+        } else if (matrix) {
+            mat = *matrix;
+        }
+        const auto transform = mat4(toVec4(mat.col(0)), toVec4(mat.col(1)), toVec4(mat.col(2)), toVec4(mat.col(3)));
+
         if (auto m = node.meshIndex; m.has_value()) {
             auto mesh = asset->meshes[m.value()];
-            auto mat = fastgltf::math::fmat4x4(1.0f);
-            auto* trs = std::get_if<fastgltf::TRS>(&node.transform);
-            auto* matrix = std::get_if<fastgltf::math::fmat4x4>(&node.transform);
-            if (trs) {
-                mat = fastgltf::math::scale(fastgltf::math::rotate(fastgltf::math::translate(mat, trs->translation), trs->rotation), trs->scale);
-            } else if (matrix) {
-                mat = *matrix;
-            }
             for (uint j = 0; j < mesh.primitives.size(); j++) {
                 const auto& primitive = mesh.primitives[j];
                 const auto& geometry = newGeometryTable[m.value()][j];
@@ -394,7 +400,6 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
 
                 if (geometry.emitter.has_value()) {
                     const auto& emitter = geometry.emitter.value();
-                    const auto transform = mat4(toVec4(mat.col(0)), toVec4(mat.col(1)), toVec4(mat.col(2)), toVec4(mat.col(3)));
                     const auto normalTransform = transpose(inverse(mat3(transform)));
                     lightTable.reserve(lightTable.size() + emitter.indices.size() / 3);
                     for (uint j = 0; j < emitter.indices.size(); j += 3) {
@@ -426,6 +431,20 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
                 }
                 i++;
             }
+        }
+        if (auto c = node.cameraIndex; c.has_value()) {
+            const auto& camera = asset->cameras[c.value()];
+            const auto cameraToWorld = transform;
+            const auto cameraToClip = std::visit(overloaded {
+                [&](const fastgltf::Camera::Perspective& perspective) {
+                    return glm::perspective(perspective.yfov, 1.0f, perspective.znear, perspective.zfar.value_or(MAX_T));
+                },
+                [&](const fastgltf::Camera::Orthographic& orthographic) {
+                    return glm::ortho(-orthographic.xmag, orthographic.xmag, -orthographic.ymag, orthographic.ymag, orthographic.znear, orthographic.zfar);
+                },
+            }, camera.camera);
+            const auto clipToWorld = cameraToWorld * inverse(cameraToClip);
+            cameras.emplace_back(camera.name, clipToWorld);
         }
     }
 

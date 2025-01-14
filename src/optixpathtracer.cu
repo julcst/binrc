@@ -188,16 +188,16 @@ extern "C" __global__ void __raygen__rg() {
         if (nee) {
             const auto sample = sampleLight(getRand(depth, 0, rotation.w, rotation.x, rotation.y), hitPoint);
             const auto cosThetaS = dot(sample.wi, n);
-            if (abs(cosThetaS) > 0.0f && abs(sample.cosThetaL) > 0.0f) {
+            //if (abs(cosThetaS) > 0.0f && abs(sample.cosThetaL) > 0.0f) {
                 const auto brdf = evalDisney(wo, sample.wi, n, baseColor, metallic, alpha);
                 const auto surfacePoint = hitPoint + n * copysignf(params.sceneEpsilon, cosThetaS);
                 const auto lightPoint = sample.position - sample.n * copysignf(params.sceneEpsilon, dot(sample.wi, sample.n));
-                if (brdf.pdf > 0.0f && !traceOcclusion(surfacePoint, lightPoint)) {
+                if (!brdf.isDirac && brdf.pdf > 0.0f && !traceOcclusion(surfacePoint, lightPoint)) {
                     const auto weight = balanceHeuristic(sample.pdf, brdf.pdf);
                     // if (getRand(depth, 0, rotation.y) < 0.001f) printf("\t\t\t\t\t\tNEE We: %.3f BRDF: %.3f Light: %.3f\n", weight, brdf.pdf, sample.pdf);
                     color += throughput * brdf.throughput * sample.emission * weight / sample.pdf;
                 }
-            }
+            //}
         }
 
         // TODO: Move sampling into closesthit to benefit from reordering
