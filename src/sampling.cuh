@@ -157,9 +157,9 @@ __device__ constexpr SampleResult sampleTrowbridgeReitz(const float2& rand, cons
     return {wi, specular};
 }
 
-__device__ constexpr SampleResult sampleTrowbridgeReitzTransmission(const float2& rand, const float3& wo, float cosThetaO, const float3& n, float alpha, const float3& F0, const float3& albedo, bool inside) {
+__device__ constexpr SampleResult sampleTrowbridgeReitzTransmission(const float2& rand, const float3& wo, float cosThetaO, const float3& n, float alpha, const float3& F0, const float3& albedo, float eta) {
     const auto wm = sampleVNDFTrowbridgeReitz(rand, wo, n, alpha);
-    const auto wi = refract(wo, wm, inside ? 1.0f / 1.5f : 1.5f / 1.0f);
+    const auto wi = refract(wo, wm, eta);
     const auto cosThetaD = dot(wo, wm); // = dot(wi, wm)
     const auto cosThetaI = dot(wo, n); // TODO: Check if this is correct
     const auto F = F_SchlickApprox(cosThetaD, F0);
@@ -167,13 +167,6 @@ __device__ constexpr SampleResult sampleTrowbridgeReitzTransmission(const float2
     const auto LambdaL = Lambda_TrowbridgeReitz(cosThetaI, alpha2);
     const auto LambdaV = Lambda_TrowbridgeReitz(cosThetaO, alpha2);
     const auto transmission = albedo * (1.0f - F) * (1.0f + LambdaV) / (1.0f + LambdaL + LambdaV); // = (1 - F) * (G2 / G1)
-    return {wi, transmission};
-}
-
-__device__ constexpr SampleResult samplePerfectTransmission(const float3& wo, const float3& n, const float3& albedo, bool inside) {
-    const auto wm = n;
-    const auto wi = refract(wo, wm, inside ? 1.0f / 1.5f : 1.5f / 1.0f);
-    const auto transmission = albedo;
     return {wi, transmission};
 }
 
@@ -194,8 +187,12 @@ struct LightContext {
     float NdotH;
     float NdotV;
     float NdotL;
+    float HdotL;
+    float HdotV;
+    float eta;
     float pSpecular;
     float pDiffuse;
+    float pTransmission;
 };
 
 __device__ constexpr float disneyPdf(const LightContext& ctx) {
@@ -205,11 +202,11 @@ __device__ constexpr float disneyPdf(const LightContext& ctx) {
     const auto G1 = 1.0f / (1.0f + lambdaV);
     const auto VNDF = G1 * D;
     const auto pdfSpecular = VNDF / (4.0f * ctx.NdotV);
-    //const auto pdfTransmission = VNDF * ctx.HdotL / pow2(ctx.HdotL + ctx.HdotO / ctx.eta);
+    const auto pdfTransmission = VNDF * ctx.HdotL / pow2(ctx.HdotL + ctx.HdotV / ctx.eta);
 
     const auto pdfDiffuse = ctx.NdotL * INV_PI;
 
-    const auto pdf = ctx.pSpecular * pdfSpecular + ctx.pDiffuse * pdfDiffuse;
+    const auto pdf = ctx.pSpecular * pdfSpecular + ctx.pDiffuse * pdfDiffuse + ctx.pTransmission * pdfTransmission;
 
     return pdf;
 }
@@ -224,6 +221,7 @@ struct MISSampleResult {
 __device__ constexpr MISSampleResult sampleDisney(const float rType, const float2& rMicrofacet, const float2& rDiffuse, const float3& wo, const float3& n, const bool inside, const float3& baseColor, const float metallic, const float alpha, const float transmission) {
     const auto F0 = mix(make_float3(0.04f), baseColor, metallic); // Specular base
     const auto albedo = (1.0f - metallic) * baseColor; // Diffuse base
+    const auto eta = inside ? 1.0f / 1.5f : 1.5f / 1.0f;
 
     const auto NdotV = dot(n, wo);
 
@@ -231,6 +229,8 @@ __device__ constexpr MISSampleResult sampleDisney(const float rType, const float
     const auto wSpecular = luminance(F_SchlickApprox(NdotV, F0));
     const auto wDiffuse = luminance(albedo);
     const auto pSpecular = wSpecular / (wSpecular + wDiffuse);
+    const auto pDiffuse = (1.0f - pSpecular) * (1.0f - transmission);
+    const auto pTransmission = (1.0f - pSpecular) * transmission;
 
     auto throughput = make_float3(0.0f);
     auto wi = make_float3(0.0f);
@@ -245,41 +245,21 @@ __device__ constexpr MISSampleResult sampleDisney(const float rType, const float
         if (transmission < 0.5f) { // Sample Brent-Burley diffuse
             const auto tangentToWorld = buildTBN(n);
             const auto sample = sampleBrentBurley(rDiffuse, wo, NdotV, n, alpha, tangentToWorld, albedo);
-            throughput = sample.throughput / (1.0f - pSpecular);
+            throughput = sample.throughput / pDiffuse;
             wi = sample.direction;
         } else {
-            const auto sample = sampleTrowbridgeReitzTransmission(rMicrofacet, wo, NdotV, n, alpha, F0, baseColor, inside);
-            throughput = sample.throughput / (1.0f - pSpecular);
+            const auto sample = sampleTrowbridgeReitzTransmission(rMicrofacet, wo, NdotV, n, alpha, F0, baseColor, eta);
+            throughput = sample.throughput / pTransmission;
             wi = sample.direction;
         }
     }
 
-    const auto pdf = disneyPdf({alpha * alpha, dot(n, normalize(wo + wi)), NdotV, dot(n, wi), pSpecular, 1.0f - pSpecular});
+    const auto H = normalize(wo + wi);
+    const auto pdf = disneyPdf({alpha * alpha, dot(n, H), NdotV, dot(n, wi), dot(H, wi), dot(H, wo), eta, pSpecular, pDiffuse, pTransmission});
 
-    const auto isDirac = alpha == 0.0f && wDiffuse == 0.0f;
+    const auto isDirac = alpha == 0.0f && pDiffuse == 0.0f;
 
     return {wi, throughput, pdf, isDirac};
-}
-
-__device__ constexpr float3 disneyBRDF(const float3& wo, const float3& wi, const float3& n, const float3& albedo, float metallic, float alpha) {
-    const auto F0 = mix(make_float3(0.04f), albedo, metallic);
-    const auto alpha2 = alpha * alpha;
-    const auto H = normalize(wo + wi);
-    const auto NdotH = dot(n, H);
-    const auto NdotV = dot(n, wo);
-    const auto NdotL = dot(n, wi);
-    const auto HdotV = dot(H, wo);
-
-    const auto F = F_SchlickApprox(HdotV, F0);
-    const auto D = D_TrowbridgeReitz(NdotH, alpha2);
-    const auto G = G2_TrowbridgeReitz(NdotL, NdotV, alpha2);
-    const auto specular = F * D * G / (4.0f * NdotV);
-
-    const auto FD90 = 0.5f + 2.0f * alpha * HdotV * HdotV;
-    const auto response = (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotL)) * (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotV));
-    const auto diffuse = albedo * response * NdotL * INV_PI; // Include NdotL
-
-    return specular + diffuse;
 }
 
 struct BRDFResult {
@@ -288,7 +268,7 @@ struct BRDFResult {
     bool isDirac;
 };
 
-__device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, const float3& n, const float3& baseColor, float metallic, float alpha) {
+__device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, const float3& n, const float3& baseColor, float metallic, float alpha, float transmissiveness, bool inside) {
     const auto F0 = mix(make_float3(0.04f), baseColor, metallic);
     const auto albedo = (1.0f - metallic) * baseColor;
     const auto alpha2 = alpha * alpha;
@@ -297,32 +277,38 @@ __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, c
     const auto NdotV = dot(n, wo);
     const auto NdotL = dot(n, wi);
     const auto HdotV = dot(H, wo);
+    const auto HdotL = dot(H, wi);
+    const auto eta = inside ? 1.0f / 1.5f : 1.5f / 1.0f;
 
-    //if (NdotL <= 0.0f) return {{0.0f}, 0.0f};
+    //if (NdotL <= 0.0f) return {{1.0f}, 1.0f};
 
-    const auto F = F_SchlickApprox(HdotV, F0);
+    const auto F = F_SchlickApprox(HdotV, F0); // TODO: Different F0 inside and outside
     const auto D = D_TrowbridgeReitz(NdotH, alpha2);
     const auto lambdaL = Lambda_TrowbridgeReitz(NdotL, alpha2);
     const auto lambdaV = Lambda_TrowbridgeReitz(NdotV, alpha2);
     const auto G1 = 1.0f / (1.0f + lambdaV);
     const auto G = 1.0f / (1.0f + lambdaL + lambdaV);
     const auto specular = F * D * G / (4.0f * NdotV);
-    const auto pdfSpecular = G1 * D / (4.0f * NdotV);
+    const auto transmission = albedo * (1.0f - F) * D * G * HdotL * HdotV / (NdotV * NdotL * pow2(HdotL + HdotV / eta)); // TODO: Check
+    const auto VNDF = G1 * D;
+    const auto pdfSpecular = VNDF / (4.0f * NdotV);
+    const auto pdfTransmission = VNDF * HdotL / pow2(HdotL + HdotV / eta);
 
     const auto FD90 = 0.5f + 2.0f * alpha * HdotV * HdotV;
     const auto response = (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotL)) * (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotV));
     const auto diffuse = albedo * response * NdotL * INV_PI;
-    const auto pdfDiffuse = NdotL * INV_PI; // This coorect?
+    const auto pdfDiffuse = NdotL * INV_PI;
 
     const auto wSpecular = luminance(F_SchlickApprox(NdotV, F0));
     const auto wDiffuse = luminance(albedo);
     const auto pSpecular = wSpecular / (wSpecular + wDiffuse);
-    const auto pDiffuse = 1.0f - pSpecular;
-    const auto pdf = pSpecular * pdfSpecular + pDiffuse * pdfDiffuse;
+    const auto pDiffuse = (1.0f - pSpecular) * (1.0f - transmissiveness);
+    const auto pTransmission = (1.0f - pSpecular) * transmissiveness;
+    const auto pdf = pSpecular * pdfSpecular + pDiffuse * pdfDiffuse + pTransmission * pdfTransmission;
 
     const auto isDirac = alpha == 0.0f && wDiffuse == 0.0f;
 
-    return {specular + diffuse, pdf, isDirac};
+    return {specular + mix(diffuse, transmission, transmissiveness), pdf, isDirac};
 }
 
 struct LightSample {

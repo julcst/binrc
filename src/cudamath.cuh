@@ -48,6 +48,10 @@ __host__ __device__ constexpr float sign(float x) {
     return x < 0.0f ? -1.0f : 1.0f;
 }
 
+__host__ __device__ constexpr float step(float x) {
+    return max(0.0f, x);
+}
+
 // Operators on CUDA float2
 
 __host__ __device__ constexpr float2 make_float2(float x) {
@@ -328,6 +332,26 @@ __host__ __device__ constexpr float3 min(const float3& a, const float3& b) {
     return {min(a.x, b.x), min(a.y, b.y), min(a.z, b.z)};
 }
 
+__host__ __device__ constexpr float3 min(const float3& a, float b) {
+    return {min(a.x, b), min(a.y, b), min(a.z, b)};
+}
+
+__host__ __device__ constexpr float3 min(float a, const float3& b) {
+    return {min(a, b.x), min(a, b.y), min(a, b.z)};
+}
+
+__host__ __device__ constexpr float3 max(const float3& a, const float3& b) {
+    return {max(a.x, b.x), max(a.y, b.y), max(a.z, b.z)};
+}
+
+__host__ __device__ constexpr float3 max(const float3& a, float b) {
+    return {max(a.x, b), max(a.y, b), max(a.z, b)};
+}
+
+__host__ __device__ constexpr float3 max(float a, const float3& b) {
+    return {max(a, b.x), max(a, b.y), max(a, b.z)};
+}
+
 __host__ __device__ constexpr float3 reflect(const float3& i, const float3& n) {
     return 2.0f * dot(n, i) * n - i;
 }
@@ -342,6 +366,10 @@ __host__ __device__ constexpr float3 refract(const float3& i, const float3& n, c
 
 __host__ __device__ constexpr bool isfinite(const float3& v) {
     return isfinite(v.x) && isfinite(v.y) && isfinite(v.z);
+}
+
+__host__ __device__ constexpr bool ispositive(const float3& v) {
+    return v.x > 0.0f && v.y > 0.0f && v.z > 0.0f;
 }
 
 __host__ __device__ float luminance(const float3& linearRGB) {

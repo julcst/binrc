@@ -173,7 +173,9 @@ extern "C" __global__ void __raygen__rg() {
                 // NOTE: Maybe calculating the prevBrdfPdf here only when necessary is faster
                 const auto lightPdf = lightPdfUniform(wo, payload.t, n, payload.area);
                 weight = balanceHeuristic(prevBrdfPdf, lightPdf);
-                // printf("Weight: %.3f BRDF: %.3f Light: %.3f\n", weight, prevBrdfPdf, lightPdf);
+#ifdef DEBUGPRINT
+                printf("Weight: %.3f BRDF: %.3f Light: %.3f\n", weight, prevBrdfPdf, lightPdf);
+#endif
             }
             color += throughput * payload.emission * weight;
         }
@@ -189,12 +191,14 @@ extern "C" __global__ void __raygen__rg() {
             const auto sample = sampleLight(getRand(depth, 0, rotation.w, rotation.x, rotation.y), hitPoint);
             const auto cosThetaS = dot(sample.wi, n);
             //if (abs(cosThetaS) > 0.0f && abs(sample.cosThetaL) > 0.0f) {
-                const auto brdf = evalDisney(wo, sample.wi, n, baseColor, metallic, alpha);
+                const auto brdf = evalDisney(wo, sample.wi, n, baseColor, metallic, alpha, payload.transmission, inside);
                 const auto surfacePoint = hitPoint + n * copysignf(params.sceneEpsilon, cosThetaS);
                 const auto lightPoint = sample.position - sample.n * copysignf(params.sceneEpsilon, dot(sample.wi, sample.n));
                 if (!brdf.isDirac && brdf.pdf > 0.0f && !traceOcclusion(surfacePoint, lightPoint)) {
                     const auto weight = balanceHeuristic(sample.pdf, brdf.pdf);
-                    // if (getRand(depth, 0, rotation.y) < 0.001f) printf("\t\t\t\t\t\tNEE We: %.3f BRDF: %.3f Light: %.3f\n", weight, brdf.pdf, sample.pdf);
+#ifdef DEBUGPRINT
+                    if (getRand(depth, 0, rotation.y) < 0.001f) printf("\t\t\t\t\t\tNEE We: %.3f BRDF: %.3f Light: %.3f\n", weight, brdf.pdf, sample.pdf);
+#endif
                     color += throughput * brdf.throughput * sample.emission * weight / sample.pdf;
                 }
             //}
@@ -211,8 +215,8 @@ extern "C" __global__ void __raygen__rg() {
 
     // NOTE: We should not need to prevent NaNs
     // FIXME: NaNs
-    // if (isfinite(throughput))
-    params.image[i] = mix(params.image[i], make_float4(color, 1.0f), params.weight);
+    //if (isfinite(color))
+    params.image[i] = mix(params.image[i], make_float4(max(color, 0.0f), 1.0f), params.weight); // FXIME: Negative colors
 }
 
 extern "C" __global__ void __closesthit__ch() {
