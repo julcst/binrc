@@ -1,5 +1,6 @@
-#include "optixrenderer.hpp"
+#include "optixrenderer.cuh"
 
+#include <cuda.h>
 #include <cuda_runtime.h>
 #include <curand.h>
 
@@ -15,6 +16,10 @@
 #include <array>
 #include <vector>
 #include <fstream>
+
+#include <tiny-cuda-nn/common_host.h>
+#include <tiny-cuda-nn/gpu_matrix.h>
+#include <tiny-cuda-nn/config.h>
 
 #include "optixir.hpp"
 #include "cudautil.hpp"
@@ -129,6 +134,8 @@ OptixRenderer::OptixRenderer() {
 
     check(cudaMallocManaged(reinterpret_cast<void**>(&params), sizeof(Params)));
     initParams(params);
+
+    auto nrcModel = tcnn::create_from_config(NRC_INPUT_SIZE, NRC_OUTPUT_SIZE, NRC_CONFIG);
 }
 
 OptixRenderer::~OptixRenderer() {
@@ -183,7 +190,9 @@ void OptixRenderer::generateSobol(uint offset, uint n) {
 
 void OptixRenderer::ensureSobol(uint sample) {
     if (sample < params->sequenceOffset || sample >= params->sequenceOffset + params->sequenceStride) {
-        std::cout << std::format("Regenerating Sobol sequence for samples [{},{})", sample, sample + RAND_SEQUENCE_CACHE_SIZE) << std::endl;
+        // std::cout << std::format("Regenerating Sobol sequence for samples [{},{})", sample, sample + RAND_SEQUENCE_CACHE_SIZE) << std::endl;
+        // C++17
+        std::cout << "Regenerating Sobol sequence for samples [" << sample << "," << sample + RAND_SEQUENCE_CACHE_SIZE << ")" << std::endl;
         generateSobol(sample, RAND_SEQUENCE_CACHE_SIZE);
     }
 }

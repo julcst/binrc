@@ -69,6 +69,7 @@ struct Params {
     Material* materials; // materials
     EmissiveTriangle* lightTable; // lightTable
     uint lightTableSize; // lightTableSize
+    float* trainingData;
 //////////////////////////////////////////////////
 
 };

@@ -29,6 +29,9 @@ using namespace glm;
 #include "optixparams.cuh"
 #include "cudaglm.cuh"
 
+Geometry::Geometry(OptixTraversableHandle handle, CUdeviceptr gasBuffer, CUdeviceptr indexBuffer, CUdeviceptr vertexData, uint sbtOffset, std::optional<Emitter> emitter)
+    : handle(handle), gasBuffer(gasBuffer), indexBuffer(indexBuffer), vertexData(vertexData), sbtOffset(sbtOffset), emitter(emitter) {}
+
 Geometry::~Geometry() {
     check(cudaFree(reinterpret_cast<void*>(gasBuffer)));
     check(cudaFree(reinterpret_cast<void*>(indexBuffer)));
@@ -206,9 +209,13 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
     auto parser = fastgltf::Parser(fastgltf::Extensions::KHR_materials_transmission
                                 | fastgltf::Extensions::KHR_materials_emissive_strength);
     auto data = fastgltf::GltfDataBuffer::FromPath(path);
-    if (auto e = data.error(); e != fastgltf::Error::None) throw std::runtime_error(std::format("Error: {}", fastgltf::getErrorMessage(e)));
+    // if (auto e = data.error(); e != fastgltf::Error::None) throw std::runtime_error(std::format("Error: {}", fastgltf::getErrorMessage(e)));
+    // C++ 17
+    if (auto e = data.error(); e != fastgltf::Error::None) throw std::runtime_error(fastgltf::getErrorMessage(e).data());
     auto asset = parser.loadGltf(data.get(), path.parent_path(), fastgltf::Options::GenerateMeshIndices);
-    if (auto e = asset.error(); e != fastgltf::Error::None) throw std::runtime_error(std::format("Error: {}", fastgltf::getErrorMessage(e)));
+    // if (auto e = asset.error(); e != fastgltf::Error::None) throw std::runtime_error(std::format("Error: {}", fastgltf::getErrorMessage(e)));
+    // C++ 17
+    if (auto e = asset.error(); e != fastgltf::Error::None) throw std::runtime_error(fastgltf::getErrorMessage(e).data());
     
     std::vector<cudaArray_t> newImages;
     newImages.reserve(asset->images.size());

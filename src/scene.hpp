@@ -26,6 +26,7 @@ struct Geometry {
     CUdeviceptr vertexData; // NOTE: This is owned memory and must be freed
     uint sbtOffset;
     std::optional<Emitter> emitter;
+    Geometry(OptixTraversableHandle handle, CUdeviceptr gasBuffer, CUdeviceptr indexBuffer, CUdeviceptr vertexData, uint sbtOffset, std::optional<Emitter> emitter);
     ~Geometry();
 };
 

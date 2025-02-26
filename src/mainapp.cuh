@@ -16,7 +16,7 @@ using namespace glm;
 #include <filesystem>
 #include <vector>
 
-#include "optixrenderer.hpp"
+#include "optixrenderer.cuh"
 
 class MainApp : public App {
   public:

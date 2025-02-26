@@ -174,7 +174,7 @@ extern "C" __global__ void __raygen__rg() {
                 const auto lightPdf = lightPdfUniform(wo, payload.t, n, payload.area);
                 weight = balanceHeuristic(prevBrdfPdf, lightPdf);
 #ifdef DEBUGPRINT
-                printf("Weight: %.3f BRDF: %.3f Light: %.3f\n", weight, prevBrdfPdf, lightPdf);
+    printf("Weight: %.3f BRDF: %.3f Light: %.3f\n", weight, prevBrdfPdf, lightPdf);
 #endif
             }
             color += throughput * payload.emission * weight;
@@ -196,10 +196,10 @@ extern "C" __global__ void __raygen__rg() {
                 const auto lightPoint = sample.position - sample.n * copysignf(params.sceneEpsilon, dot(sample.wi, sample.n));
                 if (!brdf.isDirac && brdf.pdf > 0.0f && !traceOcclusion(surfacePoint, lightPoint)) {
                     const auto weight = balanceHeuristic(sample.pdf, brdf.pdf);
-#ifdef DEBUGPRINT
-                    if (getRand(depth, 0, rotation.y) < 0.001f) printf("\t\t\t\t\t\tNEE We: %.3f BRDF: %.3f Light: %.3f\n", weight, brdf.pdf, sample.pdf);
-#endif
                     color += throughput * brdf.throughput * sample.emission * weight / sample.pdf;
+#ifdef DEBUGPRINT
+    if (getRand(depth, 0, rotation.y) < 0.001f) printf("\t\t\t\t\t\tNEE We: %.3f BRDF: %.3f Light: %.3f\n", weight, brdf.pdf, sample.pdf);
+#endif
                 }
             //}
         }

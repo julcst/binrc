@@ -11,16 +11,15 @@ elseif (WIN32)
 endif()
 # Config
 set(GLM_ENABLE_FAST_MATH ON)
-set(GLM_ENABLE_CXX_20 ON)
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --diag-suppress 20012 --use_fast_math") # Disables glm warnings
 set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} --debug --device-debug") # Enables debugging
 set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
+set(CUDA_LINK_LIBRARIES_KEYWORD PUBLIC)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(FASTGLTF_COMPILE_AS_CPP20 ON)
 
 project(biNRC LANGUAGES CXX CUDA)
 
-# Fin dependencies
+# Find dependencies
 find_package(CUDAToolkit 12 REQUIRED)
 
 include(FetchContent)
@@ -32,7 +31,11 @@ FetchContent_Declare(
     fastgltf
     URL https://github.com/spnda/fastgltf/archive/v0.8.0.tar.gz
 )
-FetchContent_MakeAvailable(framework fastgltf)
+FetchContent_Declare(
+    tinycudann
+    GIT_REPOSITORY https://github.com/NVlabs/tiny-cuda-nn
+)
+FetchContent_MakeAvailable(framework fastgltf tinycudann)
 
 # Build the OptiX IR
 set(OPTIXIR
@@ -44,19 +47,19 @@ target_include_directories(optixir PRIVATE ${OPTIX_DIR}/include ${CUDAToolkit_IN
 set_property(TARGET optixir PROPERTY CUDA_OPTIX_COMPILATION ON)
 
 set(SRC
-    src/main.cpp
-    src/mainapp.cpp
-    src/optixrenderer.cpp
+    src/main.cu
+    src/mainapp.cu
+    src/optixrenderer.cu
     src/scene.cpp
 )
 
 # Add the executable
 add_executable(${PROJECT_NAME} ${SRC})
-target_link_libraries(${PROJECT_NAME} CUDA::cudart CUDA::curand framework fastgltf)
+target_link_libraries(${PROJECT_NAME} CUDA::cudart CUDA::curand framework fastgltf tiny-cuda-nn)
 target_include_directories(${PROJECT_NAME} PUBLIC src ${OPTIX_DIR}/include ${CUDAToolkit_INCLUDE_DIRS})
 
 # Set compiler flags
-target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20 cuda_std_20)
+target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17 cuda_std_17)
 set_target_properties(${PROJECT_NAME} PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
     CUDA_EXTENSIONS OFF

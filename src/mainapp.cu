@@ -1,4 +1,4 @@
-#include "mainapp.hpp"
+#include "mainapp.cuh"
 
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
