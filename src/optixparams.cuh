@@ -3,6 +3,9 @@
 #include <cuda_runtime.h>
 #include <array>
 
+#include <tiny-cuda-nn/common.h>
+#include <json/json.hpp>
+
 #include "cudamathtypes.cuh"
 
 constexpr int PAYLOAD_SIZE = 17;
@@ -15,6 +18,35 @@ constexpr uint RAND_SEQUENCE_CACHE_SIZE = 4096;
 
 constexpr uint TRANSMISSION_FLAG = 1 << 0;
 constexpr uint NEE_FLAG = 1 << 1;
+
+constexpr uint NRC_INPUT_SIZE = 3;
+constexpr uint NRC_OUTPUT_SIZE = 3;
+constexpr uint NRC_BATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY;
+
+const nlohmann::json NRC_CONFIG = {
+	{"loss", {
+		{"otype", "RelativeL2Luminance"}
+	}},
+	{"optimizer", {
+		{"otype", "Adam"},
+		{"learning_rate", 1e-3},
+	}},
+	{"encoding", {
+		{"otype", "HashGrid"},
+		{"n_levels", 16},
+		{"n_features_per_level", 2},
+		{"log2_hashmap_size", 19},
+		{"base_resolution", 16},
+		{"per_level_scale", 2.0},
+	}},
+	{"network", {
+		{"otype", "FullyFusedMLP"},
+		{"activation", "ReLU"},
+		{"output_activation", "None"},
+		{"n_neurons", 64},
+		{"n_hidden_layers", 2},
+	}},
+};
 
 struct VertexData {
     float3 position;
@@ -69,9 +101,10 @@ struct Params {
     Material* materials; // materials
     EmissiveTriangle* lightTable; // lightTable
     uint lightTableSize; // lightTableSize
-    float* trainingData;
 //////////////////////////////////////////////////
 
+    float* trainingInput;
+    float* trainingTarget;
 };
 extern "C" __constant__ Params params;
 

@@ -24,6 +24,7 @@
 #include "optixir.hpp"
 #include "cudautil.hpp"
 #include "cudaglm.cuh"
+#include "optixparams.cuh"
 
 std::vector<char> readBinaryFile(const std::filesystem::path& filepath) {
     std::ifstream stream{filepath, std::ios::binary};
@@ -135,7 +136,11 @@ OptixRenderer::OptixRenderer() {
     check(cudaMallocManaged(reinterpret_cast<void**>(&params), sizeof(Params)));
     initParams(params);
 
-    auto nrcModel = tcnn::create_from_config(NRC_INPUT_SIZE, NRC_OUTPUT_SIZE, NRC_CONFIG);
+    nrcModel = tcnn::create_from_config(NRC_INPUT_SIZE, NRC_OUTPUT_SIZE, NRC_CONFIG);
+    nrcTrainInput = tcnn::GPUMatrix<float>(NRC_INPUT_SIZE, NRC_BATCH_SIZE);
+    nrcTrainOutput = tcnn::GPUMatrix<float>(NRC_OUTPUT_SIZE, NRC_BATCH_SIZE);
+    params->trainingInput = nrcTrainInput.data();
+    params->trainingTarget = nrcTrainOutput.data();
 }
 
 OptixRenderer::~OptixRenderer() {
@@ -154,6 +159,7 @@ OptixRenderer::~OptixRenderer() {
 void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
     scene.loadGLTF(context, params, programGroups[2], sbt, path);
     reset();
+    lossHistory.clear();
 }
 
 void OptixRenderer::setCamera(const mat4& clipToWorld) {
@@ -170,6 +176,8 @@ void OptixRenderer::render(vec4* image, uvec2 dim) {
     
     params->sample++;
     params->weight = 1.0f / static_cast<float>(params->sample);
+
+    train();
 }
 
 void OptixRenderer::generateSobol(uint offset, uint n) {
@@ -212,4 +220,10 @@ void OptixRenderer::resize(uvec2 dim) {
 void OptixRenderer::reset() {
     params->sample = 0;
     params->weight = 1.0f;
+}
+
+void OptixRenderer::train() {
+    auto ctx = nrcModel.trainer->training_step(nrcTrainInput, nrcTrainOutput);
+    float loss = nrcModel.trainer->loss(*ctx);
+    lossHistory.push_back(loss);
 }

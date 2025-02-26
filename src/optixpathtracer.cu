@@ -131,6 +131,20 @@ __device__ bool traceOcclusion(const float3& a, const float3& b) {
     return optixHitObjectIsHit();
 }
 
+__device__ void pushTrainingSample(float3 pos, float3 color) {
+    const auto idx = optixGetLaunchIndex();
+    const auto dim = optixGetLaunchDimensions();
+    const auto i = (idx.y * params.dim.x + idx.x) % NRC_BATCH_SIZE;
+    const auto inputIdx = i * NRC_INPUT_SIZE;
+    const auto outputIdx = i * NRC_OUTPUT_SIZE;
+    params.trainingInput[inputIdx + 0] = pos.x;
+    params.trainingInput[inputIdx + 1] = pos.y;
+    params.trainingInput[inputIdx + 2] = pos.z;
+    params.trainingTarget[outputIdx + 0] = color.x;
+    params.trainingTarget[outputIdx + 1] = color.y;
+    params.trainingTarget[outputIdx + 2] = color.z;
+}
+
 extern "C" __global__ void __raygen__rg() {
     const auto idx = optixGetLaunchIndex();
     const auto dim = optixGetLaunchDimensions();
@@ -184,6 +198,8 @@ extern "C" __global__ void __raygen__rg() {
         const auto alpha = payload.roughness * payload.roughness;
         const auto metallic = payload.metallic;
         const auto baseColor = payload.baseColor; // baseColor
+
+        if (getRand(depth, 2, rotation.y) < 0.001f) pushTrainingSample(hitPoint, baseColor);
 
         // Next event estimation
         // TODO: Dirac check

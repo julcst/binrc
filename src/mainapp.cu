@@ -143,6 +143,7 @@ void MainApp::buildImGui() {
         }
         ImGui::SameLine();
     }
+    ImGui::PlotLines("Loss", renderer.lossHistory.data(), renderer.lossHistory.size());
     ImGui::End();
 
     if (reset) renderer.reset();

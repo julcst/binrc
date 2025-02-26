@@ -42,7 +42,7 @@ set(OPTIXIR
     src/optixpathtracer.cu
 )
 add_library(optixir OBJECT ${OPTIXIR})
-target_link_libraries(optixir CUDA::cudart)
+target_link_libraries(optixir CUDA::cudart tiny-cuda-nn)
 target_include_directories(optixir PRIVATE ${OPTIX_DIR}/include ${CUDAToolkit_INCLUDE_DIRS})
 set_property(TARGET optixir PROPERTY CUDA_OPTIX_COMPILATION ON)
 
