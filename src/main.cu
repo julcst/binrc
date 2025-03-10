@@ -2,11 +2,8 @@
 
 #include <iostream>
 
-#include "test.cuh"
-
 int main() {
     try {
-        test();
         MainApp app;
         app.run();
     } catch (const std::exception& e) {
