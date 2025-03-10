@@ -19,9 +19,13 @@ constexpr uint RAND_SEQUENCE_CACHE_SIZE = 4096;
 constexpr uint TRANSMISSION_FLAG = 1 << 0;
 constexpr uint NEE_FLAG = 1 << 1;
 
-constexpr uint NRC_INPUT_SIZE = 3;
+struct NRCInput {
+    float3 position = make_float3(NAN, NAN, NAN);
+};
+
+constexpr uint NRC_INPUT_SIZE = sizeof(NRCInput) / sizeof(float);
 constexpr uint NRC_OUTPUT_SIZE = 3;
-constexpr uint NRC_BATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY;
+constexpr uint NRC_BATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY * 44;
 
 const nlohmann::json NRC_CONFIG = {
 	{"loss", {
@@ -44,7 +48,7 @@ const nlohmann::json NRC_CONFIG = {
 		{"activation", "ReLU"},
 		{"output_activation", "None"},
 		{"n_neurons", 64},
-		{"n_hidden_layers", 2},
+		{"n_hidden_layers", 3},
 	}},
 };
 
@@ -105,6 +109,8 @@ struct Params {
 
     float* trainingInput;
     float* trainingTarget;
+    float* inferenceInput;
+    float* inferenceOutput;
 };
 extern "C" __constant__ Params params;
 
@@ -128,6 +134,8 @@ __host__ inline void initParams(Params* params) {
     params->materials = nullptr;
     params->lightTable = nullptr;
     params->lightTableSize = 0;
+    params->trainingInput = nullptr;
+    params->trainingTarget = nullptr;
 }
 
 __device__ inline float getRand(uint dim) {

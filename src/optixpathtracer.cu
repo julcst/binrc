@@ -162,6 +162,8 @@ extern "C" __global__ void __raygen__rg() {
     auto throughput = make_float3(1.0f);
     auto prevBrdfPdf = 1.0f;
     auto diracEvent = true;
+
+    auto nrcQuery = NRCInput{};
     
     for (uint depth = 1; depth < MAX_BOUNCES; depth++) {
         // Russian roulette
@@ -199,7 +201,13 @@ extern "C" __global__ void __raygen__rg() {
         const auto metallic = payload.metallic;
         const auto baseColor = payload.baseColor; // baseColor
 
+        // NRC Training
         if (getRand(depth, 2, rotation.y) < 0.001f) pushTrainingSample(hitPoint, baseColor);
+
+        // NRC Inference Input
+        if (depth == 1) {
+            nrcQuery.position = hitPoint;
+        }
 
         // Next event estimation
         // TODO: Dirac check
@@ -228,6 +236,12 @@ extern "C" __global__ void __raygen__rg() {
         prevBrdfPdf = sample.pdf;
         diracEvent = sample.isDirac;
     }
+
+    // NRC Inference
+    const auto inputIdx = i * NRC_INPUT_SIZE;
+    params.inferenceInput[inputIdx + 0] = nrcQuery.position.x;
+    params.inferenceInput[inputIdx + 1] = nrcQuery.position.y;
+    params.inferenceInput[inputIdx + 2] = nrcQuery.position.z;
 
     // NOTE: We should not need to prevent NaNs
     // FIXME: NaNs

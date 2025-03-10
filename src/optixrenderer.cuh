@@ -30,6 +30,7 @@ public:
     OptixRenderer& operator=(OptixRenderer&&) = delete;
 
     void reset();
+    void resetNRC();
     void render(vec4* image, uvec2 dim);
     void setCamera(const mat4& clipToWorld);
     void loadGLTF(const std::filesystem::path& path);
@@ -47,6 +48,8 @@ private:
     tcnn::TrainableModel nrcModel;
     tcnn::GPUMatrix<float> nrcTrainInput;
     tcnn::GPUMatrix<float> nrcTrainOutput;
+    tcnn::GPUMatrix<float> nrcInferenceInput;
+    tcnn::GPUMatrix<float> nrcInferenceOutput;
 
     void generateSobol(uint offset, uint n);
     void ensureSobol(uint sample);

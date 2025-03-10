@@ -139,6 +139,7 @@ OptixRenderer::OptixRenderer() {
     nrcModel = tcnn::create_from_config(NRC_INPUT_SIZE, NRC_OUTPUT_SIZE, NRC_CONFIG);
     nrcTrainInput = tcnn::GPUMatrix<float>(NRC_INPUT_SIZE, NRC_BATCH_SIZE);
     nrcTrainOutput = tcnn::GPUMatrix<float>(NRC_OUTPUT_SIZE, NRC_BATCH_SIZE);
+
     params->trainingInput = nrcTrainInput.data();
     params->trainingTarget = nrcTrainOutput.data();
 }
@@ -166,6 +167,17 @@ void OptixRenderer::setCamera(const mat4& clipToWorld) {
     params->clipToWorld = glmToCuda(clipToWorld);
 }
 
+__global__
+void visualizeInference(Params* params) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= params->dim.x || y >= params->dim.y) return;
+    const int i = y * params->dim.x + x;
+    const int idxOut = i * NRC_OUTPUT_SIZE;
+    const auto inference = make_float4(params->inferenceOutput[idxOut + 0], params->inferenceOutput[idxOut + 1], params->inferenceOutput[idxOut + 2], 1.0f);
+    params->image[i] = inference;
+}
+
 void OptixRenderer::render(vec4* image, uvec2 dim) {
     params->image = reinterpret_cast<float4*>(image);
     params->dim = make_uint2(dim.x, dim.y);
@@ -173,11 +185,17 @@ void OptixRenderer::render(vec4* image, uvec2 dim) {
     ensureSobol(params->sample);
     check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params), sizeof(Params), &sbt, dim.x, dim.y, 1));
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+
+    train();
+
+    nrcModel.network->inference(nrcInferenceInput, nrcInferenceOutput);
+
+    dim3 block(16, 16);
+    dim3 grid((dim.x + block.x - 1) / block.x, (dim.y + block.y - 1) / block.y);
+    visualizeInference<<<grid, block>>>(params);
     
     params->sample++;
     params->weight = 1.0f / static_cast<float>(params->sample);
-
-    train();
 }
 
 void OptixRenderer::generateSobol(uint offset, uint n) {
@@ -206,6 +224,13 @@ void OptixRenderer::ensureSobol(uint sample) {
 }
 
 void OptixRenderer::resize(uvec2 dim) {
+    // Generate inference input and output buffers
+    nrcInferenceInput = tcnn::GPUMatrix<float>(NRC_INPUT_SIZE, dim.x * dim.y);
+    nrcInferenceOutput = tcnn::GPUMatrix<float>(NRC_OUTPUT_SIZE, dim.x * dim.y);
+    params->inferenceInput = nrcInferenceInput.data();
+    params->inferenceOutput = nrcInferenceOutput.data();
+
+    // Generate the Cranley-Patterson-Rotation per pixel
     // NOTE: We rebuild the generator on resize, this makes resize slow but saves memory
     const size_t n = static_cast<size_t>(dim.x * dim.y) * 4;
     curandGenerator_t generator;
@@ -220,6 +245,11 @@ void OptixRenderer::resize(uvec2 dim) {
 void OptixRenderer::reset() {
     params->sample = 0;
     params->weight = 1.0f;
+}
+
+void OptixRenderer::resetNRC() {
+    nrcModel.trainer->initialize_params();
+    lossHistory.clear();
 }
 
 void OptixRenderer::train() {

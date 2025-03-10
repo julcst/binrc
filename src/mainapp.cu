@@ -42,10 +42,10 @@ std::vector<std::filesystem::path> scanFolder(const std::filesystem::path& folde
     try {
         for (auto& f : std::filesystem::directory_iterator(folder)) {
             if (f.path().extension() == ".glb"|| f.path().extension() == ".gltf") files.push_back(f.path());
-        }
+        } 
         return files;
     } catch (const std::filesystem::filesystem_error& e) {
-        // Return empty
+        std::cerr << e.what() << std::endl;
         return files;
     }
 }
@@ -144,6 +144,9 @@ void MainApp::buildImGui() {
         ImGui::SameLine();
     }
     ImGui::PlotLines("Loss", renderer.lossHistory.data(), renderer.lossHistory.size());
+    if (ImGui::Button("Reset NRC")) {
+        renderer.resetNRC();
+    }
     ImGui::End();
 
     if (reset) renderer.reset();
