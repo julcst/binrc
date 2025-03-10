@@ -188,11 +188,13 @@ void OptixRenderer::render(vec4* image, uvec2 dim) {
 
     train();
 
-    nrcModel.network->inference(nrcInferenceInput, nrcInferenceOutput);
+    if (params->flags & NRC_INFERENCE_FLAG) {
+        nrcModel.network->inference(nrcInferenceInput, nrcInferenceOutput);
 
-    dim3 block(16, 16);
-    dim3 grid((dim.x + block.x - 1) / block.x, (dim.y + block.y - 1) / block.y);
-    visualizeInference<<<grid, block>>>(params);
+        dim3 block(16, 16);
+        dim3 grid((dim.x + block.x - 1) / block.x, (dim.y + block.y - 1) / block.y);
+        visualizeInference<<<grid, block>>>(params);
+    }
     
     params->sample++;
     params->weight = 1.0f / static_cast<float>(params->sample);

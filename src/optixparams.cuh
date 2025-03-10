@@ -18,6 +18,7 @@ constexpr uint RAND_SEQUENCE_CACHE_SIZE = 4096;
 
 constexpr uint TRANSMISSION_FLAG = 1 << 0;
 constexpr uint NEE_FLAG = 1 << 1;
+constexpr uint NRC_INFERENCE_FLAG = 1 << 2;
 
 struct NRCInput {
     float3 position = make_float3(NAN, NAN, NAN);
@@ -136,6 +137,8 @@ __host__ inline void initParams(Params* params) {
     params->lightTableSize = 0;
     params->trainingInput = nullptr;
     params->trainingTarget = nullptr;
+    params->inferenceInput = nullptr;
+    params->inferenceOutput = nullptr;
 }
 
 __device__ inline float getRand(uint dim) {
