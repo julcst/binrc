@@ -43,8 +43,8 @@ const nlohmann::json NRC_CONFIG = {
 		{"otype", "RelativeL2Luminance"},
 	}},
 	{"optimizer", {
-		{"otype", "Average"},
-        {"n_samples", 32},
+		{"otype", "EMA"},
+        {"decay", 0.99f},
         {"nested", {
             {"otype", "Adam"},
             {"learning_rate", 1e-3f},
