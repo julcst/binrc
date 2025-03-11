@@ -144,7 +144,7 @@ void MainApp::buildImGui() {
         ImGui::SameLine();
     }
     ImGui::SeparatorText("NRC");
-    FlagCheckbox("Enable NRC Inference", &renderer.params->flags, NRC_INFERENCE_FLAG);
+    reset |= FlagCheckbox("Enable NRC Inference", &renderer.params->flags, NRC_INFERENCE_FLAG);
     ImGui::PlotLines("Loss", renderer.lossHistory.data(), renderer.lossHistory.size());
     if (ImGui::Button("Reset NRC")) renderer.resetNRC();
     ImGui::End();
