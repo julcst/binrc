@@ -22,6 +22,8 @@ constexpr uint NRC_INFERENCE_FLAG = 1 << 2;
 
 struct NRCInput {
     float3 position = make_float3(NAN, 0.0f, 0.0f);
+    float3 direction = make_float3(0.0, 0.0f, 0.0f);
+    float3 baseColor = make_float3(1.0f, 1.0f, 1.0f);
 };
 
 struct NRCOutput {
@@ -40,7 +42,7 @@ const nlohmann::json NRC_CONFIG = {
 		{"otype", "Average"},
         {"nested", {
             {"otype", "Adam"},
-            {"learning_rate", 1e-2f},
+            {"learning_rate", 1e-3f},
         }},
 	}},
 	{"encoding", {
@@ -50,6 +52,19 @@ const nlohmann::json NRC_CONFIG = {
                 {"n_dims_to_encode", 3},
                 {"otype", "Grid"},
                 {"type", "Hash"},
+                {"n_levels", 16},
+                {"n_feature_per_level", 2},
+                {"log2_hashmap_size", 19},
+                {"base_resolution", 16},
+                {"interpolation", "Linear"},
+            },
+            {
+                {"n_dims_to_encode", 3},
+                {"otype", "OneBlob"},
+                {"n_bins", 4},
+            },
+            {
+                {"otype", "Identity"},
             },
         }},
     }},
@@ -57,7 +72,7 @@ const nlohmann::json NRC_CONFIG = {
 		{"otype", "FullyFusedMLP"},
 		{"activation", "ReLU"},
 		{"output_activation", "None"},
-		{"n_neurons", 32},
+		{"n_neurons", 64},
 		{"n_hidden_layers", 5},
 	}},
 };

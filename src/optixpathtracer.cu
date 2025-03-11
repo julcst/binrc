@@ -206,8 +206,15 @@ extern "C" __global__ void __raygen__rg() {
 
         // NRC Inference Input
         if (depth == 1) {
-            trainInput.position = hitPoint;
             nrcQuery.position = hitPoint;
+            nrcQuery.direction = ray.direction;
+            nrcQuery.baseColor = baseColor;
+        }
+
+        if (depth == 1) {
+            trainInput.position = hitPoint;
+            trainInput.direction = ray.direction;
+            trainInput.baseColor = baseColor;
         }
 
         // Next event estimation
@@ -248,6 +255,12 @@ extern "C" __global__ void __raygen__rg() {
         params.trainingInput[inputIdx + 0] = trainInput.position.x;
         params.trainingInput[inputIdx + 1] = trainInput.position.y;
         params.trainingInput[inputIdx + 2] = trainInput.position.z;
+        params.trainingInput[inputIdx + 3] = trainInput.direction.x;
+        params.trainingInput[inputIdx + 4] = trainInput.direction.y;
+        params.trainingInput[inputIdx + 5] = trainInput.direction.z;
+        params.trainingInput[inputIdx + 6] = trainInput.baseColor.x;
+        params.trainingInput[inputIdx + 7] = trainInput.baseColor.y;
+        params.trainingInput[inputIdx + 8] = trainInput.baseColor.z;
         params.trainingTarget[outputIdx + 0] = trainTarget.radiance.x;
         params.trainingTarget[outputIdx + 1] = trainTarget.radiance.y;
         params.trainingTarget[outputIdx + 2] = trainTarget.radiance.z;
@@ -258,6 +271,12 @@ extern "C" __global__ void __raygen__rg() {
     params.inferenceInput[inputIdx + 0] = nrcQuery.position.x;
     params.inferenceInput[inputIdx + 1] = nrcQuery.position.y;
     params.inferenceInput[inputIdx + 2] = nrcQuery.position.z;
+    params.inferenceInput[inputIdx + 3] = nrcQuery.direction.x;
+    params.inferenceInput[inputIdx + 4] = nrcQuery.direction.y;
+    params.inferenceInput[inputIdx + 5] = nrcQuery.direction.z;
+    params.inferenceInput[inputIdx + 6] = nrcQuery.baseColor.x;
+    params.inferenceInput[inputIdx + 7] = nrcQuery.baseColor.y;
+    params.inferenceInput[inputIdx + 8] = nrcQuery.baseColor.z;
 
     // NOTE: We should not need to prevent NaNs
     // FIXME: NaNs
