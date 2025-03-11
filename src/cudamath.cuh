@@ -36,12 +36,20 @@ __host__ __device__ constexpr float mix(float a, float b, float t) {
     return a + (b - a) * t;
 }
 
+__host__ __device__ constexpr float minf(float a, float b) {
+    return a < b ? a : b;
+}
+
+__host__ __device__ constexpr float maxf(float a, float b) {
+    return a > b ? a : b;
+}
+
 __host__ __device__ constexpr float clamp(float x, float a, float b) {
-    return max(a, min(b, x));
+    return maxf(a, minf(b, x));
 }
 
 __host__ __device__ constexpr float safesqrt(float x) {
-    return sqrtf(max(x, 0.0f));
+    return sqrtf(maxf(x, 0.0f));
 }
 
 __host__ __device__ constexpr float sign(float x) {
@@ -49,7 +57,7 @@ __host__ __device__ constexpr float sign(float x) {
 }
 
 __host__ __device__ constexpr float step(float x) {
-    return max(0.0f, x);
+    return maxf(0.0f, x);
 }
 
 // Operators on CUDA float2
@@ -171,7 +179,8 @@ __host__ __device__ constexpr float length(const float2& v) {
 }
 
 __host__ __device__ constexpr float2 normalize(const float2& v) {
-    return v * rsqrtf(pow2(v));
+    //return v * rsqrtf(pow2(v));
+    return v / length(v);
 }
 
 __host__ __device__ constexpr float2 fract(const float2& v) {
@@ -180,6 +189,10 @@ __host__ __device__ constexpr float2 fract(const float2& v) {
 
 __host__ __device__ constexpr float2 mix(const float2& a, const float2& b, float t) {
     return a + (b - a) * t;
+}
+
+__host__ __device__ constexpr bool isfinite(const float2& v) {
+    return std::isfinite(v.x) && std::isfinite(v.y);
 }
 
 // Operators on CUDA float3
@@ -313,11 +326,13 @@ __host__ __device__ constexpr float3 cross(const float3& a, const float3& b) {
 }
 
 __host__ __device__ constexpr float length(const float3& v) {
-    return norm3df(v.x, v.y, v.z);
+    //return norm3df(v.x, v.y, v.z);
+    return sqrtf(dot(v, v));
 }
 
 __host__ __device__ constexpr float3 normalize(const float3& v) {
-    return v * rnorm3df(v.x, v.y, v.z);
+    //return v * rnorm3df(v.x, v.y, v.z);
+    return v / length(v);
 }
 
 __host__ __device__ constexpr float3 fract(const float3& v) {
@@ -329,27 +344,27 @@ __host__ __device__ constexpr float3 mix(const float3& a, const float3& b, float
 }
 
 __host__ __device__ constexpr float3 min(const float3& a, const float3& b) {
-    return {min(a.x, b.x), min(a.y, b.y), min(a.z, b.z)};
+    return {minf(a.x, b.x), minf(a.y, b.y), minf(a.z, b.z)};
 }
 
 __host__ __device__ constexpr float3 min(const float3& a, float b) {
-    return {min(a.x, b), min(a.y, b), min(a.z, b)};
+    return {minf(a.x, b), minf(a.y, b), minf(a.z, b)};
 }
 
 __host__ __device__ constexpr float3 min(float a, const float3& b) {
-    return {min(a, b.x), min(a, b.y), min(a, b.z)};
+    return {minf(a, b.x), minf(a, b.y), minf(a, b.z)};
 }
 
 __host__ __device__ constexpr float3 max(const float3& a, const float3& b) {
-    return {max(a.x, b.x), max(a.y, b.y), max(a.z, b.z)};
+    return {maxf(a.x, b.x), maxf(a.y, b.y), maxf(a.z, b.z)};
 }
 
 __host__ __device__ constexpr float3 max(const float3& a, float b) {
-    return {max(a.x, b), max(a.y, b), max(a.z, b)};
+    return {maxf(a.x, b), maxf(a.y, b), maxf(a.z, b)};
 }
 
 __host__ __device__ constexpr float3 max(float a, const float3& b) {
-    return {max(a, b.x), max(a, b.y), max(a, b.z)};
+    return {maxf(a, b.x), maxf(a, b.y), maxf(a, b.z)};
 }
 
 __host__ __device__ constexpr float3 reflect(const float3& i, const float3& n) {
@@ -359,21 +374,22 @@ __host__ __device__ constexpr float3 reflect(const float3& i, const float3& n) {
 __host__ __device__ constexpr float3 refract(const float3& i, const float3& n, const float eta) {
     const auto cosTheta_i  = dot(n, i);
     const auto sin2Theta_i = 1.0f - safesqrt(cosTheta_i);
-    const auto sin2Theta_t = sin2Theta_i * rsqrtf(eta);
+    //const auto sin2Theta_t = sin2Theta_i * rsqrtf(eta);
+    const auto sin2Theta_t = sin2Theta_i / eta;
     const auto cosTheta_t = safesqrt(1.0f - sin2Theta_t); // NOTE: Important to prevent NaNs
     return (cosTheta_i / eta - cosTheta_t) * n - i / eta;
 }
 
 __host__ __device__ constexpr bool isfinite(const float3& v) {
-    return isfinite(v.x) && isfinite(v.y) && isfinite(v.z);
+    return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
 }
 
 __host__ __device__ constexpr bool ispositive(const float3& v) {
     return v.x > 0.0f && v.y > 0.0f && v.z > 0.0f;
 }
 
-__host__ __device__ float luminance(const float3& linearRGB) {
-    return dot(make_float3(0.2126f, 0.7152f, 0.0722f), linearRGB);
+__host__ __device__ constexpr float luminance(const float3& linearRGB) {
+    return dot({0.2126f, 0.7152f, 0.0722f}, linearRGB);
 }
 
 // Operators on CUDA float4
@@ -511,11 +527,13 @@ __host__ __device__ constexpr float pow2(const float4& a) {
 }
 
 __host__ __device__ constexpr float length(const float4& v) {
-    return norm4df(v.x, v.y, v.z, v.w);
+    //return norm4df(v.x, v.y, v.z, v.w);
+    return sqrtf(dot(v, v));
 }
 
 __host__ __device__ constexpr float4 normalize(const float4& v) {
-    return v * rnorm4df(v.x, v.y, v.z, v.w);
+    //return v * rnorm4df(v.x, v.y, v.z, v.w);
+    return v / length(v);
 }
 
 __host__ __device__ constexpr float4 fract(const float4& v) {
@@ -1161,31 +1179,31 @@ __host__ __device__ constexpr uint dot(const uint4& a, const uint4& b) {
 // float2x2
 
 __host__ __device__ constexpr float2 operator*(const float2x2& m, const float2& v) {
-    return make_float2(
+    return {
         m[0].x * v.x + m[1].x * v.y,
         m[0].y * v.x + m[1].y * v.y
-    );
+    };
 }
 
 // float3x3
 
 __host__ __device__ constexpr float3 operator*(const float3x3& m, const float3& v) {
-    return make_float3(
+    return {
         m[0].x * v.x + m[1].x * v.y + m[2].x * v.z,
         m[0].y * v.x + m[1].y * v.y + m[2].y * v.z,
         m[0].z * v.x + m[1].z * v.y + m[2].z * v.z
-    );
+    };
 }
 
 // float4x4
 
 __host__ __device__ constexpr float4 operator*(const float4x4& m, const float4& v) {
-    return make_float4(
+    return {
         m[0].x * v.x + m[1].x * v.y + m[2].x * v.z + m[3].x * v.w,
         m[0].y * v.x + m[1].y * v.y + m[2].y * v.z + m[3].y * v.w,
         m[0].z * v.x + m[1].z * v.y + m[2].z * v.z + m[3].z * v.w,
         m[0].w * v.x + m[1].w * v.y + m[2].w * v.z + m[3].w * v.w
-    );
+    };
 }
 
 /**
@@ -1207,7 +1225,11 @@ __host__ __device__ constexpr float3x3 buildTBN(const float3& n) {
     float sign = copysignf(1.0f, n.z);
     const float a = -1.0f / (sign + n.z);
     const float b = n.x * n.y * a;
-    const auto b1 = make_float3(1.0f + sign * n.x * n.x * a, sign * b, -sign * n.x);
-    const auto b2 = make_float3(b, sign + n.y * n.y * a, -n.y);
+    const float3 b1 = {1.0f + sign * n.x * n.x * a, sign * b, -sign * n.x};
+    const float3 b2 = {b, sign + n.y * n.y * a, -n.y};
     return make_float3x3(b1, b2, n);
+}
+
+__host__ __device__ constexpr float2 toNormSpherical(const float3& n) {
+    return {atan2f(n.y, n.x) * INV_PI * 0.5f + 0.5f, acosf(n.z) * INV_PI};
 }

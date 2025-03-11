@@ -25,6 +25,7 @@
 #include "cudautil.hpp"
 #include "cudaglm.cuh"
 #include "optixparams.cuh"
+#include "cudamath.cuh"
 
 std::vector<char> readBinaryFile(const std::filesystem::path& filepath) {
     std::ifstream stream{filepath, std::ios::binary};
@@ -174,9 +175,12 @@ void visualizeInference(Params* params) {
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= params->dim.x || y >= params->dim.y) return;
     const int i = y * params->dim.x + x;
+    const int idxIn = i * NRC_INPUT_SIZE;
     const int idxOut = i * NRC_OUTPUT_SIZE;
-    const auto inference = make_float4(params->inferenceOutput[idxOut + 0], params->inferenceOutput[idxOut + 1], params->inferenceOutput[idxOut + 2], 1.0f);
-    params->image[i] = inference;
+    const auto inference = make_float3(params->inferenceOutput[idxOut + 0], params->inferenceOutput[idxOut + 1], params->inferenceOutput[idxOut + 2]);
+    const auto diffuse = make_float3(params->inferenceInput[idxIn + 8], params->inferenceInput[idxIn + 9], params->inferenceInput[idxIn + 10]);
+    const auto specular = make_float3(params->inferenceInput[idxIn + 11], params->inferenceInput[idxIn + 12], params->inferenceInput[idxIn + 13]);
+    params->image[i] = make_float4(inference * (diffuse + specular), 1.0f);
 }
 
 void OptixRenderer::render(vec4* image, uvec2 dim) {
@@ -187,7 +191,7 @@ void OptixRenderer::render(vec4* image, uvec2 dim) {
     check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params), sizeof(Params), &sbt, dim.x, dim.y, 1));
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
 
-    train();
+    if (!scene.isEmpty()) train();
 
     if (params->flags & NRC_INFERENCE_FLAG) {
         nrcModel.network->inference(nrcInferenceInput, nrcInferenceOutput);

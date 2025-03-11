@@ -28,6 +28,7 @@ using namespace glm;
 
 #include "optixparams.cuh"
 #include "cudaglm.cuh"
+#include "cudamath.cuh"
 
 Geometry::Geometry(OptixTraversableHandle handle, CUdeviceptr gasBuffer, CUdeviceptr indexBuffer, CUdeviceptr vertexData, uint sbtOffset, std::optional<Emitter> emitter)
     : handle(handle), gasBuffer(gasBuffer), indexBuffer(indexBuffer), vertexData(vertexData), sbtOffset(sbtOffset), emitter(emitter) {}
@@ -50,6 +51,7 @@ void Scene::free() {
     for (auto& texture : textures) {
         check(cudaDestroyTextureObject(texture));
     }
+    iasBuffer = 0;
 }
 
 std::tuple<OptixTraversableHandle, CUdeviceptr> buildGAS(OptixDeviceContext ctx, const std::vector<OptixBuildInput>& buildInputs) {
@@ -163,10 +165,6 @@ float3 toFloat3(const fastgltf::math::fvec4& v) {
 
 float3 toFloat3(const fastgltf::math::nvec3& v, const fastgltf::num factor) {
     return make_float3(v.x() * factor, v.y() * factor, v.z() * factor);
-}
-
-float luminance(const float3& v) {
-    return 0.2126f * v.x + 0.7152f * v.y + 0.0722f * v.z;
 }
 
 std::ostream& operator<<(std::ostream& os, const float3& v) {

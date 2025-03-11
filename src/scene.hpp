@@ -48,5 +48,6 @@ struct Scene {
     Scene& operator=(Scene&&) = delete;
 
     void free();
+    bool isEmpty() const { return geometryTable.empty(); }
     void loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& o, OptixShaderBindingTable& sbt, const std::filesystem::path& path);
 };

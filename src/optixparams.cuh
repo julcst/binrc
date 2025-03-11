@@ -20,10 +20,14 @@ constexpr uint TRANSMISSION_FLAG = 1 << 0;
 constexpr uint NEE_FLAG = 1 << 1;
 constexpr uint NRC_INFERENCE_FLAG = 1 << 2;
 
+// TODO: Use half instead of float
 struct NRCInput {
     float3 position = make_float3(NAN, 0.0f, 0.0f);
-    float3 direction = make_float3(0.0, 0.0f, 0.0f);
-    float3 baseColor = make_float3(1.0f, 1.0f, 1.0f);
+    float2 wo = make_float2(0.0f, 0.0f);
+    float2 wn = make_float2(0.0f, 0.0f);
+    float roughness = 0.0f;
+    float3 diffuse = make_float3(0.0f, 0.0f, 0.0f);
+    float3 specular = make_float3(0.0f, 0.0f, 0.0f);
 };
 
 struct NRCOutput {
@@ -32,14 +36,15 @@ struct NRCOutput {
 
 constexpr uint NRC_INPUT_SIZE = sizeof(NRCInput) / sizeof(float);
 constexpr uint NRC_OUTPUT_SIZE = sizeof(NRCOutput) / sizeof(float);
-constexpr uint NRC_BATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY * 22;
+constexpr uint NRC_BATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY * 64;
 
 const nlohmann::json NRC_CONFIG = {
 	{"loss", {
-		{"otype", "RelativeL2Luminance"}
+		{"otype", "RelativeL2Luminance"},
 	}},
 	{"optimizer", {
 		{"otype", "Average"},
+        {"n_samples", 32},
         {"nested", {
             {"otype", "Adam"},
             {"learning_rate", 1e-3f},
@@ -59,7 +64,7 @@ const nlohmann::json NRC_CONFIG = {
                 {"interpolation", "Linear"},
             },
             {
-                {"n_dims_to_encode", 3},
+                {"n_dims_to_encode", 5},
                 {"otype", "OneBlob"},
                 {"n_bins", 4},
             },
