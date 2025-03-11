@@ -21,35 +21,44 @@ constexpr uint NEE_FLAG = 1 << 1;
 constexpr uint NRC_INFERENCE_FLAG = 1 << 2;
 
 struct NRCInput {
-    float3 position = make_float3(NAN, NAN, NAN);
+    float3 position = make_float3(NAN, 0.0f, 0.0f);
+};
+
+struct NRCOutput {
+    float3 radiance = make_float3(0.0f, 0.0f, 0.0f);
 };
 
 constexpr uint NRC_INPUT_SIZE = sizeof(NRCInput) / sizeof(float);
-constexpr uint NRC_OUTPUT_SIZE = 3;
-constexpr uint NRC_BATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY * 44;
+constexpr uint NRC_OUTPUT_SIZE = sizeof(NRCOutput) / sizeof(float);
+constexpr uint NRC_BATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY * 22;
 
 const nlohmann::json NRC_CONFIG = {
 	{"loss", {
 		{"otype", "RelativeL2Luminance"}
 	}},
 	{"optimizer", {
-		{"otype", "Adam"},
-		{"learning_rate", 1e-3},
+		{"otype", "Average"},
+        {"nested", {
+            {"otype", "Adam"},
+            {"learning_rate", 1e-2f},
+        }},
 	}},
 	{"encoding", {
-		{"otype", "HashGrid"},
-		{"n_levels", 16},
-		{"n_features_per_level", 2},
-		{"log2_hashmap_size", 19},
-		{"base_resolution", 16},
-		{"per_level_scale", 2.0},
-	}},
+		{"otype", "Composite"},
+        {"nested", {
+            {
+                {"n_dims_to_encode", 3},
+                {"otype", "Grid"},
+                {"type", "Hash"},
+            },
+        }},
+    }},
 	{"network", {
 		{"otype", "FullyFusedMLP"},
 		{"activation", "ReLU"},
 		{"output_activation", "None"},
-		{"n_neurons", 64},
-		{"n_hidden_layers", 3},
+		{"n_neurons", 32},
+		{"n_hidden_layers", 5},
 	}},
 };
 
@@ -116,29 +125,14 @@ struct Params {
 extern "C" __constant__ Params params;
 
 __host__ inline void initParams(Params* params) {
-    params->image = nullptr;
-    params->dim = make_uint2(0, 0);
-    params->handle = 0;
     params->clipToWorld = make_float4x4(make_float4(1.0f, 0.0f, 0.0f, 0.0f),
                                         make_float4(0.0f, 1.0f, 0.0f, 0.0f),
                                         make_float4(0.0f, 0.0f, 1.0f, 0.0f),
                                         make_float4(0.0f, 0.0f, 0.0f, 1.0f));
-    params->sequenceOffset = 0;
-    params->sequenceStride = 0;
-    params->sample = 0;
     params->weight = 1.0f;
     params->russianRouletteWeight = 10.0f;
     params->sceneEpsilon = 1e-4f;
     params->flags = TRANSMISSION_FLAG | NEE_FLAG;
-    params->randSequence = nullptr;
-    params->rotationTable = nullptr;
-    params->materials = nullptr;
-    params->lightTable = nullptr;
-    params->lightTableSize = 0;
-    params->trainingInput = nullptr;
-    params->trainingTarget = nullptr;
-    params->inferenceInput = nullptr;
-    params->inferenceOutput = nullptr;
 }
 
 __device__ inline float getRand(uint dim) {

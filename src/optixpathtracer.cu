@@ -163,6 +163,9 @@ extern "C" __global__ void __raygen__rg() {
     auto prevBrdfPdf = 1.0f;
     auto diracEvent = true;
 
+    auto trainInput = NRCInput{};
+    auto trainTarget = NRCOutput{};
+
     auto nrcQuery = NRCInput{};
     
     for (uint depth = 1; depth < MAX_BOUNCES; depth++) {
@@ -201,11 +204,9 @@ extern "C" __global__ void __raygen__rg() {
         const auto metallic = payload.metallic;
         const auto baseColor = payload.baseColor; // baseColor
 
-        // NRC Training
-        if (getRand(depth, 2, rotation.y) < 0.001f) pushTrainingSample(hitPoint, baseColor);
-
         // NRC Inference Input
         if (depth == 1) {
+            trainInput.position = hitPoint;
             nrcQuery.position = hitPoint;
         }
 
@@ -237,6 +238,21 @@ extern "C" __global__ void __raygen__rg() {
         diracEvent = sample.isDirac;
     }
 
+    trainTarget.radiance = color;
+    
+    // NRC Training
+    if (isfinite(trainInput.position) && isfinite(trainTarget.radiance) && getRand(1, 2, rotation.y) < NRC_BATCH_SIZE / float(params.dim.x * params.dim.y)) {
+        const auto trainIdx = i % NRC_BATCH_SIZE;
+        const auto inputIdx = trainIdx * NRC_INPUT_SIZE;
+        const auto outputIdx = trainIdx * NRC_OUTPUT_SIZE;
+        params.trainingInput[inputIdx + 0] = trainInput.position.x;
+        params.trainingInput[inputIdx + 1] = trainInput.position.y;
+        params.trainingInput[inputIdx + 2] = trainInput.position.z;
+        params.trainingTarget[outputIdx + 0] = trainTarget.radiance.x;
+        params.trainingTarget[outputIdx + 1] = trainTarget.radiance.y;
+        params.trainingTarget[outputIdx + 2] = trainTarget.radiance.z;
+    }
+
     // NRC Inference
     const auto inputIdx = i * NRC_INPUT_SIZE;
     params.inferenceInput[inputIdx + 0] = nrcQuery.position.x;
@@ -246,7 +262,7 @@ extern "C" __global__ void __raygen__rg() {
     // NOTE: We should not need to prevent NaNs
     // FIXME: NaNs
     //if (isfinite(color))
-    params.image[i] = mix(params.image[i], make_float4(max(color, 0.0f), 1.0f), params.weight); // FXIME: Negative colors
+    params.image[i] = mix(params.image[i], make_float4(max(color, 0.0f), 1.0f), params.weight); // FIXME: Negative colors
 }
 
 extern "C" __global__ void __closesthit__ch() {

@@ -134,6 +134,7 @@ OptixRenderer::OptixRenderer() {
     };
 
     check(cudaMallocManaged(reinterpret_cast<void**>(&params), sizeof(Params)));
+    check(cudaMemset(params, 0, sizeof(Params)));
     initParams(params);
 
     nrcModel = tcnn::create_from_config(NRC_INPUT_SIZE, NRC_OUTPUT_SIZE, NRC_CONFIG);
