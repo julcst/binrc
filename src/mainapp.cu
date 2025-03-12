@@ -141,7 +141,7 @@ void MainApp::buildImGui() {
             renderer.setCamera(clipToWorld);
             reset = true;
         }
-        ImGui::SameLine();
+        if (i < renderer.scene.cameras.size() - 1) ImGui::SameLine();
     }
     ImGui::SeparatorText("NRC");
     reset |= FlagCheckbox("Enable NRC Inference", &renderer.params->flags, NRC_INFERENCE_FLAG);

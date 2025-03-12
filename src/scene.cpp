@@ -372,6 +372,8 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
 
     std::vector<EmissiveTriangle> lightTable;
     std::vector<OptixInstance> instances(nInstances);
+    cameras.clear();
+    
     uint i = 0;
     // FIXME: Loading scenes with multiple primitves per mesh
     for (const auto& node : asset->nodes) {
