@@ -163,21 +163,33 @@ extern "C" __global__ void __raygen__rg() {
     auto prevBrdfPdf = 1.0f;
     auto diracEvent = true;
 
+    auto trainDepth = -1;
+    if (getRand(1, 2, rotation.y) < NRC_BATCH_SIZE / float(params.dim.x * params.dim.y)) {
+        trainDepth = int(getRand(1, 3, rotation.z) * 6) + 1;
+    }
     auto trainInput = NRCInput{};
     auto trainTarget = NRCOutput{};
+    auto trainThroughput = make_float3(1.0f);
 
     auto nrcQuery = NRCInput{};
     
     for (uint depth = 1; depth < MAX_BOUNCES; depth++) {
+        if (depth == trainDepth) {
+            trainTarget.radiance = make_float3(0.0f);
+            trainThroughput = make_float3(1.0f);
+        }
+
         // Russian roulette
         const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
         if (getRand(depth, 3, rotation.z) >= pContinue) break;
         throughput /= pContinue;
+        trainThroughput /= pContinue;
 
         payload = trace(ray);
 
         if (isinf(payload.t)) {
             color += throughput * payload.emission;
+            trainTarget.radiance += trainThroughput * payload.emission;
             break; // Skybox
         }
 
@@ -197,6 +209,7 @@ extern "C" __global__ void __raygen__rg() {
 #endif
             }
             color += throughput * payload.emission * weight;
+            trainTarget.radiance += trainThroughput * payload.emission * weight;
         }
 
         const auto hitPoint = ray.origin + payload.t * ray.direction;
@@ -216,7 +229,7 @@ extern "C" __global__ void __raygen__rg() {
             nrcQuery.specular = F0;
         }
 
-        if (depth == 1) {
+        if (depth == trainDepth) {
             const auto F0 = mix(make_float3(0.04f), baseColor, metallic);
             const auto albedo = (1.0f - metallic) * baseColor;
             trainInput.position = hitPoint;
@@ -239,6 +252,7 @@ extern "C" __global__ void __raygen__rg() {
                 if (!brdf.isDirac && brdf.pdf > 0.0f && !traceOcclusion(surfacePoint, lightPoint)) {
                     const auto weight = balanceHeuristic(sample.pdf, brdf.pdf);
                     color += throughput * brdf.throughput * sample.emission * weight / sample.pdf;
+                    trainTarget.radiance += trainThroughput * brdf.throughput * sample.emission * weight / sample.pdf;
 #ifdef DEBUGPRINT
     if (getRand(depth, 0, rotation.y) < 0.001f) printf("\t\t\t\t\t\tNEE We: %.3f BRDF: %.3f Light: %.3f\n", weight, brdf.pdf, sample.pdf);
 #endif
@@ -251,11 +265,12 @@ extern "C" __global__ void __raygen__rg() {
         
         ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
         throughput *= sample.throughput;
+        trainThroughput *= sample.throughput;
         prevBrdfPdf = sample.pdf;
         diracEvent = sample.isDirac;
     }
 
-    trainTarget.radiance = color / max(trainInput.diffuse + trainInput.specular, 1e-3f);
+    trainTarget.radiance = trainTarget.radiance / max(trainInput.diffuse + trainInput.specular, 1e-3f);
     
     // NRC Training
     if (isfinite(trainInput.position)
@@ -308,6 +323,7 @@ extern "C" __global__ void __raygen__rg() {
     // NOTE: We should not need to prevent NaNs
     // FIXME: NaNs
     //if (isfinite(color))
+    if (!(NRC_INFERENCE_FLAG & params.flags))
     params.image[i] = mix(params.image[i], make_float4(max(color, 0.0f), 1.0f), params.weight); // FIXME: Negative colors
 }
 
@@ -368,7 +384,7 @@ extern "C" __global__ void __closesthit__ch() {
 
 extern "C" __global__ void __miss__ms() {
     const auto dir = optixGetWorldRayDirection();
-    auto sky = make_float3(0.1f);
+    auto sky = make_float3(0.0f);
 
     setEmission(sky);
     setT(INFINITY);

@@ -44,7 +44,7 @@ const nlohmann::json NRC_CONFIG = {
 	}},
 	{"optimizer", {
 		{"otype", "EMA"},
-        {"decay", 0.99f},
+        {"decay", 0.95f},
         {"nested", {
             {"otype", "Adam"},
             {"learning_rate", 1e-3f},

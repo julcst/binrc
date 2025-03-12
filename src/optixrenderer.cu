@@ -180,7 +180,7 @@ void visualizeInference(Params* params) {
     const auto inference = make_float3(params->inferenceOutput[idxOut + 0], params->inferenceOutput[idxOut + 1], params->inferenceOutput[idxOut + 2]);
     const auto diffuse = make_float3(params->inferenceInput[idxIn + 8], params->inferenceInput[idxIn + 9], params->inferenceInput[idxIn + 10]);
     const auto specular = make_float3(params->inferenceInput[idxIn + 11], params->inferenceInput[idxIn + 12], params->inferenceInput[idxIn + 13]);
-    params->image[i] = make_float4(inference * (diffuse + specular), 1.0f);
+    params->image[i] = mix(params->image[i], make_float4(inference * (diffuse + specular), 1.0f), params->weight);
 }
 
 void OptixRenderer::render(vec4* image, uvec2 dim) {
