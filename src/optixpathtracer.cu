@@ -131,18 +131,39 @@ __device__ bool traceOcclusion(const float3& a, const float3& b) {
     return optixHitObjectIsHit();
 }
 
-__device__ void pushTrainingSample(float3 pos, float3 color) {
-    const auto idx = optixGetLaunchIndex();
-    const auto dim = optixGetLaunchDimensions();
-    const auto i = (idx.y * params.dim.x + idx.x) % NRC_BATCH_SIZE;
-    const auto inputIdx = i * NRC_INPUT_SIZE;
-    const auto outputIdx = i * NRC_OUTPUT_SIZE;
-    params.trainingInput[inputIdx + 0] = pos.x;
-    params.trainingInput[inputIdx + 1] = pos.y;
-    params.trainingInput[inputIdx + 2] = pos.z;
-    params.trainingTarget[outputIdx + 0] = color.x;
-    params.trainingTarget[outputIdx + 1] = color.y;
-    params.trainingTarget[outputIdx + 2] = color.z;
+__device__ NRCInput encodeInput(const float3& position, const float3& wo, const float3& wn, const float3& diffuse, const float3& specular, float alpha) {
+    return {
+        .position = position,
+        .wo = toNormSpherical(wo),
+        .wn = toNormSpherical(wn),
+        //.roughness = 1 - exp(-alpha),
+        .roughness = alpha,
+        .diffuse = diffuse,
+        .specular = specular,
+    };
+}
+
+__device__ void pushNRCInput(float* to, const NRCInput& input) {
+    to[0] = input.position.x;
+    to[1] = input.position.y;
+    to[2] = input.position.z;
+    to[3] = input.wo.x;
+    to[4] = input.wo.y;
+    to[5] = input.wn.x;
+    to[6] = input.wn.y;
+    to[7] = input.roughness;
+    to[8] = input.diffuse.x;
+    to[9] = input.diffuse.y;
+    to[10] = input.diffuse.z;
+    to[11] = input.specular.x;
+    to[12] = input.specular.y;
+    to[13] = input.specular.z;
+}
+
+__device__ void pushNRCOutput(float* to, const NRCOutput& output) {
+    to[0] = output.radiance.x;
+    to[1] = output.radiance.y;
+    to[2] = output.radiance.z;
 }
 
 extern "C" __global__ void __raygen__rg() {
@@ -167,11 +188,13 @@ extern "C" __global__ void __raygen__rg() {
     if (getRand(1, 2, rotation.y) < NRC_BATCH_SIZE / float(params.dim.x * params.dim.y)) {
         trainDepth = int(getRand(1, 3, rotation.z) * 6) + 1;
     }
-    auto trainInput = NRCInput{};
     auto trainTarget = NRCOutput{};
+    auto reflectanceFactorizationTerm = make_float3(1.0f);
     auto trainThroughput = make_float3(1.0f);
+    bool isTrainingPath = trainDepth >= 0;
+    bool writeTrainingSample = false;
 
-    auto nrcQuery = NRCInput{};
+    NRCInput nrcQuery {};
     
     for (uint depth = 1; depth < MAX_BOUNCES; depth++) {
         if (depth == trainDepth) {
@@ -217,31 +240,22 @@ extern "C" __global__ void __raygen__rg() {
         const auto metallic = payload.metallic;
         const auto baseColor = payload.baseColor; // baseColor
 
-        // NRC Inference Input
-        if (depth == 1) {
+        if (depth == trainDepth && luminance(payload.emission) < 1e-3f) { // NOTE: Maybe skipping emissive vertices reduces variance
             const auto F0 = mix(make_float3(0.04f), baseColor, metallic);
             const auto albedo = (1.0f - metallic) * baseColor;
-            nrcQuery.position = hitPoint;
-            nrcQuery.wo = toNormSpherical(wo);
-            nrcQuery.wn = toNormSpherical(n);
-            nrcQuery.roughness = 1 - exp(-alpha);
-            nrcQuery.diffuse = albedo;
-            nrcQuery.specular = F0;
+            auto trainInput = encodeInput(hitPoint, wo, n, albedo, F0, alpha);
+            reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
+            const auto inputIdx = (i % NRC_BATCH_SIZE) * NRC_INPUT_SIZE;
+            pushNRCInput(params.trainingInput + inputIdx, trainInput);
+            writeTrainingSample = true;
         }
 
-        // NOTE: Maybe skipping emissive vertices reduces variance
-        if (depth == trainDepth) {
+        // NRC Inference Input
+        if ((params.inferenceMode == InferenceMode::FIRST_VERTEX || params.inferenceMode == InferenceMode::RAW_CACHE) && depth == 1) {
             const auto F0 = mix(make_float3(0.04f), baseColor, metallic);
             const auto albedo = (1.0f - metallic) * baseColor;
-            trainInput.position = hitPoint;
-            trainInput.wo = toNormSpherical(wo);
-            trainInput.wn = toNormSpherical(n);
-            trainInput.roughness = 1 - exp(-alpha);
-            trainInput.diffuse = albedo;
-            trainInput.specular = F0;
-            if (luminance(payload.emission) > 0.0f) {
-                trainInput.position = make_float3(NAN, 0.0f, 0.0f);
-            }
+            nrcQuery = encodeInput(hitPoint, wo, n, albedo, F0, alpha);
+            if (!isTrainingPath) break;
         }
 
         // Next event estimation
@@ -264,6 +278,14 @@ extern "C" __global__ void __raygen__rg() {
             //}
         }
 
+        // NRC Inference Input
+        if (params.inferenceMode == InferenceMode::FIRST_VERTEX_WITH_NEE && depth == 1) {
+            const auto F0 = mix(make_float3(0.04f), baseColor, metallic);
+            const auto albedo = (1.0f - metallic) * baseColor;
+            nrcQuery = encodeInput(hitPoint, wo, n, albedo, F0, alpha);
+            if (!isTrainingPath) break;
+        }
+
         // TODO: Move sampling into closesthit to benefit from reordering
         const auto sample = sampleDisney(getRand(depth, 0, rotation.w), getRand(depth, 1, rotation.x, rotation.y), getRand(depth, 1, rotation.z, rotation.w), wo, n, inside, baseColor, metallic, alpha, payload.transmission);
         
@@ -274,60 +296,18 @@ extern "C" __global__ void __raygen__rg() {
         diracEvent = sample.isDirac;
     }
 
-    trainTarget.radiance = trainTarget.radiance / max(trainInput.diffuse + trainInput.specular, 1e-3f);
-    
-    // NRC Training
-    if (isfinite(trainInput.position)
-        && isfinite(trainInput.wo)
-        && isfinite(trainInput.wn)
-        && isfinite(trainInput.roughness)
-        && isfinite(trainInput.diffuse)
-        && isfinite(trainInput.specular)
-        && isfinite(trainTarget.radiance)
-        && getRand(1, 2, rotation.y) < NRC_BATCH_SIZE / float(params.dim.x * params.dim.y)) {
-        const auto trainIdx = i % NRC_BATCH_SIZE;
-        const auto inputIdx = trainIdx * NRC_INPUT_SIZE;
-        const auto outputIdx = trainIdx * NRC_OUTPUT_SIZE;
-        params.trainingInput[inputIdx + 0] = trainInput.position.x;
-        params.trainingInput[inputIdx + 1] = trainInput.position.y;
-        params.trainingInput[inputIdx + 2] = trainInput.position.z;
-        params.trainingInput[inputIdx + 3] = trainInput.wo.x;
-        params.trainingInput[inputIdx + 4] = trainInput.wo.y;
-        params.trainingInput[inputIdx + 5] = trainInput.wn.x;
-        params.trainingInput[inputIdx + 6] = trainInput.wn.y;
-        params.trainingInput[inputIdx + 7] = trainInput.roughness;
-        params.trainingInput[inputIdx + 8] = trainInput.diffuse.x;
-        params.trainingInput[inputIdx + 9] = trainInput.diffuse.y;
-        params.trainingInput[inputIdx + 10] = trainInput.diffuse.z;
-        params.trainingInput[inputIdx + 11] = trainInput.specular.x;
-        params.trainingInput[inputIdx + 12] = trainInput.specular.y;
-        params.trainingInput[inputIdx + 13] = trainInput.specular.z;
-        params.trainingTarget[outputIdx + 0] = trainTarget.radiance.x;
-        params.trainingTarget[outputIdx + 1] = trainTarget.radiance.y;
-        params.trainingTarget[outputIdx + 2] = trainTarget.radiance.z;
+    if (writeTrainingSample) {
+        trainTarget.radiance *= reflectanceFactorizationTerm;
+        const auto outputIdx = (i % NRC_BATCH_SIZE) * NRC_OUTPUT_SIZE;
+        pushNRCOutput(params.trainingTarget + outputIdx, trainTarget);
     }
 
-    // NRC Inference
     const auto inputIdx = i * NRC_INPUT_SIZE;
-    params.inferenceInput[inputIdx + 0] = nrcQuery.position.x;
-    params.inferenceInput[inputIdx + 1] = nrcQuery.position.y;
-    params.inferenceInput[inputIdx + 2] = nrcQuery.position.z;
-    params.inferenceInput[inputIdx + 3] = nrcQuery.wo.x;
-    params.inferenceInput[inputIdx + 4] = nrcQuery.wo.y;
-    params.inferenceInput[inputIdx + 5] = nrcQuery.wn.x;
-    params.inferenceInput[inputIdx + 6] = nrcQuery.wn.y;
-    params.inferenceInput[inputIdx + 7] = nrcQuery.roughness;
-    params.inferenceInput[inputIdx + 8] = nrcQuery.diffuse.x;
-    params.inferenceInput[inputIdx + 9] = nrcQuery.diffuse.y;
-    params.inferenceInput[inputIdx + 10] = nrcQuery.diffuse.z;
-    params.inferenceInput[inputIdx + 11] = nrcQuery.specular.x;
-    params.inferenceInput[inputIdx + 12] = nrcQuery.specular.y;
-    params.inferenceInput[inputIdx + 13] = nrcQuery.specular.z;
+    pushNRCInput(params.inferenceInput + inputIdx, nrcQuery);
 
     // NOTE: We should not need to prevent NaNs
     // FIXME: NaNs
     //if (isfinite(color))
-    if (!(NRC_INFERENCE_FLAG & params.flags))
     params.image[i] = mix(params.image[i], make_float4(max(color, 0.0f), 1.0f), params.weight); // FIXME: Negative colors
 }
 

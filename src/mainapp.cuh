@@ -13,10 +13,30 @@
 using namespace glm;
 
 #include <string>
+#include <string_view>
 #include <filesystem>
 #include <vector>
+#include <array>
 
 #include "optixrenderer.cuh"
+
+#include <framework/imguiutil.hpp>
+#include <imgui.h>
+#include <misc/cpp/imgui_stdlib.h>
+
+template <typename T, size_t N>
+constexpr bool EnumCombo(const char* label, T* curr, const std::array<std::string_view, N>& items) {
+    return ImGui::Combo(
+        label, reinterpret_cast<int*>(curr),
+        [](void* data, int idx, const char** out_text) {
+            auto items = reinterpret_cast<const std::array<std::string_view, N>*>(data);
+            *out_text = items->at(idx).data();
+            return true;
+        },
+        const_cast<void*>(reinterpret_cast<const void*>(&items)),
+        N
+    );
+}
 
 class MainApp : public App {
   public:

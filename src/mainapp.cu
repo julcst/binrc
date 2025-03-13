@@ -144,7 +144,7 @@ void MainApp::buildImGui() {
         if (i < renderer.scene.cameras.size() - 1) ImGui::SameLine();
     }
     ImGui::SeparatorText("NRC");
-    reset |= FlagCheckbox("Enable NRC Inference", &renderer.params->flags, NRC_INFERENCE_FLAG);
+    reset |= EnumCombo("Inference Mode", &renderer.params->inferenceMode, INFERENCE_MODES);
     ImGui::PlotLines("Loss", renderer.lossHistory.data(), renderer.lossHistory.size());
     if (ImGui::Button("Reset NRC")) {
         renderer.resetNRC();

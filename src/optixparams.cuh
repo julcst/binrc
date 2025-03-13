@@ -2,6 +2,7 @@
 
 #include <cuda_runtime.h>
 #include <array>
+#include <string_view>
 
 #include <tiny-cuda-nn/common.h>
 #include <json/json.hpp>
@@ -18,7 +19,6 @@ constexpr uint RAND_SEQUENCE_CACHE_SIZE = 4096;
 
 constexpr uint TRANSMISSION_FLAG = 1 << 0;
 constexpr uint NEE_FLAG = 1 << 1;
-constexpr uint NRC_INFERENCE_FLAG = 1 << 2;
 
 // TODO: Use half instead of float
 struct NRCInput {
@@ -48,6 +48,13 @@ const nlohmann::json NRC_CONFIG = {
         {"nested", {
             {"otype", "Adam"},
             {"learning_rate", 1e-3f},
+            {"beta1", 0.9f},
+            {"beta2", 0.999f},
+            {"epsilon", 1e-8f},
+            {"l2_reg", 0.0f},
+            {"relative_decay", 0.0f},
+            {"absolute_decay", 0.0f},
+            {"adabound", false},
         }},
 	}},
 	{"encoding", {
@@ -61,6 +68,7 @@ const nlohmann::json NRC_CONFIG = {
                 {"n_feature_per_level", 2},
                 {"log2_hashmap_size", 19},
                 {"base_resolution", 16},
+                {"per_level_scale", 1.5f},
                 {"interpolation", "Linear"},
             },
             {
@@ -113,6 +121,24 @@ struct EmissiveTriangle {
     float3 n2;
 };
 
+constexpr std::array<std::string_view, 6> INFERENCE_MODES = {
+    "No Inference",
+    "Raw Cache",
+    "1st Vertex",
+    "1st Vertex + NEE",
+    "1st Diffuse",
+    "Variance Heuristic",
+};
+
+enum class InferenceMode : u_int8_t {
+    NO_INFERENCE,
+    RAW_CACHE,
+    FIRST_VERTEX,
+    FIRST_VERTEX_WITH_NEE,
+    FIRST_DIFFUSE,
+    VARIANCE_HEURISTIC,
+};
+
 // NOTE: Because this includes pointers this should be zero-initialized using cudaMemset
 struct Params {
     float4* image; // A copied pointer to the image buffer
@@ -126,6 +152,7 @@ struct Params {
     float russianRouletteWeight; // Weight for Russian Roulette
     float sceneEpsilon; // Scene epsilon
     uint flags;
+    InferenceMode inferenceMode;
 
 ////////////////// OWNED MEMORY //////////////////
 // NOTE: This is owned memory and must be freed //

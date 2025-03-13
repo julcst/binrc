@@ -142,6 +142,10 @@ OptixRenderer::OptixRenderer() {
     nrcTrainInput = tcnn::GPUMatrix<float>(NRC_INPUT_SIZE, NRC_BATCH_SIZE);
     nrcTrainOutput = tcnn::GPUMatrix<float>(NRC_OUTPUT_SIZE, NRC_BATCH_SIZE);
 
+    std::cout << "Network: " << std::setw(2) << nrcModel.network->hyperparams()
+              << "\nTrainer: " << std::setw(2) << nrcModel.trainer->hyperparams()
+              << std::endl;
+
     params->trainingInput = nrcTrainInput.data();
     params->trainingTarget = nrcTrainOutput.data();
 }
@@ -177,10 +181,11 @@ void visualizeInference(Params* params) {
     const int i = y * params->dim.x + x;
     const int idxIn = i * NRC_INPUT_SIZE;
     const int idxOut = i * NRC_OUTPUT_SIZE;
-    const auto inference = make_float3(params->inferenceOutput[idxOut + 0], params->inferenceOutput[idxOut + 1], params->inferenceOutput[idxOut + 2]);
+    auto inference = make_float3(params->inferenceOutput[idxOut + 0], params->inferenceOutput[idxOut + 1], params->inferenceOutput[idxOut + 2]);
     const auto diffuse = make_float3(params->inferenceInput[idxIn + 8], params->inferenceInput[idxIn + 9], params->inferenceInput[idxIn + 10]);
     const auto specular = make_float3(params->inferenceInput[idxIn + 11], params->inferenceInput[idxIn + 12], params->inferenceInput[idxIn + 13]);
-    params->image[i] = mix(params->image[i], make_float4(inference * (diffuse + specular), 1.0f), params->weight);
+    if (params->inferenceMode != InferenceMode::RAW_CACHE) inference *= (diffuse + specular);
+    params->image[i] += params->weight * make_float4(inference, 1.0f);
 }
 
 void OptixRenderer::render(vec4* image, uvec2 dim) {
@@ -193,12 +198,13 @@ void OptixRenderer::render(vec4* image, uvec2 dim) {
 
     if (!scene.isEmpty()) train();
 
-    if (params->flags & NRC_INFERENCE_FLAG) {
+    if (params->inferenceMode != InferenceMode::NO_INFERENCE) {
         nrcModel.network->inference(nrcInferenceInput, nrcInferenceOutput);
 
         dim3 block(16, 16);
         dim3 grid((dim.x + block.x - 1) / block.x, (dim.y + block.y - 1) / block.y);
         visualizeInference<<<grid, block>>>(params);
+        check(cudaDeviceSynchronize()); // Wait for the visualization to finish
     }
     
     params->sample++;
