@@ -229,6 +229,7 @@ extern "C" __global__ void __raygen__rg() {
             nrcQuery.specular = F0;
         }
 
+        // NOTE: Maybe skipping emissive vertices reduces variance
         if (depth == trainDepth) {
             const auto F0 = mix(make_float3(0.04f), baseColor, metallic);
             const auto albedo = (1.0f - metallic) * baseColor;
@@ -238,6 +239,9 @@ extern "C" __global__ void __raygen__rg() {
             trainInput.roughness = 1 - exp(-alpha);
             trainInput.diffuse = albedo;
             trainInput.specular = F0;
+            if (luminance(payload.emission) > 0.0f) {
+                trainInput.position = make_float3(NAN, 0.0f, 0.0f);
+            }
         }
 
         // Next event estimation
@@ -384,7 +388,7 @@ extern "C" __global__ void __closesthit__ch() {
 
 extern "C" __global__ void __miss__ms() {
     const auto dir = optixGetWorldRayDirection();
-    auto sky = make_float3(0.0f);
+    auto sky = make_float3(0.03f);
 
     setEmission(sky);
     setT(INFINITY);
