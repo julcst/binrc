@@ -173,8 +173,7 @@ void OptixRenderer::setCamera(const mat4& clipToWorld) {
     params->clipToWorld = glmToCuda(clipToWorld);
 }
 
-__global__
-void visualizeInference(Params* params) {
+__global__ void visualizeInference(Params* params) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= params->dim.x || y >= params->dim.y) return;
@@ -182,10 +181,15 @@ void visualizeInference(Params* params) {
     const int idxIn = i * NRC_INPUT_SIZE;
     const int idxOut = i * NRC_OUTPUT_SIZE;
     auto inference = make_float3(params->inferenceOutput[idxOut + 0], params->inferenceOutput[idxOut + 1], params->inferenceOutput[idxOut + 2]);
-    const auto diffuse = make_float3(params->inferenceInput[idxIn + 8], params->inferenceInput[idxIn + 9], params->inferenceInput[idxIn + 10]);
-    const auto specular = make_float3(params->inferenceInput[idxIn + 11], params->inferenceInput[idxIn + 12], params->inferenceInput[idxIn + 13]);
-    if (params->inferenceMode != InferenceMode::RAW_CACHE) inference *= (diffuse + specular);
-    params->image[i] += params->weight * make_float4(inference, 1.0f);
+    if (!isfinite(inference)) return;
+    if (params->inferenceMode == InferenceMode::RAW_CACHE) {
+        params->image[i] = make_float4(inference, 1.0f);
+    } else {
+        const auto diffuse = make_float3(params->inferenceInput[idxIn + 8], params->inferenceInput[idxIn + 9], params->inferenceInput[idxIn + 10]);
+        const auto specular = make_float3(params->inferenceInput[idxIn + 11], params->inferenceInput[idxIn + 12], params->inferenceInput[idxIn + 13]);
+        const auto throughput = params->inferenceThroughput[i];
+        params->image[i] += params->weight * make_float4(inference * (diffuse + specular) * throughput, 1.0f);
+    }
 }
 
 void OptixRenderer::render(vec4* image, uvec2 dim) {
@@ -238,10 +242,14 @@ void OptixRenderer::ensureSobol(uint sample) {
 
 void OptixRenderer::resize(uvec2 dim) {
     // Generate inference input and output buffers
-    nrcInferenceInput = tcnn::GPUMatrix<float>(NRC_INPUT_SIZE, dim.x * dim.y);
-    nrcInferenceOutput = tcnn::GPUMatrix<float>(NRC_OUTPUT_SIZE, dim.x * dim.y);
+    auto inferenceBatchSize = dim.x * dim.y;
+    inferenceBatchSize += tcnn::BATCH_SIZE_GRANULARITY - inferenceBatchSize % tcnn::BATCH_SIZE_GRANULARITY; // Round up to the next multiple of BATCH_SIZE_GRANULARITY
+    nrcInferenceInput = tcnn::GPUMatrix<float>(NRC_INPUT_SIZE, inferenceBatchSize);
+    nrcInferenceOutput = tcnn::GPUMatrix<float>(NRC_OUTPUT_SIZE, inferenceBatchSize);
+    nrcInferenceThroughput = tcnn::GPUMemory<float3>(inferenceBatchSize);
     params->inferenceInput = nrcInferenceInput.data();
     params->inferenceOutput = nrcInferenceOutput.data();
+    params->inferenceThroughput = nrcInferenceThroughput.data();
 
     // Generate the Cranley-Patterson-Rotation per pixel
     // NOTE: We rebuild the generator on resize, this makes resize slow but saves memory

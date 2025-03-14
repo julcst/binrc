@@ -90,16 +90,21 @@ MainApp::~MainApp() {
     check(cudaGraphicsUnregisterResource(cudaPboResource));
 }
 
-void MainApp::resizeCallback(const vec2& res) { 
+void MainApp::resize(const ivec2& res) {
+    bufferDim = uvec2(res);
     if (cudaPboResource) check(cudaGraphicsUnregisterResource(cudaPboResource)); // Unregister the old resource to prevent memory leak
     pbo.allocate(res.x * res.y * sizeof(vec4), GL_STREAM_DRAW);
     check(cudaGraphicsGLRegisterBuffer(&cudaPboResource, pbo.handle, cudaGraphicsMapFlagsWriteDiscard));
     blitTexture = Texture<GL_TEXTURE_2D>();
     blitTexture.allocate2D(GL_RGBA32F, res.x, res.y);
     blitTexture.bindTextureUnit(0);
-    camera.resize(res.x / res.y);
+    camera.resize(float(res.x) / float(res.y));
     renderer.reset();
     renderer.resize(uvec2(res));
+}
+
+void MainApp::resizeCallback(const vec2& res) { 
+    resize(res); // TODO: Fix scaling issues
 }
 
 void MainApp::keyCallback(Key key, Action action, Modifier modifier) {
@@ -161,21 +166,20 @@ void MainApp::render() {
     size_t size;
     check(cudaGraphicsMapResources(1, &cudaPboResource));
     check(cudaGraphicsResourceGetMappedPointer(reinterpret_cast<void**>(&image), &size, cudaPboResource));
-    const auto dim = uvec2(resolution);
 
     if(camera.updateIfChanged()) {
         renderer.setCamera(inverse(camera.projectionMatrix * camera.viewMatrix));
         renderer.reset();
     }
 
-    renderer.render(image, dim);
+    renderer.render(image, bufferDim);
 
     // Unmap the buffer
     check(cudaGraphicsUnmapResources(1, &cudaPboResource));
 
     // Map the buffer to a texture
     pbo.bind();
-    glTextureSubImage2D(blitTexture.handle, 0, 0, 0, dim.x, dim.y, GL_RGBA, GL_FLOAT, nullptr);
+    glTextureSubImage2D(blitTexture.handle, 0, 0, 0, bufferDim.x, bufferDim.y, GL_RGBA, GL_FLOAT, nullptr);
 
     // Blit the texture using OpenGL
     fullscreenTriangle.draw();

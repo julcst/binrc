@@ -133,7 +133,7 @@ __device__ bool traceOcclusion(const float3& a, const float3& b) {
 
 __device__ NRCInput encodeInput(const float3& position, const float3& wo, const float3& wn, const float3& diffuse, const float3& specular, float alpha) {
     return {
-        .position = position,
+        .position = position * 0.1f + 0.5f, // TODO: Normalize position
         .wo = toNormSpherical(wo),
         .wn = toNormSpherical(wn),
         //.roughness = 1 - exp(-alpha),
@@ -185,6 +185,7 @@ extern "C" __global__ void __raygen__rg() {
     auto diracEvent = true;
 
     auto trainDepth = -1;
+    // TODO: Train the whole path
     if (getRand(1, 2, rotation.y) < NRC_BATCH_SIZE / float(params.dim.x * params.dim.y)) {
         trainDepth = int(getRand(1, 3, rotation.z) * 6) + 1;
     }
@@ -193,6 +194,8 @@ extern "C" __global__ void __raygen__rg() {
     auto trainThroughput = make_float3(1.0f);
     bool isTrainingPath = trainDepth >= 0;
     bool writeTrainingSample = false;
+    float3 inferenceThroughput = make_float3(1.0f);
+    float3 inferencePlus = make_float3(0.0f);
 
     NRCInput nrcQuery {};
     
@@ -255,6 +258,8 @@ extern "C" __global__ void __raygen__rg() {
             const auto F0 = mix(make_float3(0.04f), baseColor, metallic);
             const auto albedo = (1.0f - metallic) * baseColor;
             nrcQuery = encodeInput(hitPoint, wo, n, albedo, F0, alpha);
+            inferenceThroughput = throughput;
+            inferencePlus = color;
             if (!isTrainingPath) break;
         }
 
@@ -283,6 +288,8 @@ extern "C" __global__ void __raygen__rg() {
             const auto F0 = mix(make_float3(0.04f), baseColor, metallic);
             const auto albedo = (1.0f - metallic) * baseColor;
             nrcQuery = encodeInput(hitPoint, wo, n, albedo, F0, alpha);
+            inferenceThroughput = throughput;
+            inferencePlus = color;
             if (!isTrainingPath) break;
         }
 
@@ -304,11 +311,16 @@ extern "C" __global__ void __raygen__rg() {
 
     const auto inputIdx = i * NRC_INPUT_SIZE;
     pushNRCInput(params.inferenceInput + inputIdx, nrcQuery);
+    params.inferenceThroughput[i] = inferenceThroughput;
 
     // NOTE: We should not need to prevent NaNs
     // FIXME: NaNs
     //if (isfinite(color))
-    params.image[i] = mix(params.image[i], make_float4(max(color, 0.0f), 1.0f), params.weight); // FIXME: Negative colors
+    if (params.inferenceMode == InferenceMode::NO_INFERENCE) {
+        params.image[i] = mix(params.image[i], make_float4(max(color, 0.0f), 1.0f), params.weight); // FIXME: Negative colors
+    } else {
+        params.image[i] = mix(params.image[i], make_float4(max(inferencePlus, 0.0f), 1.0f), params.weight); // FIXME: Negative colors
+    }
 }
 
 extern "C" __global__ void __closesthit__ch() {

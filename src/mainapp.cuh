@@ -55,7 +55,7 @@ class MainApp : public App {
     void moveCallback(const vec2& movement, bool leftButton, bool rightButton, bool middleButton) override;
     void resizeCallback(const vec2& resolution) override;
   private:
-    void resize(int width, int height);
+    void resize(const ivec2& res);
     Buffer<GL_PIXEL_UNPACK_BUFFER> pbo;
     Texture<GL_TEXTURE_2D> blitTexture;
     Mesh fullscreenTriangle;
@@ -67,4 +67,5 @@ class MainApp : public App {
     std::filesystem::path folder;
     std::vector<std::filesystem::path> scenes;
     size_t sceneID;
+    glm::uvec2 bufferDim;
 };

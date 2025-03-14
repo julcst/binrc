@@ -36,7 +36,7 @@ struct NRCOutput {
 
 constexpr uint NRC_INPUT_SIZE = sizeof(NRCInput) / sizeof(float);
 constexpr uint NRC_OUTPUT_SIZE = sizeof(NRCOutput) / sizeof(float);
-constexpr uint NRC_BATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY * 64;
+constexpr uint NRC_BATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY * 64 * 4 * 8;
 
 const nlohmann::json NRC_CONFIG = {
 	{"loss", {
@@ -66,9 +66,9 @@ const nlohmann::json NRC_CONFIG = {
                 {"type", "Hash"},
                 {"n_levels", 16},
                 {"n_feature_per_level", 2},
-                {"log2_hashmap_size", 19},
+                {"log2_hashmap_size", 15},
                 {"base_resolution", 16},
-                {"per_level_scale", 1.5f},
+                {"per_level_scale", 2.0f},
                 {"interpolation", "Linear"},
             },
             {
@@ -83,6 +83,7 @@ const nlohmann::json NRC_CONFIG = {
     }},
 	{"network", {
 		{"otype", "FullyFusedMLP"},
+        //{"otype", "CutlassMLP"},
 		{"activation", "ReLU"},
 		{"output_activation", "None"},
 		{"n_neurons", 64},
@@ -168,6 +169,7 @@ struct Params {
     float* trainingTarget;
     float* inferenceInput;
     float* inferenceOutput;
+    float3* inferenceThroughput;
 };
 extern "C" __constant__ Params params;
 

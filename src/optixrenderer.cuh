@@ -50,6 +50,7 @@ private:
     tcnn::GPUMatrix<float> nrcTrainOutput;
     tcnn::GPUMatrix<float> nrcInferenceInput;
     tcnn::GPUMatrix<float> nrcInferenceOutput;
+    tcnn::GPUMemory<float3> nrcInferenceThroughput;
 
     void generateSobol(uint offset, uint n);
     void ensureSobol(uint sample);
