@@ -301,6 +301,16 @@ extern "C" __global__ void __raygen__rg() {
         trainThroughput *= sample.throughput;
         prevBrdfPdf = sample.pdf;
         diracEvent = sample.isDirac;
+
+        // NRC Inference Input
+        if (params.inferenceMode == InferenceMode::FIRST_DIFFUSE && !sample.isSpecular) {
+            const auto F0 = mix(make_float3(0.04f), baseColor, metallic);
+            const auto albedo = (1.0f - metallic) * baseColor;
+            nrcQuery = encodeInput(hitPoint, wo, n, albedo, F0, alpha);
+            inferenceThroughput = throughput;
+            inferencePlus = color;
+            if (!isTrainingPath) break;
+        }
     }
 
     if (writeTrainingSample) {

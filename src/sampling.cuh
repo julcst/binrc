@@ -216,6 +216,7 @@ struct MISSampleResult {
     float3 throughput;
     float pdf;
     bool isDirac;
+    bool isSpecular;
 };
 
 __device__ constexpr MISSampleResult sampleDisney(const float rType, const float2& rMicrofacet, const float2& rDiffuse, const float3& wo, const float3& n, const bool inside, const float3& baseColor, const float metallic, const float alpha, const float transmission) {
@@ -234,6 +235,7 @@ __device__ constexpr MISSampleResult sampleDisney(const float rType, const float
 
     auto throughput = make_float3(0.0f);
     auto wi = make_float3(0.0f);
+    auto isSpecular = true;
 
     if (rType < pSpecular) { 
         // Sample Trowbridge-Reitz specular
@@ -247,6 +249,7 @@ __device__ constexpr MISSampleResult sampleDisney(const float rType, const float
             const auto sample = sampleBrentBurley(rDiffuse, wo, NdotV, n, alpha, tangentToWorld, albedo);
             throughput = sample.throughput / pDiffuse;
             wi = sample.direction;
+            isSpecular = false;
         } else {
             const auto sample = sampleTrowbridgeReitzTransmission(rMicrofacet, wo, NdotV, n, alpha, F0, baseColor, eta);
             throughput = sample.throughput / pTransmission;
@@ -259,7 +262,7 @@ __device__ constexpr MISSampleResult sampleDisney(const float rType, const float
 
     const auto isDirac = alpha == 0.0f && pDiffuse == 0.0f;
 
-    return {wi, throughput, pdf, isDirac};
+    return {wi, throughput, pdf, isDirac, isSpecular};
 }
 
 struct BRDFResult {
