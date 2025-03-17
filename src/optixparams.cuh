@@ -9,7 +9,19 @@
 
 #include "cudamathtypes.cuh"
 
-constexpr int PAYLOAD_SIZE = 17;
+struct Payload {
+    float3 baseColor; // Linear RGB base color
+    float3 normal; // World space normal, guaranteed to be normalized
+    float3 tangent; // World space tenagent, not normalized
+    float3 emission; // Linear RGB emission color
+    float roughness;
+    float metallic;
+    float transmission;
+    float area;
+    float t; // Distance of intersection on ray, set to INFINITY if no intersection
+};
+
+constexpr int PAYLOAD_SIZE = sizeof(Payload) / sizeof(float);
 constexpr float MAX_T = 1e32f;
 constexpr uint MAX_BOUNCES = 31;
 constexpr uint RANDS_PER_PIXEL = 2;
@@ -36,7 +48,9 @@ struct NRCOutput {
 
 constexpr uint NRC_INPUT_SIZE = sizeof(NRCInput) / sizeof(float);
 constexpr uint NRC_OUTPUT_SIZE = sizeof(NRCOutput) / sizeof(float);
-constexpr uint NRC_BATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY * 64 * 4 * 8;
+constexpr uint NRC_SUBBATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY * 64 * 8;
+constexpr uint STEPS_PER_BATCH = 4;
+constexpr uint NRC_BATCH_SIZE = NRC_SUBBATCH_SIZE * STEPS_PER_BATCH;
 
 const nlohmann::json NRC_CONFIG = {
 	{"loss", {
@@ -165,6 +179,7 @@ struct Params {
     uint lightTableSize; // lightTableSize
 //////////////////////////////////////////////////
 
+    uint trainingIndex;
     float* trainingInput;
     float* trainingTarget;
     float* inferenceInput;

@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.28...3.31)
 
+option(DEBUG_CUDA "Enable debugging for CUDA" OFF)
+
 # FIXME: These should be cmake -D arguments but I am lazy
 set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures to compile for" FORCE)
 set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc CACHE PATH "Path to the CUDA compiler" FORCE)
@@ -12,7 +14,10 @@ endif()
 # Config
 set(GLM_ENABLE_FAST_MATH ON)
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --diag-suppress 20012 --use_fast_math") # Disables glm warnings
-set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} --debug --device-debug") # Enables debugging
+if (DEBUG_CUDA)
+    set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} --debug --device-debug") # Enables debugging
+    add_compile_definitions(OPTIX_DEBUG)
+endif()
 set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 set(CUDA_LINK_LIBRARIES_KEYWORD PUBLIC)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

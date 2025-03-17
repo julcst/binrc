@@ -10,13 +10,13 @@ struct Ray {
     float3 direction;
 };
 
-__device__ Ray makeCameraRay(const float2& uv) {
+__device__ inline Ray makeCameraRay(const float2& uv) {
     const float4 origin = params.clipToWorld[3]; // = params.clipToWorld * make_float4(0.0f, 0.0f, 0.0f, 1.0f);
     const float4 clipTarget = make_float4(-2.0f * uv + 1.0f, -1.0f, 1.0f);
     const float4 target = params.clipToWorld * clipTarget;
     const float3 origin3 = make_float3(origin) / origin.w;
     const float3 dir3 = normalize(origin3 - make_float3(target) / target.w);
-    return Ray{origin3, dir3};
+    return {origin3, dir3};
 }
 
 __device__ inline float getRand(uint depth, uint offset, float rotation) {
@@ -31,77 +31,65 @@ __device__ inline float3 getRand(uint depth, uint offset, float r0, float r1, fl
     return fract(make_float3(getRand(depth, offset + 0) + r0, getRand(depth, offset + 1) + r1, getRand(depth, offset + 2) + r2));
 }
 
-struct Payload {
-    float3 baseColor; // Linear RGB base color
-    float3 normal; // World space normal, guaranteed to be normalized
-    float3 tangent; // World space tenagent, not normalized
-    float3 emission; // Linear RGB emission color
-    float roughness;
-    float metallic;
-    float transmission;
-    float area;
-    float t; // Distance of intersection on ray, set to INFINITY if no intersection
-};
-
-__device__ void setBaseColor(const float3& value) {
+__device__ inline void setBaseColor(const float3& value) {
     optixSetPayload_0(__float_as_uint(value.x));
     optixSetPayload_1(__float_as_uint(value.y));
     optixSetPayload_2(__float_as_uint(value.z));
 }
 
-__device__ void setNormal(const float3& value) {
+__device__ inline void setNormal(const float3& value) {
     optixSetPayload_3(__float_as_uint(value.x));
     optixSetPayload_4(__float_as_uint(value.y));
     optixSetPayload_5(__float_as_uint(value.z));
 }
 
-__device__ void setTangent(const float3& value) {
+__device__ inline void setTangent(const float3& value) {
     optixSetPayload_6(__float_as_uint(value.x));
     optixSetPayload_7(__float_as_uint(value.y));
     optixSetPayload_8(__float_as_uint(value.z));
 }
 
-__device__ void setEmission(const float3& value) {
+__device__ inline void setEmission(const float3& value) {
     optixSetPayload_9(__float_as_uint(value.x));
     optixSetPayload_10(__float_as_uint(value.y));
     optixSetPayload_11(__float_as_uint(value.z));
 }
 
-__device__ void setRoughness(const float value) {
+__device__ inline void setRoughness(const float value) {
     optixSetPayload_12(__float_as_uint(value));
 }
 
-__device__ void setMetallic(const float value) {
+__device__ inline void setMetallic(const float value) {
     optixSetPayload_13(__float_as_uint(value));
 }
 
-__device__ void setTransmission(const float value) {
+__device__ inline void setTransmission(const float value) {
     optixSetPayload_14(__float_as_uint(value));
 }
 
-__device__ void setArea(const float value) {
+__device__ inline void setArea(const float value) {
     optixSetPayload_15(__float_as_uint(value));
 }
 
-__device__ void setT(const float value) {
+__device__ inline void setT(const float value) {
     optixSetPayload_16(__float_as_uint(value));
 }
 
-__device__ Payload getPayload(uint a, uint b, uint c, uint d, uint e, uint f, uint g, uint h, uint i, uint j, uint k, uint l, uint m, uint n, uint o, uint p, uint q) {
-    return Payload{
-        make_float3(__uint_as_float(a), __uint_as_float(b), __uint_as_float(c)),
-        make_float3(__uint_as_float(d), __uint_as_float(e), __uint_as_float(f)),
-        make_float3(__uint_as_float(g), __uint_as_float(h), __uint_as_float(i)),
-        make_float3(__uint_as_float(j), __uint_as_float(k), __uint_as_float(l)),
-        __uint_as_float(m),
-        __uint_as_float(n),
-        __uint_as_float(o),
-        __uint_as_float(p),
-        __uint_as_float(q),
+__device__ constexpr inline Payload getPayload(const std::array<uint, 17>& values) {
+    return {
+        make_float3(__uint_as_float(values[0]), __uint_as_float(values[1]), __uint_as_float(values[2])),
+        make_float3(__uint_as_float(values[3]), __uint_as_float(values[4]), __uint_as_float(values[5])),
+        make_float3(__uint_as_float(values[6]), __uint_as_float(values[7]), __uint_as_float(values[8])),
+        make_float3(__uint_as_float(values[9]), __uint_as_float(values[10]), __uint_as_float(values[11])),
+        __uint_as_float(values[12]),
+        __uint_as_float(values[13]),
+        __uint_as_float(values[14]),
+        __uint_as_float(values[15]),
+        __uint_as_float(values[16]),
     };
 }
 
-__device__ Payload trace(const Ray& ray) {
+__device__ inline Payload trace(const Ray& ray) {
     uint a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q;
     optixTraverse(
         params.handle,
@@ -115,10 +103,10 @@ __device__ Payload trace(const Ray& ray) {
     //const auto data = reinterpret_cast<HitData*>(optixGetSbtDataPointer());
     //optixReorder(data->materialID, 3); // TODO: Provide coherence hints
     optixInvoke(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q);
-    return getPayload(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q);
+    return getPayload({a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q});
 }
 
-__device__ bool traceOcclusion(const float3& a, const float3& b) {
+__device__ inline bool traceOcclusion(const float3& a, const float3& b) {
     const auto dir = b - a;
     optixTraverse(
         params.handle,
@@ -131,7 +119,7 @@ __device__ bool traceOcclusion(const float3& a, const float3& b) {
     return optixHitObjectIsHit();
 }
 
-__device__ NRCInput encodeInput(const float3& position, const float3& wo, const float3& wn, const float3& diffuse, const float3& specular, float alpha) {
+__device__ inline NRCInput encodeInput(const float3& position, const float3& wo, const float3& wn, const float3& diffuse, const float3& specular, float alpha) {
     return {
         .position = position * 0.1f + 0.5f, // TODO: Normalize position
         .wo = toNormSpherical(wo),
@@ -143,7 +131,7 @@ __device__ NRCInput encodeInput(const float3& position, const float3& wo, const 
     };
 }
 
-__device__ void pushNRCInput(float* to, const NRCInput& input) {
+__device__ inline void pushNRCInput(float* to, const NRCInput& input) {
     to[0] = input.position.x;
     to[1] = input.position.y;
     to[2] = input.position.z;
@@ -160,7 +148,12 @@ __device__ void pushNRCInput(float* to, const NRCInput& input) {
     to[13] = input.specular.z;
 }
 
-__device__ void pushNRCOutput(float* to, const NRCOutput& output) {
+__device__ inline void pushNRCTrainInput(const NRCInput& input) {
+    pushNRCInput(params.trainingInput + (params.trainingIndex % NRC_BATCH_SIZE) * NRC_INPUT_SIZE, input);
+    atomicAdd(&params.trainingIndex, 1);
+}
+
+__device__ inline void pushNRCOutput(float* to, const NRCOutput& output) {
     to[0] = output.radiance.x;
     to[1] = output.radiance.y;
     to[2] = output.radiance.z;

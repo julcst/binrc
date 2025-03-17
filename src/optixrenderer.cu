@@ -46,7 +46,7 @@ OptixRenderer::OptixRenderer() {
         .logCallbackLevel = 4, // Print all log messages
         .validationMode = OPTIX_DEVICE_CONTEXT_VALIDATION_MODE_OFF,
     };
-#ifndef NDEBUG
+#ifdef OPTIX_DEBUG
     options.validationMode = OPTIX_DEVICE_CONTEXT_VALIDATION_MODE_ALL; // Enable all validation checks
 #endif
     CUcontext cuCtx = nullptr; // zero means take the current context
@@ -60,7 +60,7 @@ OptixRenderer::OptixRenderer() {
         .numPayloadTypes = 0,
         .payloadTypes = nullptr,
     };
-#ifndef NDEBUG
+#ifdef OPTIX_DEBUG
     moduleCompileOptions.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0; // Disable optimizations
     moduleCompileOptions.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL; // Generate debug information
 #endif
@@ -274,7 +274,9 @@ void OptixRenderer::resetNRC() {
 }
 
 void OptixRenderer::train() {
-    auto ctx = nrcModel.trainer->training_step(nrcTrainInput, nrcTrainOutput);
-    float loss = nrcModel.trainer->loss(*ctx);
-    lossHistory.push_back(loss);
+    for (uint32_t offset = 0; offset < NRC_BATCH_SIZE; offset += NRC_SUBBATCH_SIZE) {
+        auto ctx = nrcModel.trainer->training_step(nrcTrainInput.slice_cols(offset, NRC_SUBBATCH_SIZE), nrcTrainOutput.slice_cols(offset, NRC_SUBBATCH_SIZE));
+        float loss = nrcModel.trainer->loss(*ctx);
+        lossHistory.push_back(loss);
+    }
 }
