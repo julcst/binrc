@@ -148,6 +148,10 @@ OptixRenderer::OptixRenderer() {
 
     params->trainingInput = nrcTrainInput.data();
     params->trainingTarget = nrcTrainOutput.data();
+
+    nrcTrainIndex = tcnn::GPUMemory<uint>(1, true);
+    nrcTrainIndex.memset(0);
+    params->trainingIndexPtr = nrcTrainIndex.data();
 }
 
 OptixRenderer::~OptixRenderer() {
@@ -195,6 +199,7 @@ __global__ void visualizeInference(Params* params) {
 void OptixRenderer::render(vec4* image, uvec2 dim) {
     params->image = reinterpret_cast<float4*>(image);
     params->dim = make_uint2(dim.x, dim.y);
+    const auto prevTrainIndex = nrcTrainIndex.at(0);
     
     ensureSobol(params->sample);
     check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params), sizeof(Params), &sbt, dim.x, dim.y, 1));
@@ -213,6 +218,7 @@ void OptixRenderer::render(vec4* image, uvec2 dim) {
     
     params->sample++;
     params->weight = 1.0f / static_cast<float>(params->sample);
+    //std::cout << nrcTrainIndex.at(0) - prevTrainIndex << std::endl;
 }
 
 void OptixRenderer::generateSobol(uint offset, uint n) {

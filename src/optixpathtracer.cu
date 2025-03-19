@@ -122,12 +122,12 @@ __device__ inline bool traceOcclusion(const float3& a, const float3& b) {
 __device__ inline NRCInput encodeInput(const float3& position, const float3& wo, const float3& wn, const float3& diffuse, const float3& specular, float alpha) {
     return {
         .position = position * 0.1f + 0.5f, // TODO: Normalize position
-        .wo = toNormSpherical(wo),
-        .wn = toNormSpherical(wn),
+        .wo = toNormSpherical(wo), // Switch to Octahedral
+        .wn = toNormSpherical(wn), // Switch to Octahedral
         //.roughness = 1 - exp(-alpha),
         .roughness = alpha,
         .diffuse = diffuse,
-        .specular = specular,
+        .specular = specular, // directional albedo FDG
     };
 }
 
@@ -149,8 +149,8 @@ __device__ inline void pushNRCInput(float* to, const NRCInput& input) {
 }
 
 __device__ inline void pushNRCTrainInput(const NRCInput& input) {
-    pushNRCInput(params.trainingInput + (params.trainingIndex % NRC_BATCH_SIZE) * NRC_INPUT_SIZE, input);
-    atomicAdd(&params.trainingIndex, 1);
+    const auto i = atomicAdd(params.trainingIndexPtr, 1u);
+    pushNRCInput(params.trainingInput + ((i + 1) % NRC_BATCH_SIZE) * NRC_INPUT_SIZE, input);
 }
 
 __device__ inline void pushNRCOutput(float* to, const NRCOutput& output) {
@@ -179,6 +179,7 @@ extern "C" __global__ void __raygen__rg() {
 
     auto trainDepth = -1;
     // TODO: Train the whole path
+    // TODO: Use stratified sampling
     if (getRand(1, 2, rotation.y) < NRC_BATCH_SIZE / float(params.dim.x * params.dim.y)) {
         trainDepth = int(getRand(1, 3, rotation.z) * 6) + 1;
     }
@@ -236,13 +237,14 @@ extern "C" __global__ void __raygen__rg() {
         const auto metallic = payload.metallic;
         const auto baseColor = payload.baseColor; // baseColor
 
-        if (depth == trainDepth && luminance(payload.emission) < 1e-3f) { // NOTE: Maybe skipping emissive vertices reduces variance
+        if (depth == trainDepth && luminance(payload.emission) < 1e-3f) { // NOTE: Skipping emissive vertices reduces variance
             const auto F0 = mix(make_float3(0.04f), baseColor, metallic);
             const auto albedo = (1.0f - metallic) * baseColor;
             auto trainInput = encodeInput(hitPoint, wo, n, albedo, F0, alpha);
             reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
             const auto inputIdx = (i % NRC_BATCH_SIZE) * NRC_INPUT_SIZE;
             pushNRCInput(params.trainingInput + inputIdx, trainInput);
+            //pushNRCTrainInput(trainInput);
             writeTrainingSample = true;
         }
 

@@ -48,6 +48,7 @@ private:
     tcnn::TrainableModel nrcModel;
     tcnn::GPUMatrix<float> nrcTrainInput;
     tcnn::GPUMatrix<float> nrcTrainOutput;
+    tcnn::GPUMemory<uint> nrcTrainIndex;
     tcnn::GPUMatrix<float> nrcInferenceInput;
     tcnn::GPUMatrix<float> nrcInferenceOutput;
     tcnn::GPUMemory<float3> nrcInferenceThroughput;

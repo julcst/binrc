@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28...3.31)
 
-option(DEBUG_CUDA "Enable debugging for CUDA" OFF)
+set(DEBUG_CUDA OFF CACHE BOOL "Enable debugging for CUDA" FORCE)
 
 # FIXME: These should be cmake -D arguments but I am lazy
 set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures to compile for" FORCE)

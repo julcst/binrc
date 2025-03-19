@@ -1233,3 +1233,7 @@ __host__ __device__ constexpr float3x3 buildTBN(const float3& n) {
 __host__ __device__ constexpr float2 toNormSpherical(const float3& n) {
     return {atan2f(n.y, n.x) * INV_PI * 0.5f + 0.5f, acosf(n.z) * INV_PI};
 }
+
+__host__ __device__ constexpr float2 toNormCylindrical(const float3& n) {
+    return {atan2f(n.y, n.x) * INV_PI * 0.5f + 0.5f, n.z * 0.5f + 0.5f};
+}

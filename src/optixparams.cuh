@@ -179,14 +179,14 @@ struct Params {
     uint lightTableSize; // lightTableSize
 //////////////////////////////////////////////////
 
-    uint trainingIndex;
+    uint* trainingIndexPtr;
     float* trainingInput;
     float* trainingTarget;
     float* inferenceInput;
     float* inferenceOutput;
     float3* inferenceThroughput;
 };
-extern "C" __constant__ Params params;
+extern "C" __constant__ const Params params;
 
 __host__ inline void initParams(Params* params) {
     params->clipToWorld = make_float4x4(make_float4(1.0f, 0.0f, 0.0f, 0.0f),
