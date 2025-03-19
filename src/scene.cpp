@@ -372,7 +372,6 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
     cameras.clear();
     
     uint i = 0;
-    // FIXME: Loading scenes with multiple primitves per mesh
     for (const auto& node : asset->nodes) {
         auto mat = fastgltf::math::fmat4x4(1.0f);
         auto* trs = std::get_if<fastgltf::TRS>(&node.transform);

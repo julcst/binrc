@@ -198,7 +198,7 @@ __host__ inline void initParams(Params* params) {
     params->weight = 1.0f;
     params->russianRouletteWeight = 10.0f;
     params->sceneEpsilon = 1e-4f;
-    params->flags = TRANSMISSION_FLAG | NEE_FLAG;
+    params->flags = NEE_FLAG;
 }
 
 __device__ inline float getRand(uint dim) {

@@ -123,11 +123,11 @@ __device__ inline NRCInput encodeInput(const float3& position, const float3& wo,
     return {
         .position = params.sceneScale * (position - params.sceneMin),
         .wo = toNormSpherical(wo), // Switch to Octahedral
-        .wn = toNormSpherical(wn), // Switch to Octahedral
+        .wn = toNormSpherical(wn), // TODO: Switch to Octahedral
         //.roughness = 1 - exp(-alpha),
         .roughness = alpha,
         .diffuse = diffuse,
-        .specular = specular, // directional albedo FDG
+        .specular = specular, // TODO: directional albedo FDG
     };
 }
 
@@ -148,6 +148,7 @@ __device__ inline void pushNRCInput(float* to, const NRCInput& input) {
     to[13] = input.specular.z;
 }
 
+// TODO: Fix
 __device__ inline void pushNRCTrainInput(const NRCInput& input) {
     const auto i = atomicAdd(params.trainingIndexPtr, 1u);
     pushNRCInput(params.trainingInput + ((i + 1) % NRC_BATCH_SIZE) * NRC_INPUT_SIZE, input);
@@ -259,7 +260,6 @@ extern "C" __global__ void __raygen__rg() {
         }
 
         // Next event estimation
-        // TODO: Dirac check
         if (nee) {
             const auto sample = sampleLight(getRand(depth, 0, rotation.w, rotation.x, rotation.y), hitPoint);
             const auto cosThetaS = dot(sample.wi, n);
@@ -288,7 +288,6 @@ extern "C" __global__ void __raygen__rg() {
             if (!isTrainingPath) break;
         }
 
-        // TODO: Move sampling into closesthit to benefit from reordering
         const auto sample = sampleDisney(getRand(depth, 0, rotation.w), getRand(depth, 1, rotation.x, rotation.y), getRand(depth, 1, rotation.z, rotation.w), wo, n, inside, baseColor, metallic, alpha, payload.transmission);
         
         ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};

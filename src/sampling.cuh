@@ -196,8 +196,8 @@ struct LightContext {
 };
 
 __device__ constexpr float disneyPdf(const LightContext& ctx) {
-    if (ctx.NdotL < 0.0f) return 0.0f;
-    const auto D = D_TrowbridgeReitz(ctx.NdotH, ctx.alpha2); // TODO: Why is this necessary?
+    if (ctx.NdotL < 0.0f) return 0.0f; // TODO: Why is this necessary?
+    const auto D = D_TrowbridgeReitz(ctx.NdotH, ctx.alpha2);
     const auto lambdaV = Lambda_TrowbridgeReitz(ctx.NdotV, ctx.alpha2);
     const auto G1 = 1.0f / (1.0f + lambdaV);
     const auto VNDF = G1 * D;
