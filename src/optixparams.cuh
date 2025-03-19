@@ -168,6 +168,8 @@ struct Params {
     float sceneEpsilon; // Scene epsilon
     uint flags;
     InferenceMode inferenceMode;
+    float3 sceneMin;
+    float sceneScale;
 
 ////////////////// OWNED MEMORY //////////////////
 // NOTE: This is owned memory and must be freed //

@@ -169,6 +169,11 @@ OptixRenderer::~OptixRenderer() {
 
 void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
     scene.loadGLTF(context, params, programGroups[2], sbt, path);
+    const auto aabb = scene.getAABB();
+    params->sceneMin = {aabb.min.x, aabb.min.y, aabb.min.z};
+    const auto size = aabb.max - aabb.min;
+    params->sceneScale = 1.0f / std::max(size.x, std::max(size.y, size.z));
+    std::cout << "Min: (" << params->sceneMin.x << ", " << params->sceneMin.y << ", " << params->sceneMin.z << ") Scale: " << params->sceneScale << std::endl;
     reset();
     lossHistory.clear();
 }

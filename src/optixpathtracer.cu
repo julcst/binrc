@@ -121,7 +121,7 @@ __device__ inline bool traceOcclusion(const float3& a, const float3& b) {
 
 __device__ inline NRCInput encodeInput(const float3& position, const float3& wo, const float3& wn, const float3& diffuse, const float3& specular, float alpha) {
     return {
-        .position = position * 0.1f + 0.5f, // TODO: Normalize position
+        .position = params.sceneScale * (position - params.sceneMin),
         .wo = toNormSpherical(wo), // Switch to Octahedral
         .wn = toNormSpherical(wn), // Switch to Octahedral
         //.roughness = 1 - exp(-alpha),

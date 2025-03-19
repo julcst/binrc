@@ -30,9 +30,6 @@ using namespace glm;
 #include "cudaglm.cuh"
 #include "cudamath.cuh"
 
-Geometry::Geometry(OptixTraversableHandle handle, CUdeviceptr gasBuffer, CUdeviceptr indexBuffer, CUdeviceptr vertexData, uint sbtOffset, std::optional<Emitter> emitter)
-    : handle(handle), gasBuffer(gasBuffer), indexBuffer(indexBuffer), vertexData(vertexData), sbtOffset(sbtOffset), emitter(emitter) {}
-
 Geometry::~Geometry() {
     check(cudaFree(reinterpret_cast<void*>(gasBuffer)));
     check(cudaFree(reinterpret_cast<void*>(indexBuffer)));
@@ -72,7 +69,6 @@ std::tuple<OptixTraversableHandle, CUdeviceptr> buildGAS(OptixDeviceContext ctx,
 
     OptixTraversableHandle handle;
     check(optixAccelBuild(ctx, nullptr, &accelOptions, buildInputs.data(), buildInputs.size(), tempBuffer, bufferSizes.tempSizeInBytes, gasBuffer, bufferSizes.outputSizeInBytes, &handle, nullptr, 0));
-
     // TODO: Compact
 
     check(cudaFree(reinterpret_cast<void*>(tempBuffer)));
@@ -146,7 +142,6 @@ std::tuple<OptixTraversableHandle, CUdeviceptr> buildIAS(OptixDeviceContext ctx,
 
     OptixTraversableHandle handle;
     check(optixAccelBuild(ctx, nullptr, &accelOptions, &buildInput, 1, tempBuffer, bufferSizes.tempSizeInBytes, iasBuffer, bufferSizes.outputSizeInBytes, &handle, nullptr, 0));
-
     // TODO: Compact
 
     check(cudaFree(reinterpret_cast<void*>(instanceBuffer)));
@@ -317,12 +312,14 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
         for (const auto& primitive : mesh.primitives) {
             if (!primitive.materialIndex.has_value()) throw std::runtime_error("Primitive has no material index");
 
+            AABB aabb;
             auto& posAcc = asset->accessors[primitive.findAttribute("POSITION")->accessorIndex];
             std::vector<vec4> vertices(posAcc.count);
             std::vector<VertexData> vertexData(vertices.size());
             fastgltf::iterateAccessorWithIndex<vec3>(asset.get(), posAcc, [&](const vec3& vertex, auto i) {
                 vertices[i] = vec4(vertex, 1.0f);
                 vertexData[i].position = glmToCuda(vertex);
+                aabb.extend(vertex);
             });
             auto& normalAcc = asset->accessors.at(primitive.findAttribute("NORMAL")->accessorIndex);
             fastgltf::iterateAccessorWithIndex<vec3>(asset.get(), normalAcc, [&](const vec3& normal, auto i) {
@@ -365,7 +362,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
 
             const auto emitter = isEmissive ? std::optional<Emitter>(Emitter { emission, std::move(vertices), std::move(indices), std::move(vertexData) }) : std::nullopt;
 
-            newGeometryTable[i].emplace_back(handle, gasBuffer, vertexDataBuffer, indexBuffer, geometryID, emitter);
+            newGeometryTable[i].emplace_back(handle, gasBuffer, vertexDataBuffer, indexBuffer, geometryID, emitter, aabb);
             geometryID++;
         }
     }
@@ -391,7 +388,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
             auto mesh = asset->meshes[m.value()];
             for (uint j = 0; j < mesh.primitives.size(); j++) {
                 const auto& primitive = mesh.primitives[j];
-                const auto& geometry = newGeometryTable[m.value()][j];
+                auto& geometry = newGeometryTable[m.value()][j];
                 instances[i] = OptixInstance {
                     .transform = {
                         mat.row(0)[0], mat.row(0)[1], mat.row(0)[2], mat.row(0)[3],
@@ -404,6 +401,7 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
                     .flags = OPTIX_INSTANCE_FLAG_NONE,
                     .traversableHandle = geometry.handle,
                 };
+                geometry.aabb.transform(transform);
 
                 if (geometry.emitter.has_value()) {
                     const auto& emitter = geometry.emitter.value();
@@ -501,4 +499,14 @@ void Scene::loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& 
     geometryTable = std::move(newGeometryTable);
     textures = std::move(newTextures);
     images = std::move(newImages);
+}
+
+AABB Scene::getAABB() const {
+    AABB aabb;
+    for (const auto& geometries : geometryTable) {
+        for (const auto& geometry : geometries) {
+            aabb.extend(geometry.aabb);
+        }
+    }
+    return aabb;
 }
