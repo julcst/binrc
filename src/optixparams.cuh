@@ -34,16 +34,16 @@ constexpr uint NEE_FLAG = 1 << 1;
 
 // TODO: Use half instead of float
 struct NRCInput {
-    float3 position = make_float3(NAN, 0.0f, 0.0f);
-    float2 wo = make_float2(0.0f, 0.0f);
-    float2 wn = make_float2(0.0f, 0.0f);
+    float3 position = {NAN, 0.0f, 0.0f};
+    float2 wo = {0.0f, 0.0f};
+    float2 wn = {0.0f, 0.0f};
     float roughness = 0.0f;
-    float3 diffuse = make_float3(0.0f, 0.0f, 0.0f);
-    float3 specular = make_float3(0.0f, 0.0f, 0.0f);
+    float3 diffuse = {0.0f, 0.0f, 0.0f};
+    float3 specular = {0.0f, 0.0f, 0.0f};
 };
 
 struct NRCOutput {
-    float3 radiance = make_float3(0.0f, 0.0f, 0.0f);
+    float3 radiance = {0.0f, 0.0f, 0.0f};
 };
 
 constexpr uint NRC_INPUT_SIZE = 3 * 3 + 2 * 2 + 1;
