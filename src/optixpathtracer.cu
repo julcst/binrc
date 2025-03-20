@@ -89,8 +89,8 @@ __device__ constexpr inline Payload getPayload(const std::array<uint, 17>& value
     };
 }
 
-__device__ inline Payload trace(const Ray& ray) {
-    uint a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q;
+__device__ inline Payload trace(const Ray& ray, uint hint) {
+    std::array<uint, 17> p;
     optixTraverse(
         params.handle,
         ray.origin, ray.direction,
@@ -98,12 +98,11 @@ __device__ inline Payload trace(const Ray& ray) {
         0.0f, // rayTime
         OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
         0, 1, 0, // SBT offset, stride, miss index
-        a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q // Payload
+        p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16]
     );
-    //const auto data = reinterpret_cast<HitData*>(optixGetSbtDataPointer());
-    //optixReorder(data->materialID, 3); // TODO: Provide coherence hints
-    optixInvoke(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q);
-    return getPayload({a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q});
+    optixReorder(hint, 1);
+    optixInvoke(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16]);
+    return getPayload(p);
 }
 
 __device__ inline bool traceOcclusion(const float3& a, const float3& b) {
@@ -208,7 +207,7 @@ extern "C" __global__ void __raygen__rg() {
         throughput /= pContinue;
         trainThroughput /= pContinue;
 
-        payload = trace(ray);
+        payload = trace(ray, isTrainingPath ? 1u : 0u);
 
         if (isinf(payload.t)) {
             color += throughput * payload.emission;

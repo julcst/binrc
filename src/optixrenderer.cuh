@@ -45,7 +45,7 @@ private:
     OptixPipeline pipeline;
     OptixShaderBindingTable sbt; // NOTE: This contains owned memory and must be properly freed
     std::array<OptixProgramGroup, 3> programGroups;
-    tcnn::TrainableModel nrcModel;
+    tcnn::TrainableModel nrcModel; // TODO: Explore half inputs and outputs
     tcnn::GPUMatrix<float> nrcTrainInput;
     tcnn::GPUMatrix<float> nrcTrainOutput;
     tcnn::GPUMemory<uint> nrcTrainIndex;
