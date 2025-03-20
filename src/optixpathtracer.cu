@@ -149,9 +149,10 @@ __device__ inline void pushNRCInput(float* to, const NRCInput& input) {
 }
 
 // TODO: Fix
-__device__ inline void pushNRCTrainInput(const NRCInput& input) {
+__device__ inline uint pushNRCTrainInput(const NRCInput& input) {
     const auto i = atomicAdd(params.trainingIndexPtr, 1u);
-    pushNRCInput(params.trainingInput + ((i + 1) % NRC_BATCH_SIZE) * NRC_INPUT_SIZE, input);
+    pushNRCInput(params.trainingInput + (i % NRC_BATCH_SIZE) * NRC_INPUT_SIZE, input);
+    return i;
 }
 
 __device__ inline void pushNRCOutput(float* to, const NRCOutput& output) {
@@ -185,6 +186,7 @@ extern "C" __global__ void __raygen__rg() {
         trainDepth = int(getRand(1, 3, rotation.z) * 6) + 1;
     }
     auto trainTarget = NRCOutput{};
+    uint trainIndex = 0;
     auto reflectanceFactorizationTerm = make_float3(1.0f);
     auto trainThroughput = make_float3(1.0f);
     bool isTrainingPath = trainDepth >= 0;
@@ -243,9 +245,9 @@ extern "C" __global__ void __raygen__rg() {
             const auto albedo = (1.0f - metallic) * baseColor;
             auto trainInput = encodeInput(hitPoint, wo, n, albedo, F0, alpha);
             reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
-            const auto inputIdx = (i % NRC_BATCH_SIZE) * NRC_INPUT_SIZE;
-            pushNRCInput(params.trainingInput + inputIdx, trainInput);
-            //pushNRCTrainInput(trainInput);
+            //const auto inputIdx = (i % NRC_BATCH_SIZE) * NRC_INPUT_SIZE;
+            //pushNRCInput(params.trainingInput + inputIdx, trainInput);
+            trainIndex = pushNRCTrainInput(trainInput);
             writeTrainingSample = true;
         }
 
@@ -309,7 +311,7 @@ extern "C" __global__ void __raygen__rg() {
 
     if (writeTrainingSample) {
         trainTarget.radiance *= reflectanceFactorizationTerm;
-        const auto outputIdx = (i % NRC_BATCH_SIZE) * NRC_OUTPUT_SIZE;
+        const auto outputIdx = (trainIndex % NRC_BATCH_SIZE) * NRC_OUTPUT_SIZE;
         pushNRCOutput(params.trainingTarget + outputIdx, trainTarget);
     }
 

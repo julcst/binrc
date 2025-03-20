@@ -46,8 +46,8 @@ struct NRCOutput {
     float3 radiance = make_float3(0.0f, 0.0f, 0.0f);
 };
 
-constexpr uint NRC_INPUT_SIZE = sizeof(NRCInput) / sizeof(float);
-constexpr uint NRC_OUTPUT_SIZE = sizeof(NRCOutput) / sizeof(float);
+constexpr uint NRC_INPUT_SIZE = 3 * 3 + 2 * 2 + 1;
+constexpr uint NRC_OUTPUT_SIZE = 3;
 constexpr uint NRC_SUBBATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY * 64 * 8;
 constexpr uint STEPS_PER_BATCH = 4;
 constexpr uint NRC_BATCH_SIZE = NRC_SUBBATCH_SIZE * STEPS_PER_BATCH;
