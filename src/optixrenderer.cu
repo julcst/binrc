@@ -24,7 +24,7 @@
 #include "optixir.hpp"
 #include "cudautil.hpp"
 #include "cudaglm.cuh"
-#include "optixparams.cuh"
+#include "optix/params.cuh"
 #include "cudamath.cuh"
 
 std::vector<char> readBinaryFile(const std::filesystem::path& filepath) {
@@ -74,9 +74,11 @@ OptixRenderer::OptixRenderer() {
         .usesPrimitiveTypeFlags = static_cast<unsigned int>(OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE),
     };
 
-    OptixModule module = nullptr;
-    const auto source = readBinaryFile(optixir::optixpathtracer_path);
-    check(optixModuleCreate(context, &moduleCompileOptions, &pipelineCompileOptions, source.data(), source.size(), nullptr, nullptr, &module));
+    OptixModule combinedModule, hitModule = nullptr;
+    const auto combined = readBinaryFile(optixir::paths[0]);
+    check(optixModuleCreate(context, &moduleCompileOptions, &pipelineCompileOptions, combined.data(), combined.size(), nullptr, nullptr, &combinedModule));
+    const auto hit = readBinaryFile(optixir::paths[1]);
+    check(optixModuleCreate(context, &moduleCompileOptions, &pipelineCompileOptions, hit.data(), hit.size(), nullptr, nullptr, &hitModule));
 
     // Create program groups
     OptixProgramGroupOptions pgOptions = {};
@@ -84,21 +86,21 @@ OptixRenderer::OptixRenderer() {
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
             .raygen = {
-                .module = module,
+                .module = combinedModule,
                 .entryFunctionName = "__raygen__rg",
             },
         },
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
             .miss = {
-                .module = module,
+                .module = hitModule,
                 .entryFunctionName = "__miss__ms",
             },
         },
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
             .hitgroup = {
-                .moduleCH = module,
+                .moduleCH = hitModule,
                 .entryFunctionNameCH = "__closesthit__ch",
             },
         },

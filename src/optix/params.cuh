@@ -7,21 +7,8 @@
 #include <tiny-cuda-nn/common.h>
 #include <json/json.hpp>
 
-#include "cudamathtypes.cuh"
+#include "cudamath.cuh"
 
-struct Payload {
-    float3 baseColor; // Linear RGB base color
-    float3 normal; // World space normal, guaranteed to be normalized
-    float3 tangent; // World space tenagent, not normalized
-    float3 emission; // Linear RGB emission color
-    float roughness;
-    float metallic;
-    float transmission;
-    float area;
-    float t; // Distance of intersection on ray, set to INFINITY if no intersection
-};
-
-constexpr int PAYLOAD_SIZE = sizeof(Payload) / sizeof(float);
 constexpr float MAX_T = 1e32f;
 constexpr uint MAX_BOUNCES = 31;
 constexpr uint RANDS_PER_PIXEL = 2;
@@ -46,6 +33,7 @@ struct NRCOutput {
     float3 radiance = {0.0f, 0.0f, 0.0f};
 };
 
+constexpr int PAYLOAD_SIZE = 4 * 3 + 5;
 constexpr uint NRC_INPUT_SIZE = 3 * 3 + 2 * 2 + 1;
 constexpr uint NRC_OUTPUT_SIZE = 3;
 constexpr uint NRC_SUBBATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY * 64 * 8;
@@ -199,15 +187,6 @@ __host__ inline void initParams(Params* params) {
     params->russianRouletteWeight = 10.0f;
     params->sceneEpsilon = 1e-4f;
     params->flags = NEE_FLAG;
-}
-
-__device__ inline float getRand(uint dim) {
-    const uint i = params.sample - params.sequenceOffset + params.sequenceStride * dim;
-    return params.randSequence[i];
-}
-
-__device__ inline float getRand(uint depth, uint i) {
-    return getRand(RANDS_PER_PIXEL + depth * RANDS_PER_BOUNCE + i);
 }
 
 struct RaygenData {};

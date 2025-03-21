@@ -26,7 +26,7 @@ using namespace glm;
 
 #include <framework/context.hpp>
 
-#include "optixparams.cuh"
+#include "optix/params.cuh"
 #include "cudaglm.cuh"
 #include "cudamath.cuh"
 

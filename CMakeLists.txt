@@ -44,11 +44,12 @@ FetchContent_MakeAvailable(framework fastgltf tinycudann)
 
 # Build the OptiX IR
 set(OPTIXIR
-    src/optixpathtracer.cu
+    src/optix/combined.cu
+    src/optix/hit.cu
 )
 add_library(optixir OBJECT ${OPTIXIR})
 target_link_libraries(optixir CUDA::cudart tiny-cuda-nn)
-target_include_directories(optixir PRIVATE ${OPTIX_DIR}/include ${CUDAToolkit_INCLUDE_DIRS})
+target_include_directories(optixir PRIVATE src ${OPTIX_DIR}/include ${CUDAToolkit_INCLUDE_DIRS})
 set_property(TARGET optixir PROPERTY CUDA_OPTIX_COMPILATION ON)
 
 set(SRC
@@ -74,11 +75,10 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 )
 
 # TODO: Embed the file content
-set(CONTENT "#pragma once\n#include <filesystem>\nnamespace optixir {\n")
-foreach(obj $<TARGET_OBJECTS:optixir>)
-    string(APPEND CONTENT "static const std::filesystem::path $<PATH:GET_STEM,${obj}>_path = \"$<TARGET_OBJECTS:optixir>\"\;\n")
-endforeach()
-string(APPEND CONTENT "}\n")
+string(APPEND CONTENT "#pragma once\n\n#include <filesystem>\n#include <array>\n\nnamespace optixir {\n\tstd::array paths = {\n\t\t\"")
+string(APPEND CONTENT $<JOIN:$<LIST:SORT,$<TARGET_OBJECTS:optixir>>,$<QUOTE>$<COMMA>\n\t\t$<QUOTE>>)
+string(APPEND CONTENT "\"\n\t};\n}\n")
+message(STATUS "Content: ${CONTENT}")
 set(OPTIXIR_DIR "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIGURATION>/include")
-file(GENERATE OUTPUT ${OPTIXIR_DIR}/optixir.hpp CONTENT ${CONTENT} TARGET ${PROJECT_NAME})
+file(GENERATE OUTPUT ${OPTIXIR_DIR}/optixir.hpp CONTENT "${CONTENT}" TARGET ${PROJECT_NAME})
 target_include_directories(${PROJECT_NAME} PRIVATE ${OPTIXIR_DIR})

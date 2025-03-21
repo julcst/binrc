@@ -2,8 +2,6 @@
 
 #include <cuda_runtime.h>
 
-#include "cudamathtypes.cuh"
-
 using uint = unsigned int;
 
 constexpr float PI = 3.14159265358979323846f;
@@ -58,6 +56,68 @@ __host__ __device__ constexpr float sign(float x) {
 
 __host__ __device__ constexpr float step(float x) {
     return maxf(0.0f, x);
+}
+
+// Matrices
+
+struct float2x2 {
+    float2 m[2];
+    __host__ __device__ constexpr float2& operator[](uint i) { return m[i]; }
+    __host__ __device__ constexpr const float2& operator[](uint i) const { return m[i]; }
+};
+
+__host__ __device__ constexpr float2x2 make_float2x2(const float2& a, const float2& b) {
+    return {a, b};
+}
+
+struct float3x3 {
+    float3 m[3];
+    __host__ __device__ constexpr float3& operator[](uint i) { return m[i]; }
+    __host__ __device__ constexpr const float3& operator[](uint i) const { return m[i]; }
+};
+
+__host__ __device__ constexpr float3x3 make_float3x3(const float3& a, const float3& b, const float3& c) {
+    return {a, b, c};
+}
+
+struct float4x4 {
+    float4 m[4];
+    __host__ __device__ constexpr float4& operator[](uint i) { return m[i]; }
+    __host__ __device__ constexpr const float4& operator[](uint i) const { return m[i]; }
+};
+
+__host__ __device__ constexpr float4x4 make_float4x4(const float4& a, const float4& b, const float4& c, const float4& d) {
+    return {a, b, c, d};
+}
+
+// float2x2
+
+__host__ __device__ constexpr float2 operator*(const float2x2& m, const float2& v) {
+    return {
+        m[0].x * v.x + m[1].x * v.y,
+        m[0].y * v.x + m[1].y * v.y
+    };
+}
+
+// float3x3
+
+__host__ __device__ constexpr float3 operator*(const float3x3& m, const float3& v) {
+    return {
+        m[0].x * v.x + m[1].x * v.y + m[2].x * v.z,
+        m[0].y * v.x + m[1].y * v.y + m[2].y * v.z,
+        m[0].z * v.x + m[1].z * v.y + m[2].z * v.z
+    };
+}
+
+// float4x4
+
+__host__ __device__ constexpr float4 operator*(const float4x4& m, const float4& v) {
+    return {
+        m[0].x * v.x + m[1].x * v.y + m[2].x * v.z + m[3].x * v.w,
+        m[0].y * v.x + m[1].y * v.y + m[2].y * v.z + m[3].y * v.w,
+        m[0].z * v.x + m[1].z * v.y + m[2].z * v.z + m[3].z * v.w,
+        m[0].w * v.x + m[1].w * v.y + m[2].w * v.z + m[3].w * v.w
+    };
 }
 
 // Operators on CUDA float2
@@ -1174,36 +1234,6 @@ __host__ __device__ constexpr void operator/=(uint4& a, uint b) {
 
 __host__ __device__ constexpr uint dot(const uint4& a, const uint4& b) {
     return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
-}
-
-// float2x2
-
-__host__ __device__ constexpr float2 operator*(const float2x2& m, const float2& v) {
-    return {
-        m[0].x * v.x + m[1].x * v.y,
-        m[0].y * v.x + m[1].y * v.y
-    };
-}
-
-// float3x3
-
-__host__ __device__ constexpr float3 operator*(const float3x3& m, const float3& v) {
-    return {
-        m[0].x * v.x + m[1].x * v.y + m[2].x * v.z,
-        m[0].y * v.x + m[1].y * v.y + m[2].y * v.z,
-        m[0].z * v.x + m[1].z * v.y + m[2].z * v.z
-    };
-}
-
-// float4x4
-
-__host__ __device__ constexpr float4 operator*(const float4x4& m, const float4& v) {
-    return {
-        m[0].x * v.x + m[1].x * v.y + m[2].x * v.z + m[3].x * v.w,
-        m[0].y * v.x + m[1].y * v.y + m[2].y * v.z + m[3].y * v.w,
-        m[0].z * v.x + m[1].z * v.y + m[2].z * v.z + m[3].z * v.w,
-        m[0].w * v.x + m[1].w * v.y + m[2].w * v.z + m[3].w * v.w
-    };
 }
 
 /**

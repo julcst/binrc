@@ -10,7 +10,7 @@
 #include <glm/glm.hpp>
 using namespace glm;
 
-#include "optixparams.cuh"
+#include "optix/params.cuh"
 
 struct Emitter {
     float emission;

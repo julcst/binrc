@@ -17,7 +17,7 @@ using namespace glm;
 
 #include <json/json.hpp>
 
-#include "optixparams.cuh"
+#include "optix/params.cuh"
 #include "scene.hpp"
 
 class OptixRenderer {
