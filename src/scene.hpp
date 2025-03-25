@@ -11,6 +11,7 @@
 using namespace glm;
 
 #include "optix/params.cuh"
+#include "cudautil.hpp"
 
 struct Emitter {
     float emission;
@@ -63,6 +64,47 @@ struct Geometry {
     ~Geometry();
 };
 
+struct SceneData {
+    std::vector<HitRecord> hitRecords;
+    std::vector<Material> materials;
+    std::vector<EmissiveTriangle> lightTable;
+    OptixTraversableHandle handle;
+};
+
+struct cudaArray_RAII {
+    cudaArray_t array;
+    cudaArray_RAII(cudaArray_t array = nullptr) : array(array) {}
+    ~cudaArray_RAII() { check(cudaFreeArray(array)); }
+    cudaArray_RAII(const cudaArray_RAII&) = delete;
+    cudaArray_RAII& operator=(const cudaArray_RAII&) = delete;
+    cudaArray_RAII(cudaArray_RAII&& other) : array(other.array) { other.array = nullptr; }
+    cudaArray_RAII& operator=(cudaArray_RAII&& other) {
+        if (this != &other) {
+            check(cudaFreeArray(array));
+            array = other.array;
+            other.array = nullptr;
+        }
+        return *this;
+    }
+};
+
+struct cudaTextureObject_RAII {
+    cudaTextureObject_t texture;
+    cudaTextureObject_RAII(cudaTextureObject_t texture = 0) : texture(texture) {}
+    ~cudaTextureObject_RAII() { check(cudaDestroyTextureObject(texture)); }
+    cudaTextureObject_RAII(const cudaTextureObject_RAII&) = delete;
+    cudaTextureObject_RAII& operator=(const cudaTextureObject_RAII&) = delete;
+    cudaTextureObject_RAII(cudaTextureObject_RAII&& other) : texture(other.texture) { other.texture = 0; }
+    cudaTextureObject_RAII& operator=(cudaTextureObject_RAII&& other) {
+        if (this != &other) {
+            check(cudaDestroyTextureObject(texture));
+            texture = other.texture;
+            other.texture = 0;
+        }
+        return *this;
+    }
+};
+
 struct Scene {
     std::vector<OptixInstance> instances;
     std::vector<std::pair<std::string, glm::mat4>> cameras;
@@ -70,8 +112,8 @@ struct Scene {
     // Buffers managed by the scene
     CUdeviceptr iasBuffer = 0;
     std::vector<std::vector<Geometry>> geometryTable;
-    std::vector<cudaArray_t> images;
-    std::vector<cudaTextureObject_t> textures;
+    std::vector<cudaArray_RAII> images; // NOTE: This is owned memory and must be freed
+    std::vector<cudaTextureObject_RAII> textures; // NOTE: This is owned memory and must be freed
 
     Scene() = default;
     ~Scene();
@@ -80,8 +122,7 @@ struct Scene {
     Scene(Scene&&) = delete;
     Scene& operator=(Scene&&) = delete;
 
-    void free();
     bool isEmpty() const { return geometryTable.empty(); }
-    void loadGLTF(OptixDeviceContext ctx, Params* params, OptixProgramGroup& o, OptixShaderBindingTable& sbt, const std::filesystem::path& path);
+    SceneData loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& path);
     AABB getAABB() const;
 };

@@ -35,16 +35,31 @@ public:
     void setCamera(const mat4& clipToWorld);
     void loadGLTF(const std::filesystem::path& path);
     void resize(uvec2 dim);
-    
-    Params* params; // NOTE: This is owned memory and must be properly freed
+
     Scene scene;
     std::vector<float> lossHistory;
+
+    inline Params& getParams() { return params.at(0); }
 
 private:
     OptixDeviceContext context;
     OptixPipeline pipeline;
-    OptixShaderBindingTable sbt; // NOTE: This contains owned memory and must be properly freed
-    std::array<OptixProgramGroup, 3> programGroups;
+    OptixProgramGroup combinedPG;
+    OptixProgramGroup referencePG;
+    OptixProgramGroup missPG;
+    OptixProgramGroup hitPG;
+
+    std::array<OptixShaderBindingTable, 2> sbts;
+
+    tcnn::GPUMemory<Params> params {1, true};
+    tcnn::GPUMemory<HitRecord> hitRecords;
+    tcnn::GPUMemory<RaygenRecord> raygenRecords;
+    tcnn::GPUMemory<MissRecord> missRecords;
+    tcnn::GPUMemory<float> randSequence;
+    tcnn::GPUMemory<float4> rotationTable;
+    tcnn::GPUMemory<Material> materials;
+    tcnn::GPUMemory<EmissiveTriangle> lightTable;
+
     tcnn::TrainableModel nrcModel; // TODO: Explore half inputs and outputs
     tcnn::GPUMatrix<float> nrcTrainInput;
     tcnn::GPUMatrix<float> nrcTrainOutput;

@@ -61,7 +61,10 @@ __host__ __device__ constexpr float step(float x) {
 // Matrices
 
 struct float2x2 {
-    float2 m[2];
+    float2 m[2] = {
+        {1.0f, 0.0f},
+        {0.0f, 1.0f},
+    };
     __host__ __device__ constexpr float2& operator[](uint i) { return m[i]; }
     __host__ __device__ constexpr const float2& operator[](uint i) const { return m[i]; }
 };
@@ -71,7 +74,11 @@ __host__ __device__ constexpr float2x2 make_float2x2(const float2& a, const floa
 }
 
 struct float3x3 {
-    float3 m[3];
+    float3 m[3] = {
+        {1.0f, 0.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f},
+        {0.0f, 0.0f, 1.0f},
+    };
     __host__ __device__ constexpr float3& operator[](uint i) { return m[i]; }
     __host__ __device__ constexpr const float3& operator[](uint i) const { return m[i]; }
 };
@@ -81,7 +88,12 @@ __host__ __device__ constexpr float3x3 make_float3x3(const float3& a, const floa
 }
 
 struct float4x4 {
-    float4 m[4];
+    float4 m[4] = {
+        {1.0f, 0.0f, 0.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f, 0.0f},
+        {0.0f, 0.0f, 1.0f, 0.0f},
+        {0.0f, 0.0f, 0.0f, 1.0f},
+    };
     __host__ __device__ constexpr float4& operator[](uint i) { return m[i]; }
     __host__ __device__ constexpr const float4& operator[](uint i) const { return m[i]; }
 };

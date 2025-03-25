@@ -61,8 +61,8 @@ OptixRenderer::OptixRenderer() {
         .payloadTypes = nullptr,
     };
 #ifdef OPTIX_DEBUG
-    moduleCompileOptions.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0; // Disable optimizations
-    moduleCompileOptions.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL; // Generate debug information
+    //moduleCompileOptions.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0; // Disable optimizations
+    moduleCompileOptions.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_MODERATE; // Generate debug information
 #endif
     OptixPipelineCompileOptions pipelineCompileOptions = {
         .usesMotionBlur = false,
@@ -74,20 +74,29 @@ OptixRenderer::OptixRenderer() {
         .usesPrimitiveTypeFlags = static_cast<unsigned int>(OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE),
     };
 
-    OptixModule combinedModule, hitModule = nullptr;
+    OptixModule combinedModule, hitModule, referenceModule = nullptr;
     const auto combined = readBinaryFile(optixir::paths[0]);
     check(optixModuleCreate(context, &moduleCompileOptions, &pipelineCompileOptions, combined.data(), combined.size(), nullptr, nullptr, &combinedModule));
     const auto hit = readBinaryFile(optixir::paths[1]);
     check(optixModuleCreate(context, &moduleCompileOptions, &pipelineCompileOptions, hit.data(), hit.size(), nullptr, nullptr, &hitModule));
+    const auto reference = readBinaryFile(optixir::paths[2]);
+    check(optixModuleCreate(context, &moduleCompileOptions, &pipelineCompileOptions, reference.data(), reference.size(), nullptr, nullptr, &referenceModule));
 
     // Create program groups
     OptixProgramGroupOptions pgOptions = {};
-    std::array programDecriptions = {
+    const std::array programDecriptions = {
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
             .raygen = {
                 .module = combinedModule,
-                .entryFunctionName = "__raygen__rg",
+                .entryFunctionName = "__raygen__combined",
+            },
+        },
+        OptixProgramGroupDesc {
+            .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
+            .raygen = {
+                .module = referenceModule,
+                .entryFunctionName = "__raygen__reference",
             },
         },
         OptixProgramGroupDesc {
@@ -105,7 +114,12 @@ OptixRenderer::OptixRenderer() {
             },
         },
     };
+    std::array<OptixProgramGroup, programDecriptions.size()> programGroups;
     check(optixProgramGroupCreate(context, programDecriptions.data(), programDecriptions.size(), &pgOptions, nullptr, nullptr, programGroups.data()));
+    combinedPG = programGroups[0];
+    referencePG = programGroups[1];
+    missPG = programGroups[2];
+    hitPG = programGroups[3];
 
     // Create pipeline
     OptixPipelineLinkOptions pipelineLinkOptions = {
@@ -113,32 +127,31 @@ OptixRenderer::OptixRenderer() {
     };
     check(optixPipelineCreate(context, &pipelineCompileOptions, &pipelineLinkOptions, programGroups.data(), programGroups.size(), nullptr, nullptr, &pipeline));
 
+    // TODO: optixUtilComputeStackSizesSimplePathtracer?
+
     // Set up shader binding table
-    RaygenRecord raygenRecord;
-    check(optixSbtRecordPackHeader(programGroups[0], &raygenRecord));
-    CUdeviceptr raygenRecordDevice;
-    check(cudaMalloc(reinterpret_cast<void**>(&raygenRecordDevice), sizeof(RaygenRecord)));
-    check(cudaMemcpy(reinterpret_cast<void*>(raygenRecordDevice), &raygenRecord, sizeof(RaygenRecord), cudaMemcpyHostToDevice));
+    std::vector<RaygenRecord> raygenRecord(2);
+    check(optixSbtRecordPackHeader(combinedPG, &raygenRecord[0]));
+    check(optixSbtRecordPackHeader(referencePG, &raygenRecord[1]));
+    raygenRecords.resize_and_copy_from_host(raygenRecord);
 
     MissRecord missRecord;
-    check(optixSbtRecordPackHeader(programGroups[1], &missRecord));
-    CUdeviceptr missRecordDevice;
-    check(cudaMalloc(reinterpret_cast<void**>(&missRecordDevice), sizeof(MissRecord)));
-    check(cudaMemcpy(reinterpret_cast<void*>(missRecordDevice), &missRecord, sizeof(MissRecord), cudaMemcpyHostToDevice));
+    check(optixSbtRecordPackHeader(missPG, &missRecord));
+    missRecords.resize_and_copy_from_host({missRecord});
 
-    sbt = {
-        .raygenRecord = raygenRecordDevice,
-        .missRecordBase = missRecordDevice,
-        .missRecordStrideInBytes = sizeof(MissRecord),
-        .missRecordCount = 1,
-        .hitgroupRecordBase = 0,
-        .hitgroupRecordStrideInBytes = sizeof(HitRecord),
-        .hitgroupRecordCount = 0,
-    };
+    for (size_t i = 0; i < sbts.size(); i++) {
+        sbts[i] = {
+            .raygenRecord = reinterpret_cast<CUdeviceptr>(&raygenRecords[i]),
+            .missRecordBase = reinterpret_cast<CUdeviceptr>(missRecords.data()),
+            .missRecordStrideInBytes = sizeof(MissRecord),
+            .missRecordCount = 1,
+            .hitgroupRecordBase = 0,
+            .hitgroupRecordStrideInBytes = sizeof(HitRecord),
+            .hitgroupRecordCount = 0,
+        };
+    }
 
-    check(cudaMallocManaged(reinterpret_cast<void**>(&params), sizeof(Params)));
-    check(cudaMemset(params, 0, sizeof(Params)));
-    initParams(params);
+    params.copy_from_host({Params{}});
 
     nrcModel = tcnn::create_from_config(NRC_INPUT_SIZE, NRC_OUTPUT_SIZE, NRC_CONFIG);
     nrcTrainInput = tcnn::GPUMatrix<float>(NRC_INPUT_SIZE, NRC_BATCH_SIZE);
@@ -148,40 +161,51 @@ OptixRenderer::OptixRenderer() {
               << "\nTrainer: " << std::setw(2) << nrcModel.trainer->hyperparams()
               << std::endl;
 
-    params->trainingInput = nrcTrainInput.data();
-    params->trainingTarget = nrcTrainOutput.data();
+    getParams().trainingInput = nrcTrainInput.data();
+    getParams().trainingTarget = nrcTrainOutput.data();
 
     nrcTrainIndex = tcnn::GPUMemory<uint>(1, true);
     nrcTrainIndex.memset(0);
-    params->trainingIndexPtr = nrcTrainIndex.data();
+    getParams().trainingIndexPtr = nrcTrainIndex.data();
 }
 
 OptixRenderer::~OptixRenderer() {
-    check(cudaFree(reinterpret_cast<void*>(sbt.raygenRecord)));
-    check(cudaFree(reinterpret_cast<void*>(sbt.missRecordBase)));
-    check(cudaFree(reinterpret_cast<void*>(sbt.hitgroupRecordBase)));
-    check(cudaFree(reinterpret_cast<void*>(params->randSequence)));
-    check(cudaFree(reinterpret_cast<void*>(params->rotationTable)));
-    check(cudaFree(reinterpret_cast<void*>(params->materials)));
-    check(cudaFree(reinterpret_cast<void*>(params->lightTable)));
-    check(cudaFree(reinterpret_cast<void*>(params)));
     check(optixPipelineDestroy(pipeline));
     check(optixDeviceContextDestroy(context));
 }
 
 void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
-    scene.loadGLTF(context, params, programGroups[2], sbt, path);
+    auto sceneData = scene.loadGLTF(context, path);
     const auto aabb = scene.getAABB();
-    params->sceneMin = {aabb.min.x, aabb.min.y, aabb.min.z};
     const auto size = aabb.max - aabb.min;
-    params->sceneScale = 1.0f / std::max(size.x, std::max(size.y, size.z));
-    std::cout << "Min: (" << params->sceneMin.x << ", " << params->sceneMin.y << ", " << params->sceneMin.z << ") Scale: " << params->sceneScale << std::endl;
+
+    for (auto& hitRecord : sceneData.hitRecords) optixSbtRecordPackHeader(hitPG, &hitRecord);
+
+    hitRecords.resize_and_copy_from_host(sceneData.hitRecords);
+    materials.resize_and_copy_from_host(sceneData.materials);
+    lightTable.resize_and_copy_from_host(sceneData.lightTable);
+
+    for (auto& sbt : sbts) {
+        sbt.hitgroupRecordBase = reinterpret_cast<CUdeviceptr>(hitRecords.data());
+        sbt.hitgroupRecordStrideInBytes = sizeof(HitRecord);
+        sbt.hitgroupRecordCount = hitRecords.size();
+    }
+
+    getParams().sceneMin = {aabb.min.x, aabb.min.y, aabb.min.z};
+    getParams().sceneScale = 1.0f / std::max(size.x, std::max(size.y, size.z));
+    getParams().materials = materials.data();
+    getParams().lightTable = lightTable.data();
+    getParams().lightTableSize = lightTable.size();
+    getParams().handle = sceneData.handle;
+
+    std::cout << "Min: (" << getParams().sceneMin.x << ", " << getParams().sceneMin.y << ", " << getParams().sceneMin.z << ") Scale: " << getParams().sceneScale << std::endl;
+
     reset();
     lossHistory.clear();
 }
 
 void OptixRenderer::setCamera(const mat4& clipToWorld) {
-    params->clipToWorld = glmToCuda(clipToWorld);
+    getParams().clipToWorld = glmToCuda(clipToWorld);
 }
 
 __global__ void visualizeInference(Params* params) {
@@ -203,49 +227,59 @@ __global__ void visualizeInference(Params* params) {
     }
 }
 
+void OptixRenderer::train() {
+    // TODO: Permute the training data
+    for (uint32_t offset = 0; offset < NRC_BATCH_SIZE; offset += NRC_SUBBATCH_SIZE) {
+        auto ctx = nrcModel.trainer->training_step(nrcTrainInput.slice_cols(offset, NRC_SUBBATCH_SIZE), nrcTrainOutput.slice_cols(offset, NRC_SUBBATCH_SIZE));
+        float loss = nrcModel.trainer->loss(*ctx);
+        lossHistory.push_back(loss);
+    }
+}
+
 void OptixRenderer::render(vec4* image, uvec2 dim) {
-    params->image = reinterpret_cast<float4*>(image);
-    params->dim = make_uint2(dim.x, dim.y);
+    getParams().image = reinterpret_cast<float4*>(image);
+    getParams().dim = make_uint2(dim.x, dim.y);
     const auto prevTrainIndex = nrcTrainIndex.at(0);
     
-    ensureSobol(params->sample);
-    check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params), sizeof(Params), &sbt, dim.x, dim.y, 1));
+    ensureSobol(getParams().sample);
+    check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params.data()), sizeof(Params), &sbts[0], dim.x, dim.y, 1));
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
 
     if (!scene.isEmpty()) train();
 
-    if (params->inferenceMode != InferenceMode::NO_INFERENCE) {
+    if (getParams().inferenceMode != InferenceMode::NO_INFERENCE) {
         nrcModel.network->inference(nrcInferenceInput, nrcInferenceOutput);
 
         dim3 block(16, 16);
         dim3 grid((dim.x + block.x - 1) / block.x, (dim.y + block.y - 1) / block.y);
-        visualizeInference<<<grid, block>>>(params);
+        visualizeInference<<<grid, block>>>(params.data());
         check(cudaDeviceSynchronize()); // Wait for the visualization to finish
     }
     
-    params->sample++;
-    params->weight = 1.0f / static_cast<float>(params->sample);
+    getParams().sample++;
+    getParams().weight = 1.0f / static_cast<float>(getParams().sample);
     //std::cout << nrcTrainIndex.at(0) - prevTrainIndex << std::endl;
 }
 
 void OptixRenderer::generateSobol(uint offset, uint n) {
+    randSequence.resize(n * RAND_SEQUENCE_DIMS);
+
+    getParams().sequenceStride = n;
+    getParams().sequenceOffset = offset;
+    getParams().randSequence = randSequence.data();
+
     // NOTE: We rebuild the generator, this makes regeneration slow but saves memory
-    const uint nfloats = n * RAND_SEQUENCE_DIMS;
-    params->sequenceStride = n;
-    params->sequenceOffset = offset;
     curandGenerator_t generator;
     check(curandCreateGenerator(&generator, CURAND_RNG_QUASI_SCRAMBLED_SOBOL32));
     check(curandSetQuasiRandomGeneratorDimensions(generator, RAND_SEQUENCE_DIMS)); // 4 dimensions for 4D Sobol sequence
     check(curandSetGeneratorOffset(generator, offset)); // Reset the sequence
-    check(cudaFree(reinterpret_cast<void*>(params->randSequence)));
-    check(cudaMalloc(reinterpret_cast<void**>(&params->randSequence), nfloats * sizeof(float)));
-    check(curandGenerateUniform(generator, reinterpret_cast<float*>(params->randSequence), nfloats));
+    check(curandGenerateUniform(generator, randSequence.data(), randSequence.size()));
     check(cudaDeviceSynchronize()); // Wait for the generator to finish
     check(curandDestroyGenerator(generator));
 }
 
 void OptixRenderer::ensureSobol(uint sample) {
-    if (sample < params->sequenceOffset || sample >= params->sequenceOffset + params->sequenceStride) {
+    if (sample < getParams().sequenceOffset || sample >= getParams().sequenceOffset + getParams().sequenceStride) {
         // std::cout << std::format("Regenerating Sobol sequence for samples [{},{})", sample, sample + RAND_SEQUENCE_CACHE_SIZE) << std::endl;
         // C++17
         std::cout << "Regenerating Sobol sequence for samples [" << sample << "," << sample + RAND_SEQUENCE_CACHE_SIZE << ")" << std::endl;
@@ -257,39 +291,34 @@ void OptixRenderer::resize(uvec2 dim) {
     // Generate inference input and output buffers
     auto inferenceBatchSize = dim.x * dim.y;
     inferenceBatchSize += tcnn::BATCH_SIZE_GRANULARITY - inferenceBatchSize % tcnn::BATCH_SIZE_GRANULARITY; // Round up to the next multiple of BATCH_SIZE_GRANULARITY
+
     nrcInferenceInput = tcnn::GPUMatrix<float>(NRC_INPUT_SIZE, inferenceBatchSize);
     nrcInferenceOutput = tcnn::GPUMatrix<float>(NRC_OUTPUT_SIZE, inferenceBatchSize);
     nrcInferenceThroughput = tcnn::GPUMemory<float3>(inferenceBatchSize);
-    params->inferenceInput = nrcInferenceInput.data();
-    params->inferenceOutput = nrcInferenceOutput.data();
-    params->inferenceThroughput = nrcInferenceThroughput.data();
 
     // Generate the Cranley-Patterson-Rotation per pixel
     // NOTE: We rebuild the generator on resize, this makes resize slow but saves memory
-    const size_t n = static_cast<size_t>(dim.x * dim.y) * 4;
+    rotationTable.resize(dim.x * dim.y);
+
     curandGenerator_t generator;
     check(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_XORWOW));
-    check(cudaFree(reinterpret_cast<void*>(params->rotationTable)));
-    check(cudaMalloc(reinterpret_cast<void**>(&params->rotationTable), n * sizeof(float)));
-    check(curandGenerateUniform(generator, reinterpret_cast<float*>(params->rotationTable), n));
-    check(cudaDeviceSynchronize()); // Wait for the generator to finish
+    check(curandGenerateUniform(generator, reinterpret_cast<float*>(rotationTable.data()), rotationTable.size() * 4));
     check(curandDestroyGenerator(generator));
+
+    getParams().inferenceInput = nrcInferenceInput.data();
+    getParams().inferenceOutput = nrcInferenceOutput.data();
+    getParams().inferenceThroughput = nrcInferenceThroughput.data();
+    getParams().rotationTable = rotationTable.data();
+
+    check(cudaDeviceSynchronize()); // Wait for the generator to finish
 }
 
 void OptixRenderer::reset() {
-    params->sample = 0;
-    params->weight = 1.0f;
+    getParams().sample = 0;
+    getParams().weight = 1.0f;
 }
 
 void OptixRenderer::resetNRC() {
     nrcModel.trainer->initialize_params();
     lossHistory.clear();
-}
-
-void OptixRenderer::train() {
-    for (uint32_t offset = 0; offset < NRC_BATCH_SIZE; offset += NRC_SUBBATCH_SIZE) {
-        auto ctx = nrcModel.trainer->training_step(nrcTrainInput.slice_cols(offset, NRC_SUBBATCH_SIZE), nrcTrainOutput.slice_cols(offset, NRC_SUBBATCH_SIZE));
-        float loss = nrcModel.trainer->loss(*ctx);
-        lossHistory.push_back(loss);
-    }
 }

@@ -97,6 +97,22 @@ __device__ inline Payload trace(const Ray& ray, uint hint) {
     return getPayload(p);
 }
 
+__device__ inline Payload trace(const Ray& ray) {
+    std::array<uint, 17> p;
+    optixTraverse(
+        params.handle,
+        ray.origin, ray.direction,
+        0.0f, MAX_T, // tmin, tmax
+        0.0f, // rayTime
+        OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
+        0, 1, 0, // SBT offset, stride, miss index
+        p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16]
+    );
+    optixReorder();
+    optixInvoke(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16]);
+    return getPayload(p);
+}
+
 __device__ inline bool traceOcclusion(const float3& a, const float3& b) {
     const auto dir = b - a;
     optixTraverse(

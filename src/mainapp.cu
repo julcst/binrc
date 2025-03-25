@@ -132,12 +132,12 @@ void MainApp::buildImGui() {
     if (FileCombo("Scene", &sceneID, scenes)) {
         renderer.loadGLTF(scenes.at(sceneID));
     }
-    ImGui::Text("Sample: %d", renderer.params->sample);
+    ImGui::Text("Sample: %d", renderer.getParams().sample);
     if (ImGui::SliderFloat("Exposure", &exposure, 0.1f, 10.0f, "%.1f", ImGuiSliderFlags_Logarithmic)) blitProgram.set(1, exposure);
-    ImGui::SliderFloat("Russian Roulette", &renderer.params->russianRouletteWeight, 1.0f, 10.0f, "%.1f");
-    ImGui::SliderFloat("Scene Epsilon", &renderer.params->sceneEpsilon, 1e-6f, 1e-1f, "%f", ImGuiSliderFlags_Logarithmic);
-    bool reset = FlagCheckbox("Enable NEE", &renderer.params->flags, NEE_FLAG);
-    reset |= FlagCheckbox("Enable Transmission", &renderer.params->flags, TRANSMISSION_FLAG);
+    ImGui::SliderFloat("Russian Roulette", &renderer.getParams().russianRouletteWeight, 1.0f, 10.0f, "%.1f");
+    ImGui::SliderFloat("Scene Epsilon", &renderer.getParams().sceneEpsilon, 1e-6f, 1e-1f, "%f", ImGuiSliderFlags_Logarithmic);
+    bool reset = FlagCheckbox("Enable NEE", &renderer.getParams().flags, NEE_FLAG);
+    reset |= FlagCheckbox("Enable Transmission", &renderer.getParams().flags, TRANSMISSION_FLAG);
     for (size_t i = 0; i < renderer.scene.cameras.size(); i++) {
         if (ImGui::Button(renderer.scene.cameras[i].first.c_str())) {
             auto scale = mat4(1.0f);
@@ -149,7 +149,7 @@ void MainApp::buildImGui() {
         if (i < renderer.scene.cameras.size() - 1) ImGui::SameLine();
     }
     ImGui::SeparatorText("NRC");
-    reset |= EnumCombo("Inference Mode", &renderer.params->inferenceMode, INFERENCE_MODES);
+    reset |= EnumCombo("Inference Mode", &renderer.getParams().inferenceMode, INFERENCE_MODES);
     ImGui::PlotLines("Loss", renderer.lossHistory.data(), renderer.lossHistory.size());
     if (ImGui::Button("Reset NRC")) {
         renderer.resetNRC();

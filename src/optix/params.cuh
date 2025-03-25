@@ -36,8 +36,8 @@ struct NRCOutput {
 constexpr int PAYLOAD_SIZE = 4 * 3 + 5;
 constexpr uint NRC_INPUT_SIZE = 3 * 3 + 2 * 2 + 1;
 constexpr uint NRC_OUTPUT_SIZE = 3;
-constexpr uint NRC_SUBBATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY * 64 * 8;
-constexpr uint STEPS_PER_BATCH = 4;
+constexpr uint NRC_SUBBATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY * 64 * 8 * 4;
+constexpr uint STEPS_PER_BATCH = 1;
 constexpr uint NRC_BATCH_SIZE = NRC_SUBBATCH_SIZE * STEPS_PER_BATCH;
 
 const nlohmann::json NRC_CONFIG = {
@@ -151,10 +151,10 @@ struct Params {
     uint sequenceOffset; // Offset into the Sobol sequence
     uint sequenceStride; // Stride between different dimensions
     uint sample; // Current sample
-    float weight; // Weight of the current sample (= 1 / (sample + 1))
-    float russianRouletteWeight; // Weight for Russian Roulette
-    float sceneEpsilon; // Scene epsilon
-    uint flags;
+    float weight = 1.0f; // Weight of the current sample (= 1 / (sample + 1))
+    float russianRouletteWeight = 10.0f; // Weight for Russian Roulette
+    float sceneEpsilon = 1e-4f; // Scene epsilon
+    uint flags = NEE_FLAG; // Flags
     InferenceMode inferenceMode;
     float3 sceneMin;
     float sceneScale;
@@ -177,17 +177,6 @@ struct Params {
     float3* inferenceThroughput;
 };
 extern "C" __constant__ const Params params;
-
-__host__ inline void initParams(Params* params) {
-    params->clipToWorld = make_float4x4(make_float4(1.0f, 0.0f, 0.0f, 0.0f),
-                                        make_float4(0.0f, 1.0f, 0.0f, 0.0f),
-                                        make_float4(0.0f, 0.0f, 1.0f, 0.0f),
-                                        make_float4(0.0f, 0.0f, 0.0f, 1.0f));
-    params->weight = 1.0f;
-    params->russianRouletteWeight = 10.0f;
-    params->sceneEpsilon = 1e-4f;
-    params->flags = NEE_FLAG;
-}
 
 struct RaygenData {};
 struct MissData {};
