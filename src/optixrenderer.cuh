@@ -20,6 +20,19 @@ using namespace glm;
 #include "optix/params.cuh"
 #include "scene.hpp"
 
+enum Modules {
+    COMBINED,
+    HIT,
+    REFERENCE,
+};
+
+enum ProgramGroup {
+    COMBINED_RG,
+    REFERENCE_RG,
+    MS,
+    CH,
+};
+
 class OptixRenderer {
 public:
     OptixRenderer();
@@ -44,12 +57,10 @@ public:
 private:
     OptixDeviceContext context;
     OptixPipeline pipeline;
-    OptixProgramGroup combinedPG;
-    OptixProgramGroup referencePG;
-    OptixProgramGroup missPG;
-    OptixProgramGroup hitPG;
 
+    std::array<OptixModule, 3> modules;
     std::array<OptixShaderBindingTable, 2> sbts;
+    std::array<OptixProgramGroup, 4> programGroups;
 
     tcnn::GPUMemory<Params> params {1, true};
     tcnn::GPUMemory<HitRecord> hitRecords;

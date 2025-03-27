@@ -64,7 +64,7 @@ OptixRenderer::OptixRenderer() {
     //moduleCompileOptions.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0; // Disable optimizations
     moduleCompileOptions.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_MODERATE; // Generate debug information
 #endif
-    OptixPipelineCompileOptions pipelineCompileOptions = {
+    const OptixPipelineCompileOptions pipelineCompileOptions = {
         .usesMotionBlur = false,
         .traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING,
         .numPayloadValues = PAYLOAD_SIZE,
@@ -74,13 +74,10 @@ OptixRenderer::OptixRenderer() {
         .usesPrimitiveTypeFlags = static_cast<unsigned int>(OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE),
     };
 
-    OptixModule combinedModule, hitModule, referenceModule = nullptr;
-    const auto combined = readBinaryFile(optixir::paths[0]);
-    check(optixModuleCreate(context, &moduleCompileOptions, &pipelineCompileOptions, combined.data(), combined.size(), nullptr, nullptr, &combinedModule));
-    const auto hit = readBinaryFile(optixir::paths[1]);
-    check(optixModuleCreate(context, &moduleCompileOptions, &pipelineCompileOptions, hit.data(), hit.size(), nullptr, nullptr, &hitModule));
-    const auto reference = readBinaryFile(optixir::paths[2]);
-    check(optixModuleCreate(context, &moduleCompileOptions, &pipelineCompileOptions, reference.data(), reference.size(), nullptr, nullptr, &referenceModule));
+    for (size_t i = 0; i < optixir::paths.size(); i++) {
+        const auto binary = readBinaryFile(optixir::paths[i]);
+        check(optixModuleCreate(context, &moduleCompileOptions, &pipelineCompileOptions, binary.data(), binary.size(), nullptr, nullptr, &modules[i]));
+    }
 
     // Create program groups
     OptixProgramGroupOptions pgOptions = {};
@@ -88,38 +85,33 @@ OptixRenderer::OptixRenderer() {
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
             .raygen = {
-                .module = combinedModule,
+                .module = modules[COMBINED],
                 .entryFunctionName = "__raygen__combined",
             },
         },
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
             .raygen = {
-                .module = referenceModule,
+                .module = modules[REFERENCE],
                 .entryFunctionName = "__raygen__reference",
             },
         },
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
             .miss = {
-                .module = hitModule,
+                .module = modules[HIT],
                 .entryFunctionName = "__miss__ms",
             },
         },
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
             .hitgroup = {
-                .moduleCH = hitModule,
+                .moduleCH = modules[HIT],
                 .entryFunctionNameCH = "__closesthit__ch",
             },
         },
     };
-    std::array<OptixProgramGroup, programDecriptions.size()> programGroups;
     check(optixProgramGroupCreate(context, programDecriptions.data(), programDecriptions.size(), &pgOptions, nullptr, nullptr, programGroups.data()));
-    combinedPG = programGroups[0];
-    referencePG = programGroups[1];
-    missPG = programGroups[2];
-    hitPG = programGroups[3];
 
     // Create pipeline
     OptixPipelineLinkOptions pipelineLinkOptions = {
@@ -131,12 +123,12 @@ OptixRenderer::OptixRenderer() {
 
     // Set up shader binding table
     std::vector<RaygenRecord> raygenRecord(2);
-    check(optixSbtRecordPackHeader(combinedPG, &raygenRecord[0]));
-    check(optixSbtRecordPackHeader(referencePG, &raygenRecord[1]));
+    check(optixSbtRecordPackHeader(programGroups[COMBINED_RG], &raygenRecord[0]));
+    check(optixSbtRecordPackHeader(programGroups[REFERENCE_RG], &raygenRecord[1]));
     raygenRecords.resize_and_copy_from_host(raygenRecord);
 
     MissRecord missRecord;
-    check(optixSbtRecordPackHeader(missPG, &missRecord));
+    check(optixSbtRecordPackHeader(programGroups[MS], &missRecord));
     missRecords.resize_and_copy_from_host({missRecord});
 
     for (size_t i = 0; i < sbts.size(); i++) {
@@ -170,6 +162,7 @@ OptixRenderer::OptixRenderer() {
 }
 
 OptixRenderer::~OptixRenderer() {
+    for (auto& module : modules) check(optixModuleDestroy(module));
     check(optixPipelineDestroy(pipeline));
     check(optixDeviceContextDestroy(context));
 }
@@ -179,7 +172,7 @@ void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
     const auto aabb = scene.getAABB();
     const auto size = aabb.max - aabb.min;
 
-    for (auto& hitRecord : sceneData.hitRecords) optixSbtRecordPackHeader(hitPG, &hitRecord);
+    for (auto& hitRecord : sceneData.hitRecords) optixSbtRecordPackHeader(programGroups[CH], &hitRecord);
 
     hitRecords.resize_and_copy_from_host(sceneData.hitRecords);
     materials.resize_and_copy_from_host(sceneData.materials);
