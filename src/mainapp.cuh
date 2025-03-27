@@ -66,6 +66,6 @@ class MainApp : public App {
     float exposure = 1.0f;
     std::filesystem::path folder;
     std::vector<std::filesystem::path> scenes;
-    size_t sceneID;
+    int sceneID = 0;
     glm::uvec2 bufferDim;
 };

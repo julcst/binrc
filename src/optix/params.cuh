@@ -40,59 +40,6 @@ constexpr uint NRC_SUBBATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY * 64 * 8 * 4;
 constexpr uint STEPS_PER_BATCH = 1;
 constexpr uint NRC_BATCH_SIZE = NRC_SUBBATCH_SIZE * STEPS_PER_BATCH;
 
-const nlohmann::json NRC_CONFIG = {
-	{"loss", {
-		{"otype", "RelativeL2Luminance"},
-	}},
-	{"optimizer", {
-		{"otype", "EMA"},
-        {"decay", 0.95f},
-        {"nested", {
-            {"otype", "Adam"},
-            {"learning_rate", 1e-3f},
-            {"beta1", 0.9f},
-            {"beta2", 0.999f},
-            {"epsilon", 1e-8f},
-            {"l2_reg", 0.0f},
-            {"relative_decay", 0.0f},
-            {"absolute_decay", 0.0f},
-            {"adabound", false},
-        }},
-	}},
-	{"encoding", {
-		{"otype", "Composite"},
-        {"nested", {
-            {
-                {"n_dims_to_encode", 3},
-                {"otype", "Grid"},
-                {"type", "Hash"},
-                {"n_levels", 16},
-                {"n_feature_per_level", 2},
-                {"log2_hashmap_size", 15},
-                {"base_resolution", 16},
-                {"per_level_scale", 2.0f},
-                {"interpolation", "Linear"},
-            },
-            {
-                {"n_dims_to_encode", 5},
-                {"otype", "OneBlob"},
-                {"n_bins", 4},
-            },
-            {
-                {"otype", "Identity"},
-            },
-        }},
-    }},
-	{"network", {
-		{"otype", "FullyFusedMLP"},
-        //{"otype", "CutlassMLP"},
-		{"activation", "ReLU"},
-		{"output_activation", "None"},
-		{"n_neurons", 64},
-		{"n_hidden_layers", 5},
-	}},
-};
-
 struct VertexData {
     float3 position;
     float3 normal;

@@ -50,9 +50,9 @@ std::vector<std::filesystem::path> scanFolder(const std::filesystem::path& folde
     }
 }
 
-bool FileCombo(const char* label, size_t* curr, const std::vector<std::filesystem::path>& items) {
+bool FileCombo(const char* label, int* curr, const std::vector<std::filesystem::path>& items) {
     return ImGui::Combo(
-        label, reinterpret_cast<int*>(curr),
+        label, curr,
         [](void* data, int idx, const char** out_text) {
             auto items = reinterpret_cast<const std::vector<std::filesystem::path>*>(data);
             *out_text = items->at(idx).c_str();
