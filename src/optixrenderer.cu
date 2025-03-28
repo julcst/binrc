@@ -291,11 +291,11 @@ void OptixRenderer::resize(uvec2 dim) {
 
     // Generate the Cranley-Patterson-Rotation per pixel
     // NOTE: We rebuild the generator on resize, this makes resize slow but saves memory
-    rotationTable.resize(dim.x * dim.y);
+    rotationTable.resize(dim.x * dim.y * ROTATIONS_PER_PIXEL);
 
     curandGenerator_t generator;
     check(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_XORWOW));
-    check(curandGenerateUniform(generator, reinterpret_cast<float*>(rotationTable.data()), rotationTable.size() * 4));
+    check(curandGenerateUniform(generator, rotationTable.data(), rotationTable.size()));
     check(curandDestroyGenerator(generator));
 
     getParams().inferenceInput = nrcInferenceInput.data();

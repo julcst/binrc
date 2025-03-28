@@ -39,6 +39,8 @@ FetchContent_Declare(
     fastgltf
     URL https://github.com/spnda/fastgltf/archive/v0.8.0.tar.gz
 )
+set(TCNN_BUILD_BENCHMARK OFF)
+set(TCNN_BUILD_EXAMPLES OFF)
 FetchContent_Declare(
     tinycudann
     GIT_REPOSITORY https://github.com/NVlabs/tiny-cuda-nn
