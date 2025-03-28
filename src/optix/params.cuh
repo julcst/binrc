@@ -16,8 +16,11 @@ constexpr uint RANDS_PER_BOUNCE = 4;
 constexpr uint RAND_SEQUENCE_DIMS = RANDS_PER_PIXEL + RANDS_PER_BOUNCE * MAX_BOUNCES;
 constexpr uint RAND_SEQUENCE_CACHE_SIZE = 4096;
 
+constexpr uint TRAIN_DEPTH = 6;
 constexpr uint TRANSMISSION_FLAG = 1 << 0;
 constexpr uint NEE_FLAG = 1 << 1;
+constexpr uint TRAINING_NEE_FLAG = 1 << 2;
+constexpr uint INFERENCE_NEE_FLAG = 1 << 3;
 
 // TODO: Use half instead of float
 struct NRCInput {

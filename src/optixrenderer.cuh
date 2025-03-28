@@ -19,10 +19,12 @@ using namespace glm;
 
 #include "optix/params.cuh"
 #include "scene.hpp"
+#include "optixir.hpp"
 
 enum Modules {
     COMBINED,
     HIT,
+    INFERENCE,
     REFERENCE,
 };
 
@@ -58,7 +60,7 @@ private:
     OptixDeviceContext context;
     OptixPipeline pipeline;
 
-    std::array<OptixModule, 3> modules;
+    std::array<OptixModule, optixir::paths.size()> modules;
     std::array<OptixShaderBindingTable, 2> sbts;
     std::array<OptixProgramGroup, 4> programGroups;
 

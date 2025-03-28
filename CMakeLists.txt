@@ -49,6 +49,7 @@ FetchContent_MakeAvailable(framework fastgltf tinycudann)
 set(OPTIXIR
     src/optix/combined.cu
     src/optix/hit.cu
+    src/optix/inference.cu
     src/optix/reference.cu
 )
 add_library(optixir OBJECT ${OPTIXIR})
