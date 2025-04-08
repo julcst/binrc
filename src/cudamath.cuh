@@ -267,6 +267,14 @@ __host__ __device__ constexpr bool isfinite(const float2& v) {
     return std::isfinite(v.x) && std::isfinite(v.y);
 }
 
+__host__ __device__ constexpr float2 sign(const float2& v) {
+    return {sign(v.x), sign(v.y)};
+}
+
+__host__ __device__ constexpr float2 abs(const float2& v) {
+    return {abs(v.x), abs(v.y)};
+}
+
 // Operators on CUDA float3
 
 __host__ __device__ constexpr float3 make_float3(float x) {
@@ -1278,4 +1286,21 @@ __host__ __device__ constexpr float2 toNormSpherical(const float3& n) {
 
 __host__ __device__ constexpr float2 toNormCylindrical(const float3& n) {
     return {atan2f(n.y, n.x) * INV_PI * 0.5f + 0.5f, n.z * 0.5f + 0.5f};
+}
+
+/**
+ * Fast float3 to octahedral mapping from "A Survey of Efficient Representations for Independent Unit Vectors"
+ * @param n The normalized unit vector to be mapped
+ * @return The octahedral mapping of the input vector in the range [-1, 1]
+ */
+__host__ __device__ constexpr float2 toOct(const float3& n) {
+    // Project the sphere onto the octahedron, and then onto the xy-plane
+    const auto p = make_float2(n) * (1.0f / (abs(n.x) + abs(n.y) + abs(n.z)));
+
+    // Reflect the folds of the lower hemisphere over the diagonals
+    return (n.z <= 0.0f) ? ((1.0f - abs({p.y, p.x})) * sign(p)) : p;
+}
+
+__host__ __device__ constexpr float2 toNormOct(const float3& n) {
+    return toOct(n) * 0.5f + 0.5f;
 }
