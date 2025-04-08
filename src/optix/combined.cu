@@ -11,12 +11,9 @@ extern "C" __global__ void __raygen__combined() {
     const auto idx = optixGetLaunchIndex();
     const auto dim = optixGetLaunchDimensions();
     const auto i = idx.y * params.dim.x + idx.x;
+    const auto rotation = params.rotationTable[i];
 
-    float pixelRnd[RANDS_PER_PIXEL];
-    getPixelRands(i, pixelRnd);
-
-    const float2 jitter = {pixelRnd[0], pixelRnd[1]};
-    const auto uv = (make_float2(idx.x, idx.y) + jitter) / make_float2(dim.x, dim.y);
+    const auto uv = (make_float2(idx.x, idx.y) + RND_JITTER) / make_float2(dim.x, dim.y);
     auto ray = makeCameraRay(uv);
 
     const auto nee = params.lightTable && (params.flags & NEE_FLAG);
@@ -30,8 +27,8 @@ extern "C" __global__ void __raygen__combined() {
     auto trainDepth = -1;
     // TODO: Train the whole path
     // TODO: Use stratified sampling
-    if (pixelRnd[0] < NRC_BATCH_SIZE / float(params.dim.x * params.dim.y)) {
-        trainDepth = int(pixelRnd[1] * 6) + 1;
+    if (RND_TRAIN1 < NRC_BATCH_SIZE / float(params.dim.x * params.dim.y)) {
+        trainDepth = int(RND_TRAIN2 * 6) + 1;
     }
     auto trainTarget = NRCOutput{};
     uint trainIndex = 0;
@@ -45,9 +42,6 @@ extern "C" __global__ void __raygen__combined() {
     NRCInput nrcQuery {};
     
     for (uint depth = 1; depth < MAX_BOUNCES; depth++) {
-        float bounceRnd[RANDS_PER_BOUNCE];
-        getBounceRands(i, depth, bounceRnd);
-
         if (depth == trainDepth) {
             trainTarget.radiance = make_float3(0.0f);
             trainThroughput = make_float3(1.0f);
@@ -55,7 +49,7 @@ extern "C" __global__ void __raygen__combined() {
 
         // Russian roulette
         const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
-        if (bounceRnd[0] >= pContinue) break;
+        if (RND_ROULETTE >= pContinue) break;
         throughput /= pContinue;
         trainThroughput /= pContinue;
 
@@ -111,7 +105,7 @@ extern "C" __global__ void __raygen__combined() {
 
         // Next event estimation
         if (nee) {
-            const auto sample = sampleLight({bounceRnd[1], bounceRnd[2], bounceRnd[3]}, hitPoint);
+            const auto sample = sampleLight(RND_LSRC, RND_LSAMP, hitPoint);
             const auto cosThetaS = dot(sample.wi, n);
             //if (abs(cosThetaS) > 0.0f && abs(sample.cosThetaL) > 0.0f) {
                 const auto brdf = evalDisney(wo, sample.wi, n, baseColor, metallic, alpha, payload.transmission, inside);
@@ -135,7 +129,7 @@ extern "C" __global__ void __raygen__combined() {
             if (!isTrainingPath) break;
         }
 
-        const auto sample = sampleDisney(bounceRnd[4], {bounceRnd[5], bounceRnd[6]}, {bounceRnd[7], bounceRnd[8]}, wo, n, inside, payload.baseColor, payload.metallic, alpha, payload.transmission);
+        const auto sample = sampleDisney(RND_BSDF, RND_MICROFACET, RND_DIFFUSE, wo, n, inside, payload.baseColor, payload.metallic, alpha, payload.transmission);
         
         ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
         throughput *= sample.throughput;

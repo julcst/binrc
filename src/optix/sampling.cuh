@@ -377,9 +377,9 @@ __device__ inline float lightPdfUniform(const float3& wi, const float dist, cons
     return (dist * dist) / (area * cosThetaL * params.lightTableSize); // In solid angle measure
 }
 
-__device__ inline LightSample sampleLight(const float3& rand, const float3& x) {
-    const auto light = sampleLightTableUniform(rand.x);
-    return sampleLightSource(light, make_float2(rand.y, rand.z), x);
+__device__ inline LightSample sampleLight(const float randSrc, const float2& randSurf, const float3& x) {
+    const auto light = sampleLightTableUniform(randSrc);
+    return sampleLightSource(light, randSurf, x);
 }
 
 __device__ constexpr float balanceHeuristic(float pdf1, float pdf2) {

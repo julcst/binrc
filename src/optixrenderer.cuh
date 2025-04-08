@@ -69,7 +69,7 @@ private:
     tcnn::GPUMemory<RaygenRecord> raygenRecords;
     tcnn::GPUMemory<MissRecord> missRecords;
     tcnn::GPUMemory<float> randSequence;
-    tcnn::GPUMemory<float> rotationTable;
+    tcnn::GPUMemory<float2> rotationTable;
     tcnn::GPUMemory<Material> materials;
     tcnn::GPUMemory<EmissiveTriangle> lightTable;
 

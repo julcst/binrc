@@ -10,10 +10,10 @@
 #include "cudamath.cuh"
 
 constexpr float MAX_T = 1e32f;
-constexpr uint MAX_BOUNCES = 31;
-constexpr uint RANDS_PER_PIXEL = 2;
+constexpr uint MAX_BOUNCES = 12;
+constexpr uint RANDS_PER_PIXEL = 4;
 constexpr uint RANDS_PER_BOUNCE = 9;
-constexpr uint ROTATIONS_PER_PIXEL = std::max(RANDS_PER_PIXEL, RANDS_PER_BOUNCE);
+constexpr uint ROTATIONS_PER_PIXEL = 2;
 constexpr uint RAND_SEQUENCE_DIMS = RANDS_PER_PIXEL + RANDS_PER_BOUNCE * MAX_BOUNCES;
 constexpr uint RAND_SEQUENCE_CACHE_SIZE = 4096;
 
@@ -114,7 +114,7 @@ struct Params {
 // NOTE: This is owned memory and must be freed //
 //////////////////////////////////////////////////
     float* randSequence; // Quasi-random Sobol sequence
-    float* rotationTable; // Cranley-Patterson-Rotation per pixel
+    float2* rotationTable; // Cranley-Patterson-Rotation per pixel
     Material* materials; // materials
     EmissiveTriangle* lightTable; // lightTable
     uint lightTableSize; // lightTableSize

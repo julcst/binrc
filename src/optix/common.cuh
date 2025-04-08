@@ -19,7 +19,7 @@ __device__ inline Ray makeCameraRay(const float2& uv) {
     return {origin3, dir3};
 }
 
-__device__ constexpr float getRand(uint dim) {
+__device__ __forceinline__ constexpr float getRand(uint dim) {
     const uint i = params.sample - params.sequenceOffset + params.sequenceStride * dim;
     return params.randSequence[i];
 }
@@ -32,29 +32,37 @@ __device__ __forceinline__ constexpr float getRand(uint depth, uint dim, float r
     return fract(getRand(depth, dim) + rotation);
 }
 
+__device__ __forceinline__ constexpr float2 getRand2(uint dim) {
+    const uint i = params.sample - params.sequenceOffset + params.sequenceStride * dim;
+    return {
+        params.randSequence[i],
+        params.randSequence[i + params.sequenceStride]
+    };
+}
+
+__device__ __forceinline__ constexpr float2 getRand2(uint depth, uint dim) {
+    return getRand2(RANDS_PER_PIXEL + depth * RANDS_PER_BOUNCE + dim);
+}
+
 __device__ __forceinline__ constexpr float2 getRand2(uint depth, uint offset, float2 rotation) {
     return fract(make_float2(getRand(depth, offset), getRand(depth, offset + 1)) + rotation);
 }
 
+#define PR1(dim) fract(getRand(dim) + rotation.x)
+#define PR2(dim) fract(getRand2(dim) + rotation)
 #define BR1(dim) getRand(depth, dim, rotation.x)
 #define BR2(dim) getRand2(depth, dim, rotation)
 
-__device__ __forceinline__ constexpr void getPixelRands(uint pixelIdx, float (&rands)[RANDS_PER_PIXEL]) {
-    const auto seqPtr = params.randSequence + params.sample - params.sequenceOffset;
-    const auto rotPtr = params.rotationTable + pixelIdx * ROTATIONS_PER_PIXEL;
-    for (uint dim = 0; dim < RANDS_PER_PIXEL; dim++) {
-        rands[dim] = fract(rotPtr[dim] + seqPtr[params.sequenceStride * dim]);
-    }
-}
+#define RND_JITTER PR2(0)
+#define RND_TRAIN1 PR1(2)
+#define RND_TRAIN2 PR1(3)
 
-__device__ __forceinline__ constexpr void getBounceRands(uint pixelIdx, uint depth, float (&rands)[RANDS_PER_BOUNCE]) {
-    const auto seqPtr = params.randSequence + params.sample - params.sequenceOffset;
-    const auto rotPtr = params.rotationTable + pixelIdx * ROTATIONS_PER_PIXEL;
-    const auto offset = RANDS_PER_PIXEL + RANDS_PER_BOUNCE * (depth - 1);
-    for (uint dim = 0; dim < RANDS_PER_BOUNCE; dim++) {
-        rands[dim] = fract(rotPtr[dim + offset] + seqPtr[params.sequenceStride * (dim + offset)]);
-    }
-}
+#define RND_ROULETTE BR1(0)
+#define RND_LSRC BR1(1)
+#define RND_LSAMP BR2(2)
+#define RND_BSDF BR1(4)
+#define RND_MICROFACET BR2(5)
+#define RND_DIFFUSE BR2(7)
 
 __device__ inline NRCInput encodeInput(const float3& position, const float3& wo, const float3& wn, const float3& diffuse, const float3& specular, float alpha) {
     return {
