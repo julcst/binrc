@@ -4,6 +4,7 @@
 #include "params.cuh"
 #include "payload.cuh"
 #include "common.cuh"
+#include "nrc.cuh"
 #include "cudamath.cuh"
 #include "sampling.cuh"
 

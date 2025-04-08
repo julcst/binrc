@@ -146,3 +146,48 @@ struct Record {
 using RaygenRecord = Record<RaygenData>;
 using MissRecord = Record<MissData>;
 using HitRecord = Record<HitData>;
+
+__device__ __forceinline__ float getRand(uint dim) {
+    const uint i = params.sample - params.sequenceOffset + params.sequenceStride * dim;
+    return params.randSequence[i];
+}
+
+__device__ __forceinline__ float getRand(uint depth, uint dim) {
+    return getRand(RANDS_PER_PIXEL + depth * RANDS_PER_BOUNCE + dim);
+}
+
+__device__ __forceinline__ float getRand(uint depth, uint dim, float rotation) {
+    return fract(getRand(depth, dim) + rotation);
+}
+
+__device__ __forceinline__ float2 getRand2(uint dim) {
+    const uint i = params.sample - params.sequenceOffset + params.sequenceStride * dim;
+    return {
+        params.randSequence[i],
+        params.randSequence[i + params.sequenceStride]
+    };
+}
+
+__device__ __forceinline__ float2 getRand2(uint depth, uint dim) {
+    return getRand2(RANDS_PER_PIXEL + depth * RANDS_PER_BOUNCE + dim);
+}
+
+__device__ __forceinline__ float2 getRand2(uint depth, uint offset, float2 rotation) {
+    return fract(make_float2(getRand(depth, offset), getRand(depth, offset + 1)) + rotation);
+}
+
+#define PR1(dim) fract(getRand(dim) + rotation.x)
+#define PR2(dim) fract(getRand2(dim) + rotation)
+#define BR1(dim) getRand(depth, dim, rotation.x)
+#define BR2(dim) getRand2(depth, dim, rotation)
+
+#define RND_JITTER PR2(0)
+#define RND_TRAIN1 PR1(2)
+#define RND_TRAIN2 PR1(3)
+
+#define RND_ROULETTE BR1(0)
+#define RND_LSRC BR1(1)
+#define RND_LSAMP BR2(2)
+#define RND_BSDF BR1(4)
+#define RND_MICROFACET BR2(5)
+#define RND_DIFFUSE BR2(7)
