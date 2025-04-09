@@ -21,7 +21,7 @@ extern "C" __global__ void __raygen__inference() {
 
     Payload payload;
     auto prevBrdfPdf = 1.0f;
-    auto diracEvent = true;
+    auto lightPdfIsZero = true;
     auto hitPoint = ray.origin;
     auto n = make_float3(0.0f);
     auto wo = ray.direction;
@@ -55,7 +55,7 @@ extern "C" __global__ void __raygen__inference() {
         // Emission
         if (luminance(payload.emission) > 0.0f) {
             auto weight = 1.0f;
-            if (nee && !diracEvent) {
+            if (nee && !lightPdfIsZero) {
                 // NOTE: Maybe calculating the prevBrdfPdf here only when necessary is faster
                 const auto lightPdf = lightPdfUniform(wo, payload.t, n, payload.area);
                 weight = balanceHeuristic(prevBrdfPdf, lightPdf);
@@ -87,7 +87,7 @@ extern "C" __global__ void __raygen__inference() {
         ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
         throughput *= sample.throughput;
         prevBrdfPdf = sample.pdf;
-        diracEvent = sample.isDirac;
+        lightPdfIsZero = sample.isDirac || payload.transmission > 0.0f;
     }
 
     payload = trace(ray);

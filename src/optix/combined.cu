@@ -23,7 +23,7 @@ extern "C" __global__ void __raygen__combined() {
     auto color = make_float3(0.0f);
     auto throughput = make_float3(1.0f);
     auto prevBrdfPdf = 1.0f;
-    auto diracEvent = true;
+    auto lightPdfIsZero = true;
 
     auto trainDepth = -1;
     // TODO: Train the whole path
@@ -69,7 +69,7 @@ extern "C" __global__ void __raygen__combined() {
 
         if (luminance(payload.emission) > 0.0f) {
             auto weight = 1.0f;
-            if (nee && !diracEvent) {
+            if (nee && !lightPdfIsZero) {
                 // NOTE: Maybe calculating the prevBrdfPdf here only when necessary is faster
                 const auto lightPdf = lightPdfUniform(wo, payload.t, n, payload.area);
                 weight = balanceHeuristic(prevBrdfPdf, lightPdf);
@@ -136,7 +136,7 @@ extern "C" __global__ void __raygen__combined() {
         throughput *= sample.throughput;
         trainThroughput *= sample.throughput;
         prevBrdfPdf = sample.pdf;
-        diracEvent = sample.isDirac;
+        lightPdfIsZero = sample.isDirac || payload.transmission > 0.0f;
 
         // NRC Inference Input
         if (params.inferenceMode == InferenceMode::FIRST_DIFFUSE && !sample.isSpecular) {

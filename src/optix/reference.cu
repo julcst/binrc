@@ -22,7 +22,7 @@ extern "C" __global__ void __raygen__reference() {
     auto color = make_float3(0.0f);
     auto throughput = make_float3(1.0f);
     auto prevBrdfPdf = 1.0f;
-    auto diracEvent = true;
+    auto lightPdfIsZero = true;
     
     for (uint depth = 1; depth < MAX_BOUNCES; depth++) {
         // Russian roulette
@@ -44,7 +44,7 @@ extern "C" __global__ void __raygen__reference() {
 
         if (luminance(payload.emission) > 0.0f) {
             auto weight = 1.0f;
-            if (nee && !diracEvent) {
+            if (nee && !lightPdfIsZero) {
                 // NOTE: Maybe calculating the prevBrdfPdf here only when necessary is faster
                 const auto lightPdf = lightPdfUniform(wo, payload.t, n, payload.area);
                 weight = balanceHeuristic(prevBrdfPdf, lightPdf);
@@ -77,7 +77,7 @@ extern "C" __global__ void __raygen__reference() {
         ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
         throughput *= sample.throughput;
         prevBrdfPdf = sample.pdf;
-        diracEvent = sample.isDirac;
+        lightPdfIsZero = sample.isDirac || payload.transmission > 0.0f;
     }
 
     // NOTE: We should not need to prevent NaNs

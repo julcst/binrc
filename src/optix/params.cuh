@@ -105,7 +105,7 @@ struct Params {
     float weight = 1.0f; // Weight of the current sample (= 1 / (sample + 1))
     float russianRouletteWeight = 10.0f; // Weight for Russian Roulette
     float sceneEpsilon = 1e-4f; // Scene epsilon
-    uint flags = NEE_FLAG; // Flags
+    uint flags = NEE_FLAG | TRANSMISSION_FLAG; // Flags
     InferenceMode inferenceMode;
     float3 sceneMin;
     float sceneScale;

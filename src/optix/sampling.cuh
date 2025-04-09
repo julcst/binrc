@@ -202,7 +202,7 @@ __device__ constexpr float disneyPdf(const LightContext& ctx) {
     const auto G1 = 1.0f / (1.0f + lambdaV);
     const auto VNDF = G1 * D;
     const auto pdfSpecular = VNDF / (4.0f * ctx.NdotV);
-    const auto pdfTransmission = VNDF * ctx.HdotL / pow2(ctx.HdotL + ctx.HdotV / ctx.eta);
+    const auto pdfTransmission = VNDF * abs(ctx.HdotL) / pow2(ctx.HdotL + ctx.HdotV / ctx.eta);
 
     const auto pdfDiffuse = ctx.NdotL * INV_PI;
 
@@ -292,10 +292,10 @@ __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, c
     const auto G1 = 1.0f / (1.0f + lambdaV);
     const auto G = 1.0f / (1.0f + lambdaL + lambdaV);
     const auto specular = F * D * G / (4.0f * NdotV);
-    const auto transmission = albedo * (1.0f - F) * D * G * HdotL * HdotV / (NdotV * NdotL * pow2(HdotL + HdotV / eta)); // TODO: Check
+    const auto transmission = albedo * (1.0f - F) * D * G * HdotL * HdotV / (NdotV * NdotL * pow2(HdotL + HdotV / eta));
     const auto VNDF = G1 * D;
     const auto pdfSpecular = VNDF / (4.0f * NdotV);
-    const auto pdfTransmission = VNDF * HdotL / pow2(HdotL + HdotV / eta);
+    const auto pdfTransmission = VNDF * abs(HdotL) / pow2(HdotL + HdotV / eta);
 
     const auto FD90 = 0.5f + 2.0f * alpha * HdotV * HdotV;
     const auto response = (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotL)) * (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotV));
