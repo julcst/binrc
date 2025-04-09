@@ -84,9 +84,14 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 )
 
 # TODO: Embed the file content
-string(APPEND CONTENT "#pragma once\n\n#include <filesystem>\n#include <array>\n\nnamespace optixir {\n\tconstexpr std::array paths = {\n\t\t\"")
+string(APPEND CONTENT "#pragma once\n\n#include <filesystem>\n#include <array>\n\nnamespace optixir {")
+string(APPEND CONTENT "\n\tconstexpr std::array paths = {\n\t\t\"")
 string(APPEND CONTENT $<JOIN:$<LIST:SORT,$<TARGET_OBJECTS:optixir>>,$<QUOTE>$<COMMA>\n\t\t$<QUOTE>>)
-string(APPEND CONTENT "\"\n\t};\n}\n")
+string(APPEND CONTENT "\"\n\t};")
+string(APPEND CONTENT "\n\tenum Modules {\n\t\t")
+string(APPEND CONTENT $<JOIN:$<UPPER_CASE:$<PATH:GET_STEM,$<LIST:SORT,$<TARGET_OBJECTS:optixir>>>>,$<COMMA>\n\t\t>)
+string(APPEND CONTENT "\n\t};")
+string(APPEND CONTENT "\n}\n")
 set(OPTIXIR_DIR "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIGURATION>/include")
 file(GENERATE OUTPUT ${OPTIXIR_DIR}/optixir.hpp CONTENT "${CONTENT}" TARGET ${PROJECT_NAME})
 target_include_directories(${PROJECT_NAME} PRIVATE ${OPTIXIR_DIR})

@@ -21,18 +21,11 @@ using namespace glm;
 #include "scene.hpp"
 #include "optixir.hpp"
 
-enum Modules {
-    COMBINED,
-    HIT,
-    INFERENCE,
-    REFERENCE,
-};
-
 enum ProgramGroup {
-    COMBINED_RG,
-    REFERENCE_RG,
-    MS,
-    CH,
+    COMBINED,
+    REFERENCE,
+    MISS,
+    CLOSEST_HIT,
 };
 
 class OptixRenderer {

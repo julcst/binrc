@@ -85,28 +85,28 @@ OptixRenderer::OptixRenderer() {
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
             .raygen = {
-                .module = modules[COMBINED],
+                .module = modules[optixir::COMBINED],
                 .entryFunctionName = "__raygen__combined",
             },
         },
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
             .raygen = {
-                .module = modules[REFERENCE],
+                .module = modules[optixir::REFERENCE],
                 .entryFunctionName = "__raygen__reference",
             },
         },
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
             .miss = {
-                .module = modules[HIT],
+                .module = modules[optixir::HIT],
                 .entryFunctionName = "__miss__ms",
             },
         },
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
             .hitgroup = {
-                .moduleCH = modules[HIT],
+                .moduleCH = modules[optixir::HIT],
                 .entryFunctionNameCH = "__closesthit__ch",
             },
         },
@@ -123,12 +123,12 @@ OptixRenderer::OptixRenderer() {
 
     // Set up shader binding table
     std::vector<RaygenRecord> raygenRecord(2);
-    check(optixSbtRecordPackHeader(programGroups[COMBINED_RG], &raygenRecord[0]));
-    check(optixSbtRecordPackHeader(programGroups[REFERENCE_RG], &raygenRecord[1]));
+    check(optixSbtRecordPackHeader(programGroups[COMBINED], &raygenRecord[0]));
+    check(optixSbtRecordPackHeader(programGroups[REFERENCE], &raygenRecord[1]));
     raygenRecords.resize_and_copy_from_host(raygenRecord);
 
     MissRecord missRecord;
-    check(optixSbtRecordPackHeader(programGroups[MS], &missRecord));
+    check(optixSbtRecordPackHeader(programGroups[MISS], &missRecord));
     missRecords.resize_and_copy_from_host({missRecord});
 
     for (size_t i = 0; i < sbts.size(); i++) {
@@ -172,7 +172,7 @@ void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
     const auto aabb = scene.getAABB();
     const auto size = aabb.max - aabb.min;
 
-    for (auto& hitRecord : sceneData.hitRecords) optixSbtRecordPackHeader(programGroups[CH], &hitRecord);
+    for (auto& hitRecord : sceneData.hitRecords) optixSbtRecordPackHeader(programGroups[CLOSEST_HIT], &hitRecord);
 
     hitRecords.resize_and_copy_from_host(sceneData.hitRecords);
     materials.resize_and_copy_from_host(sceneData.materials);
