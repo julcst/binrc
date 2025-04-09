@@ -24,7 +24,7 @@ __device__ constexpr float D_TrowbridgeReitz(float NdotH, float alpha2) {
     const auto cosTheta = NdotH;
     const auto cos2Theta = cosTheta * cosTheta;
     const auto sin2Theta = 1.0f - cos2Theta;
-    return alpha2 / (PI * pow2(alpha2 * cos2Theta + sin2Theta));
+    return safediv(alpha2, PI * pow2(alpha2 * cos2Theta + sin2Theta));
 }
 
 /**
@@ -36,6 +36,7 @@ __device__ constexpr float Lambda_TrowbridgeReitz(float NdotV, float alpha2) {
     const auto cos2Theta = cosTheta * cosTheta;
     const auto sin2Theta = 1.0f - cos2Theta;
     const auto tan2Theta = sin2Theta / cos2Theta;
+    if (!isfinite(tan2Theta)) return 0.0f; // Avoid NaN
     return (-1.0f + sqrtf(1.0f + alpha2 * tan2Theta)) * 0.5f;
 }
 
@@ -118,7 +119,7 @@ __device__ constexpr float3 sampleVNDFTrowbridgeReitz(const float2& rand, const 
     const auto sinTheta = sqrtf(clamp(1.0f - z * z, 0.0f, 1.0f));
     const auto x = sinTheta * cosf(phi);
     const auto y = sinTheta * sinf(phi);
-    const auto c = make_float3(x, y, z);
+    const float3 c = {x, y, z};
     // compute halfway direction as standard normal
     const auto wmStd = c + wiStd;
     // warp back to the ellipsoid configuration
@@ -131,7 +132,7 @@ __device__ constexpr float3 sampleCosineHemisphere(const float2& rand) {
     const auto phi = TWO_PI * rand.x;
     const auto sinTheta = sqrtf(1.0f - rand.y);
     const auto cosTheta = sqrtf(rand.y);
-    return make_float3(cosf(phi) * sinTheta, sinf(phi) * sinTheta, cosTheta);
+    return {cosf(phi) * sinTheta, sinf(phi) * sinTheta, cosTheta};
 }
 
 __device__ constexpr float cosineHemispherePDF(float cosTheta) {

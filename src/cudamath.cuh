@@ -50,6 +50,11 @@ __host__ __device__ constexpr float safesqrt(float x) {
     return sqrtf(maxf(x, 0.0f));
 }
 
+__host__ __device__ constexpr float safediv(float a, float b) {
+    const auto res = a / b;
+    return std::isfinite(res) ? res : 0.0f;
+}
+
 __host__ __device__ constexpr float sign(float x) {
     return x < 0.0f ? -1.0f : 1.0f;
 }
