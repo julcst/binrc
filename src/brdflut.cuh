@@ -26,7 +26,7 @@ __host__ __device__ __forceinline__ float2 Hammersley(uint i, uint N) {
  * https://learnopengl.com/PBR/IBL/Specular-IBL
  * @return scale and bias to be applied to F0.
  */
-__host__ __device__ __forceinline__ float2 integrateSpecular(float alpha, float cosTheta, uint samples) {
+__host__ __device__ __forceinline__ float3 integrateSpecular(float alpha, float cosTheta, uint samples) {
     const float alpha2 = alpha * alpha;
 
     // Create viewing vector
@@ -37,6 +37,7 @@ __host__ __device__ __forceinline__ float2 integrateSpecular(float alpha, float 
     
     float scale = 0.0f;
     float bias = 0.0f;
+    float diffuse = 0.0f;
     
     // Integrate over hemisphere
     for (uint i = 0; i < samples; ++i) {
@@ -64,11 +65,13 @@ __host__ __device__ __forceinline__ float2 integrateSpecular(float alpha, float 
         
         scale += (1.0f - Ffactor) * brdf;
         bias += Ffactor * brdf;
+        diffuse += sampleBrentBurley(rand, wo, NdotV, n, alpha, {}, make_float3(1.0f)).throughput.x;
     }
     scale /= float(samples);
     bias /= float(samples);
+    diffuse /= float(samples);
     
-    return {scale, bias};
+    return {scale, bias, diffuse};
 }
 
 __global__ void computeSpecularLUT(float4* data, uint width, uint height, uint samples) {
@@ -80,10 +83,10 @@ __global__ void computeSpecularLUT(float4* data, uint width, uint height, uint s
     const float cosTheta = float(x) / (width - 1);  // [0, 1]
     const float alpha = float(y) / (height - 1);    // [0, 1]
     
-    const float2 result = integrateSpecular(alpha, cosTheta, samples);
+    const auto result = integrateSpecular(alpha, cosTheta, samples);
     
     // Store the result. Using float4 for compatibility with texture formats.
-    data[y * width + x] = make_float4(result.x, result.y, isfinite(result) ? 0.0f : 1.0f, 1.0f);
+    data[y * width + x] = make_float4(result, 1.0f);
 }
 
 // Function to allocate a texture, compute the directional albedo, and save it to a file

@@ -5,7 +5,7 @@
 
 int main() {
     try {
-        computeAndSaveDirectionalAlbedo("lut.png", 256, 256, 128);
+        computeAndSaveDirectionalAlbedo("lut.png", 256, 256, 1024);
         MainApp app;
         app.run();
     } catch (const std::exception& e) {
