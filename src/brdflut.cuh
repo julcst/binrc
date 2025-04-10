@@ -26,7 +26,7 @@ __host__ __device__ __forceinline__ float2 Hammersley(uint i, uint N) {
  * https://learnopengl.com/PBR/IBL/Specular-IBL
  * @return scale and bias to be applied to F0.
  */
-__host__ __device__ __forceinline__ float2 integrateSpecular(float alpha, float cosTheta, uint samples = 1024) {
+__host__ __device__ __forceinline__ float2 integrateSpecular(float alpha, float cosTheta, uint samples) {
     const float alpha2 = alpha * alpha;
 
     // Create viewing vector
@@ -61,10 +61,6 @@ __host__ __device__ __forceinline__ float2 integrateSpecular(float alpha, float 
         
         // Specular BRDF weighted by cosine term and importance sampling weight
         const float brdf = (1.0f + LambdaV) / (1.0f + LambdaL + LambdaV);
-
-        if (isnan(brdf)) {
-            printf("LambdaL: %f, LambdaV: %f, NdotL: %f, NdotV: %f, HdotV: %f\n", LambdaL, LambdaV, NdotL, NdotV, HdotV);
-        }
         
         scale += (1.0f - Ffactor) * brdf;
         bias += Ffactor * brdf;
@@ -75,7 +71,7 @@ __host__ __device__ __forceinline__ float2 integrateSpecular(float alpha, float 
     return {scale, bias};
 }
 
-__global__ void computeSpecularLUT(float4* data, uint width, uint height, uint samples = 1024) {
+__global__ void computeSpecularLUT(float4* data, uint width, uint height, uint samples) {
     const uint x = blockIdx.x * blockDim.x + threadIdx.x;
     const uint y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= width || y >= height) return;
@@ -91,7 +87,7 @@ __global__ void computeSpecularLUT(float4* data, uint width, uint height, uint s
 }
 
 // Function to allocate a texture, compute the directional albedo, and save it to a file
-bool computeAndSaveDirectionalAlbedo(const char* filename, uint width, uint height) {
+bool computeAndSaveDirectionalAlbedo(const char* filename, uint width, uint height, uint samples = 1024) {
     // Allocate device memory for the texture
     float4* d_data = nullptr;
     check(cudaMalloc(&d_data, width * height * sizeof(float4)));
@@ -101,7 +97,7 @@ bool computeAndSaveDirectionalAlbedo(const char* filename, uint width, uint heig
     dim3 gridSize((width + blockSize.x - 1) / blockSize.x, (height + blockSize.y - 1) / blockSize.y);
     
     // Launch the kernel to compute the directional albedo
-    computeSpecularLUT<<<gridSize, blockSize>>>(d_data, width, height);
+    computeSpecularLUT<<<gridSize, blockSize>>>(d_data, width, height, samples);
     check(cudaDeviceSynchronize());
     
     // Allocate host memory for the texture
