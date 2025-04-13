@@ -61,7 +61,7 @@ __device__ constexpr float VNDF_TrowbridgeReitz(float NdotV, float NdotH, float 
     const auto G1 = G1_TrowbridgeReitz(NdotV, alpha2);
     const auto cosTheta = NdotV;
     const auto D = D_TrowbridgeReitz(NdotH, alpha2);
-    return G1 * D * HdotV / cosTheta;
+    return safediv(G1 * D * HdotV, cosTheta);
 }
 
 /**
@@ -73,7 +73,7 @@ __device__ constexpr float VNDF_TrowbridgeReitz(float NdotV, float NdotH, float 
  */
 __device__ constexpr float3 sampleVNDFTrowbridgeReitz(const float2& u, const float3& wi, float3 n, float alpha) {
     // Dirac function for alpha = 0
-    if (alpha == 0.0f) return n;
+    if (alpha <= 1e-6f) return n;
     // decompose the vector in parallel and perpendicular components
     const auto wi_z = n * dot(wi, n);
     const auto wi_xy = wi - wi_z;
@@ -91,8 +91,7 @@ __device__ constexpr float3 sampleVNDFTrowbridgeReitz(const float2& u, const flo
     const auto up = make_float3(0.0f, 0.0f, 1.0f);
     const auto wr = n + up;
     // prevent division by zero
-    const auto wrz_safe = max(wr.z, 1e-10f); // NOTE: Important for the case when wr.z is close to zero
-    const auto c = dot(wr, cStd) * wr / wrz_safe - cStd;
+    const auto c = safediv(dot(wr, cStd) * wr, wr.z) - cStd;
     // compute halfway direction as standard normal
     const auto wmStd = c + wiStd;
     const auto wmStd_z = n * dot(n, wmStd);
@@ -159,7 +158,7 @@ __device__ constexpr SampleResult sampleTrowbridgeReitz(const float2& rand, cons
 }
 
 __device__ constexpr SampleResult sampleTrowbridgeReitzTransmission(const float2& rand, const float3& wo, float cosThetaO, const float3& n, float alpha, const float3& F0, const float3& albedo, float eta) {
-    const auto wm = sampleVNDFTrowbridgeReitz(rand, wo, n, alpha);
+    const auto wm = sampleVNDFTrowbridgeReitz(rand, wo, n, alpha); // TODO: Sample wm for transmission and reflection together
     const auto wi = refract(wo, wm, eta);
     const auto cosThetaD = dot(wo, wm); // = dot(wi, wm)
     const auto cosThetaI = dot(wo, n); // TODO: Check if this is correct
@@ -167,7 +166,8 @@ __device__ constexpr SampleResult sampleTrowbridgeReitzTransmission(const float2
     const auto alpha2 = alpha * alpha;
     const auto LambdaL = Lambda_TrowbridgeReitz(cosThetaI, alpha2);
     const auto LambdaV = Lambda_TrowbridgeReitz(cosThetaO, alpha2);
-    const auto transmission = albedo * (1.0f - F) * (1.0f + LambdaV) / (1.0f + LambdaL + LambdaV); // = (1 - F) * (G2 / G1)
+    const auto transmission = albedo * max(1.0f - F, 0.0f) * (1.0f + LambdaV) / (1.0f + LambdaL + LambdaV); // = (1 - F) * (G2 / G1)
+    if (isnegative(transmission)) printf("Transmission is negative: %f %f %f\n", transmission.x, transmission.y, transmission.z);
     return {wi, transmission};
 }
 
@@ -202,8 +202,8 @@ __device__ constexpr float disneyPdf(const LightContext& ctx) {
     const auto lambdaV = Lambda_TrowbridgeReitz(ctx.NdotV, ctx.alpha2);
     const auto G1 = 1.0f / (1.0f + lambdaV);
     const auto VNDF = G1 * D;
-    const auto pdfSpecular = VNDF / (4.0f * ctx.NdotV);
-    const auto pdfTransmission = VNDF * abs(ctx.HdotL) / pow2(ctx.HdotL + ctx.HdotV / ctx.eta);
+    const auto pdfSpecular = safediv(VNDF, 4.0f * ctx.NdotV);
+    const auto pdfTransmission = safediv(VNDF * abs(ctx.HdotL), pow2(ctx.HdotL + ctx.HdotV / ctx.eta));
 
     const auto pdfDiffuse = ctx.NdotL * INV_PI;
 
@@ -230,7 +230,7 @@ __device__ constexpr MISSampleResult sampleDisney(const float rType, const float
     // Importance sampling weights
     const auto wSpecular = luminance(F_SchlickApprox(NdotV, F0));
     const auto wDiffuse = luminance(albedo);
-    const auto pSpecular = wSpecular / (wSpecular + wDiffuse);
+    const auto pSpecular = safediv(wSpecular, wSpecular + wDiffuse);
     const auto pDiffuse = (1.0f - pSpecular) * (1.0f - transmission);
     const auto pTransmission = (1.0f - pSpecular) * transmission;
 
@@ -292,11 +292,11 @@ __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, c
     const auto lambdaV = Lambda_TrowbridgeReitz(NdotV, alpha2);
     const auto G1 = 1.0f / (1.0f + lambdaV);
     const auto G = 1.0f / (1.0f + lambdaL + lambdaV);
-    const auto specular = F * D * G / (4.0f * NdotV);
-    const auto transmission = albedo * (1.0f - F) * D * G * HdotL * HdotV / (NdotV * NdotL * pow2(HdotL + HdotV / eta));
+    const auto specular = safediv(F * D * G, 4.0f * NdotV);
+    const auto transmission = safediv(albedo * max(1.0f - F, 0.0f) * D * G * HdotL * HdotV, NdotV * NdotL * pow2(HdotL + HdotV / eta));
     const auto VNDF = G1 * D;
-    const auto pdfSpecular = VNDF / (4.0f * NdotV);
-    const auto pdfTransmission = VNDF * abs(HdotL) / pow2(HdotL + HdotV / eta);
+    const auto pdfSpecular = safediv(VNDF, 4.0f * NdotV);
+    const auto pdfTransmission = safediv(VNDF * abs(HdotL), pow2(HdotL + HdotV / eta));
 
     const auto FD90 = 0.5f + 2.0f * alpha * HdotV * HdotV;
     const auto response = (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotL)) * (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotV));
@@ -305,12 +305,17 @@ __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, c
 
     const auto wSpecular = luminance(F_SchlickApprox(NdotV, F0));
     const auto wDiffuse = luminance(albedo);
-    const auto pSpecular = wSpecular / (wSpecular + wDiffuse);
+    const auto pSpecular = safediv(wSpecular, wSpecular + wDiffuse);
     const auto pDiffuse = (1.0f - pSpecular) * (1.0f - transmissiveness);
     const auto pTransmission = (1.0f - pSpecular) * transmissiveness;
     const auto pdf = pSpecular * pdfSpecular + pDiffuse * pdfDiffuse + pTransmission * pdfTransmission;
 
     const auto isDirac = alpha == 0.0f && wDiffuse == 0.0f;
+
+    if (isnegative(transmission)) {
+        printf("Transmission is negative: F %f %f %f D %f G %f HdotL %f HdotV %f NdotL %f NdotV %f NdotH %f\n",
+               F.x, F.y, F.z, D, G, HdotL, HdotV, NdotL, NdotV, NdotH);
+    }
 
     return {specular + mix(diffuse, transmission, transmissiveness), pdf, isDirac};
 }
@@ -363,19 +368,19 @@ __device__ inline LightSample sampleLightSource(const EmissiveTriangle& light, c
     const auto dir = position - x;
     const auto dist2 = dot(dir, dir);
     const auto dist = sqrtf(dist2);
-    const auto wi = dir / dist;
+    const auto wi = safediv(dir, dist);
     const auto cosThetaL = dot(wi, n);
 
     // PDF of sampling the triangle and the point on the triangle
     // const auto pdfPoint = light.weight / light.area; // In area measure // TODO: Precalculate
-    const auto pdf = (light.weight * dist2) / (light.area * abs(cosThetaL)); // In solid angle measure
+    const auto pdf = safediv(light.weight * dist2, light.area * abs(cosThetaL)); // In solid angle measure
 
     return {emission, wi, cosThetaL, dist, pdf, position, n};
 }
 
 __device__ inline float lightPdfUniform(const float3& wi, const float dist, const float3& lightNormal, const float area) {
     const auto cosThetaL = abs(dot(wi, lightNormal));
-    return (dist * dist) / (area * cosThetaL * params.lightTableSize); // In solid angle measure
+    return safediv(dist * dist, area * cosThetaL * params.lightTableSize); // In solid angle measure
 }
 
 __device__ inline LightSample sampleLight(const float randSrc, const float2& randSurf, const float3& x) {
@@ -384,11 +389,11 @@ __device__ inline LightSample sampleLight(const float randSrc, const float2& ran
 }
 
 __device__ constexpr float balanceHeuristic(float pdf1, float pdf2) {
-    return pdf1 / (pdf1 + pdf2);
+    return safediv(pdf1, pdf1 + pdf2);
 }
 
 __device__ constexpr float powerHeuristic(float pdf1, float pdf2) {
     const auto f1 = pdf1 * pdf1;
     const auto f2 = pdf2 * pdf2;
-    return f1 / (f1 + f2);
+    return safediv(f1, f1 + f2);
 }

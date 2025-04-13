@@ -50,9 +50,9 @@ __host__ __device__ constexpr float safesqrt(float x) {
     return sqrtf(maxf(x, 0.0f));
 }
 
-__host__ __device__ constexpr float safediv(float a, float b) {
+__host__ __device__ constexpr float safediv(float a, float b, float fallback = 0.0f) {
     const auto res = a / b;
-    return std::isfinite(res) ? res : 0.0f;
+    return std::isfinite(res) ? res : fallback;
 }
 
 __host__ __device__ constexpr float sign(float x) {
@@ -469,12 +469,30 @@ __host__ __device__ constexpr bool isfinite(const float3& v) {
     return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
 }
 
-__host__ __device__ constexpr bool ispositive(const float3& v) {
-    return v.x > 0.0f && v.y > 0.0f && v.z > 0.0f;
+__host__ __device__ constexpr bool isnegative(const float3& v) {
+    return v.x < 0.0f && v.y < 0.0f && v.z < 0.0f;
 }
 
 __host__ __device__ constexpr float luminance(const float3& linearRGB) {
     return dot({0.2126f, 0.7152f, 0.0722f}, linearRGB);
+}
+
+__host__ __device__ constexpr float3 safediv(float3 a, float3 b, float fallback = 0.0f) {
+    const auto res = a / b;
+    return {
+        std::isfinite(res.x) ? res.x : fallback,
+        std::isfinite(res.y) ? res.y : fallback,
+        std::isfinite(res.z) ? res.z : fallback
+    };
+}
+
+__host__ __device__ constexpr float3 safediv(float3 a, float b, float fallback = 0.0f) {
+    const auto res = a / b;
+    return {
+        std::isfinite(res.x) ? res.x : fallback,
+        std::isfinite(res.y) ? res.y : fallback,
+        std::isfinite(res.z) ? res.z : fallback
+    };
 }
 
 // Operators on CUDA float4
