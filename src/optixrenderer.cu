@@ -27,13 +27,6 @@
 #include "optix/params.cuh"
 #include "cudamath.cuh"
 
-std::vector<char> readBinaryFile(const std::filesystem::path& filepath) {
-    std::ifstream stream{filepath, std::ios::binary};
-    std::cout << "Loading " << std::filesystem::absolute(filepath) << std::endl;
-    if (stream.fail()) throw std::runtime_error("Could not open file: " + std::filesystem::absolute(filepath).string());
-    return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
-}
-
 OptixRenderer::OptixRenderer() {
     check(cudaFree(nullptr)); // Initialize CUDA for this device on this thread
     check(optixInit()); // Initialize the OptiX API
@@ -75,7 +68,7 @@ OptixRenderer::OptixRenderer() {
     };
 
     for (size_t i = 0; i < optixir::paths.size(); i++) {
-        const auto binary = readBinaryFile(optixir::paths[i]);
+        const auto binary = Common::readBinaryFile(optixir::paths[i]);
         check(optixModuleCreate(context, &moduleCompileOptions, &pipelineCompileOptions, binary.data(), binary.size(), nullptr, nullptr, &modules[i]));
     }
 

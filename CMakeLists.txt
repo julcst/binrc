@@ -33,7 +33,7 @@ set(CMAKE_CUDA_COMPILER ${CUDAToolkit_NVCC_EXECUTABLE} CACHE PATH "Path to the C
 include(FetchContent)
 FetchContent_Declare(
     framework
-    URL https://github.com/julcst/gltemplate/archive/v1.5.tar.gz
+    URL https://github.com/julcst/gltemplate/archive/v1.6.tar.gz
 )
 FetchContent_Declare(
     fastgltf

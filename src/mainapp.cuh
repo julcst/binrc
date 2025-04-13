@@ -24,20 +24,6 @@ using namespace glm;
 #include <imgui.h>
 #include <misc/cpp/imgui_stdlib.h>
 
-template <typename T, size_t N>
-constexpr bool EnumCombo(const char* label, T* curr, const std::array<std::string_view, N>& items) {
-    return ImGui::Combo(
-        label, reinterpret_cast<int*>(curr),
-        [](void* data, int idx, const char** out_text) {
-            auto items = reinterpret_cast<const std::array<std::string_view, N>*>(data);
-            *out_text = items->at(idx).data();
-            return true;
-        },
-        const_cast<void*>(reinterpret_cast<const void*>(&items)),
-        N
-    );
-}
-
 class MainApp : public App {
   public:
     MainApp();
@@ -51,7 +37,7 @@ class MainApp : public App {
     void buildImGui() override;
     void keyCallback(Key key, Action action, Modifier modifier) override;
     // void clickCallback(Button button, Action action, Modifier modifier) override;
-    void scrollCallback(float amount) override;
+    void scrollCallback(float xamount, float yamount) override;
     void moveCallback(const vec2& movement, bool leftButton, bool rightButton, bool middleButton) override;
     void resizeCallback(const vec2& resolution) override;
   private:

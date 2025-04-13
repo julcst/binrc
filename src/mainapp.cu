@@ -50,27 +50,6 @@ std::vector<std::filesystem::path> scanFolder(const std::filesystem::path& folde
     }
 }
 
-bool FileCombo(const char* label, int* curr, const std::vector<std::filesystem::path>& items) {
-    return ImGui::Combo(
-        label, curr,
-        [](void* data, int idx, const char** out_text) {
-            auto items = reinterpret_cast<const std::vector<std::filesystem::path>*>(data);
-            *out_text = items->at(idx).c_str();
-            return true;
-        },
-        const_cast<void*>(reinterpret_cast<const void*>(&items)), items.size());
-}
-
-bool FlagCheckbox(const char* label, unsigned int* flags, unsigned int flag) {
-    bool v = *flags & flag;
-    bool changed = ImGui::Checkbox(label, &v);
-    if (changed) {
-        if (v) *flags |= flag;
-        else *flags &= ~flag;
-    }
-    return changed;
-}
-
 MainApp::MainApp() : App(800, 600) {
     printCudaDevices();
 
@@ -111,8 +90,8 @@ void MainApp::keyCallback(Key key, Action action, Modifier modifier) {
     if (action == Action::PRESS && key == Key::ESC) close();
 }
 
-void MainApp::scrollCallback(float amount) {
-    camera.zoom(amount);
+void MainApp::scrollCallback(float xamount, float yamount) {
+    camera.zoom(yamount);
 }
 
 void MainApp::moveCallback(const vec2& movement, bool leftButton, bool rightButton, bool middleButton) {
@@ -129,15 +108,15 @@ void MainApp::buildImGui() {
         scenes = scanFolder(folder);
         sceneID = 0;
     }
-    if (FileCombo("Scene", &sceneID, scenes)) {
+    if (ImGui::FileCombo("Scene", &sceneID, scenes)) {
         renderer.loadGLTF(scenes.at(sceneID));
     }
     ImGui::Text("Sample: %d", renderer.getParams().sample);
     if (ImGui::SliderFloat("Exposure", &exposure, 0.1f, 10.0f, "%.1f", ImGuiSliderFlags_Logarithmic)) blitProgram.set(1, exposure);
     ImGui::SliderFloat("Russian Roulette", &renderer.getParams().russianRouletteWeight, 1.0f, 10.0f, "%.1f");
     ImGui::SliderFloat("Scene Epsilon", &renderer.getParams().sceneEpsilon, 1e-6f, 1e-1f, "%f", ImGuiSliderFlags_Logarithmic);
-    bool reset = FlagCheckbox("Enable NEE", &renderer.getParams().flags, NEE_FLAG);
-    reset |= FlagCheckbox("Enable Transmission", &renderer.getParams().flags, TRANSMISSION_FLAG);
+    bool reset = ImGui::FlagCheckbox("Enable NEE", &renderer.getParams().flags, NEE_FLAG);
+    reset |= ImGui::FlagCheckbox("Enable Transmission", &renderer.getParams().flags, TRANSMISSION_FLAG);
     for (size_t i = 0; i < renderer.scene.cameras.size(); i++) {
         if (ImGui::Button(renderer.scene.cameras[i].first.c_str())) {
             auto scale = mat4(1.0f);
@@ -149,7 +128,7 @@ void MainApp::buildImGui() {
         if (i < renderer.scene.cameras.size() - 1) ImGui::SameLine();
     }
     ImGui::SeparatorText("NRC");
-    reset |= EnumCombo("Inference Mode", &renderer.getParams().inferenceMode, INFERENCE_MODES);
+    reset |= ImGui::EnumCombo("Inference Mode", &renderer.getParams().inferenceMode, INFERENCE_MODES);
     ImGui::PlotLines("Loss", renderer.lossHistory.data(), renderer.lossHistory.size());
     if (ImGui::Button("Reset NRC")) {
         renderer.resetNRC();
