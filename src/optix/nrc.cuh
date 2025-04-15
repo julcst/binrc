@@ -59,3 +59,7 @@ __device__ inline void writeNRCOutput(float* to, const float3& radiance) {
 __device__ inline void writeNRCOutput(float* to, const NRCOutput& output) {
     writeNRCOutput(to, output.radiance);
 }
+
+__device__ inline void writeNRCOutput(float* to, uint idx, const float3& radiance) {
+    writeNRCOutput(to + idx * NRC_OUTPUT_SIZE, radiance);
+}

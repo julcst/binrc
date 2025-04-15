@@ -11,7 +11,7 @@
 
 constexpr float MAX_T = 1e32f;
 constexpr uint MAX_BOUNCES = 12;
-constexpr uint RANDS_PER_PIXEL = 4;
+constexpr uint RANDS_PER_PIXEL = 5;
 constexpr uint RANDS_PER_BOUNCE = 9;
 constexpr uint ROTATIONS_PER_PIXEL = 2;
 constexpr uint RAND_SEQUENCE_DIMS = RANDS_PER_PIXEL + RANDS_PER_BOUNCE * MAX_BOUNCES;

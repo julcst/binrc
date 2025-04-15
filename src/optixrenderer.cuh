@@ -25,10 +25,14 @@ enum ProgramGroup {
     COMBINED,
     REFERENCE,
     TRAIN_FORWARD,
+    TRAIN_BACKWARD,
     INFERENCE,
     MISS,
     CLOSEST_HIT,
 };
+
+constexpr size_t RAYGEN_COUNT = 5;
+constexpr size_t PROGRAM_GROUP_COUNT = RAYGEN_COUNT + 2;
 
 class OptixRenderer {
 public:
@@ -49,6 +53,7 @@ public:
     Scene scene;
     std::vector<float> lossHistory;
     bool enableTraining = false;
+    float trainingDirection = 0.5f;
 
     inline Params& getParams() { return params.at(0); }
 
@@ -57,8 +62,8 @@ private:
     OptixPipeline pipeline;
 
     std::array<OptixModule, optixir::paths.size()> modules;
-    std::array<OptixShaderBindingTable, 4> sbts;
-    std::array<OptixProgramGroup, 6> programGroups;
+    std::array<OptixShaderBindingTable, RAYGEN_COUNT> sbts;
+    std::array<OptixProgramGroup, PROGRAM_GROUP_COUNT> programGroups;
 
     tcnn::GPUMemory<Params> params {1, true};
     tcnn::GPUMemory<HitRecord> hitRecords;

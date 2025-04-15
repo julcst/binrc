@@ -54,6 +54,7 @@ set(OPTIXIR
     src/optix/hit.cu
     src/optix/inference.cu
     src/optix/reference.cu
+    src/optix/train_backward.cu
     src/optix/train_forward.cu
 )
 add_library(optixir OBJECT ${OPTIXIR})

@@ -131,6 +131,7 @@ void MainApp::buildImGui() {
 
     ImGui::SeparatorText("NRC");
     ImGui::Checkbox("Enable Training", &renderer.enableTraining);
+    ImGui::SliderFloat("Training Direction", &renderer.trainingDirection, 0.0f, 1.0f, "%.2f");
     reset |= ImGui::EnumCombo("Inference Mode", &renderer.getParams().inferenceMode, INFERENCE_MODES);
     ImGui::PlotLines("Loss", renderer.lossHistory.data(), renderer.lossHistory.size());
     if (ImGui::Button("Reset NRC")) {

@@ -99,6 +99,13 @@ OptixRenderer::OptixRenderer() {
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
             .raygen = {
+                .module = modules[optixir::TRAIN_BACKWARD],
+                .entryFunctionName = "__raygen__",
+            },
+        },
+        OptixProgramGroupDesc {
+            .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
+            .raygen = {
                 .module = modules[optixir::INFERENCE],
                 .entryFunctionName = "__raygen__",
             },
@@ -129,10 +136,11 @@ OptixRenderer::OptixRenderer() {
     // TODO: optixUtilComputeStackSizesSimplePathtracer?
 
     // Set up shader binding table
-    std::vector<RaygenRecord> raygenRecord(4);
+    std::vector<RaygenRecord> raygenRecord(sbts.size());
     check(optixSbtRecordPackHeader(programGroups[COMBINED], &raygenRecord[COMBINED]));
     check(optixSbtRecordPackHeader(programGroups[REFERENCE], &raygenRecord[REFERENCE]));
     check(optixSbtRecordPackHeader(programGroups[TRAIN_FORWARD], &raygenRecord[TRAIN_FORWARD]));
+    check(optixSbtRecordPackHeader(programGroups[TRAIN_BACKWARD], &raygenRecord[TRAIN_BACKWARD]));
     check(optixSbtRecordPackHeader(programGroups[INFERENCE], &raygenRecord[INFERENCE]));
     raygenRecords.resize_and_copy_from_host(raygenRecord);
 
@@ -236,7 +244,11 @@ __global__ void visualizeInference(Params* params) {
 
 void OptixRenderer::train() {
     // Generate training samples
-    check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params.data()), sizeof(Params), &sbts[TRAIN_FORWARD], NRC_BATCH_SIZE / TRAIN_DEPTH, 1, 1));
+    const auto totalTrainingSamples = NRC_BATCH_SIZE / TRAIN_DEPTH;
+    const uint backwardSamples = totalTrainingSamples * trainingDirection;
+    const uint forwardSamples = totalTrainingSamples - backwardSamples;
+    if (forwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params.data()), sizeof(Params), &sbts[TRAIN_FORWARD], forwardSamples, 1, 1));
+    if (backwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params.data()), sizeof(Params), &sbts[TRAIN_BACKWARD], backwardSamples, 1, 1));
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
 
     // Perform training steps

@@ -393,6 +393,33 @@ __device__ inline LightSample sampleLight(const float randSrc, const float2& ran
     return sampleLightSource(light, randSurf, x);
 }
 
+struct LightDirSample {
+    float3 wo;
+    float3 n;
+    float3 position;
+    float3 emission;
+};
+
+__device__ inline LightDirSample sampleLight(const float randSrc, const float2& randSurf, const float2& randDir) {
+    const auto light = sampleLightTableUniform(randSrc);
+
+    // Sample a barycentric coordinate on the triangle uniformly
+    const auto s = sqrtf(randSurf.y);
+    const auto u = 1.0f - s;
+    const auto v = randSurf.x * s;
+    const auto w = 1.0f - u - v;
+
+    // Get light point information
+    const auto position = u * light.v0 + v * light.v1 + w * light.v2;
+    const auto n = normalize(u * light.n0 + v * light.n1 + w * light.n2);
+    const auto emission = params.materials[light.materialID].emission;
+
+    const auto tangentToWorld = buildTBN(n);
+    const auto wo = tangentToWorld * sampleCosineHemisphere(randDir);
+
+    return {wo, n, position, emission};
+}
+
 __device__ constexpr float balanceHeuristic(float pdf1, float pdf2) {
     return safediv(pdf1, pdf1 + pdf2);
 }
