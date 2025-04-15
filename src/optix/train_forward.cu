@@ -62,6 +62,12 @@ extern "C" __global__ void __raygen__() {
         const auto metallic = payload.metallic;
         const auto baseColor = payload.baseColor; // baseColor
 
+        const auto trainInput = encodeInput(hitPoint, wo, payload);
+        const auto trainIdx = pushNRCTrainInput(trainInput);
+        const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
+        trainBounces[trainBounceIdx].index = trainIdx;
+        trainBounces[trainBounceIdx].reflectanceFactorizationTerm = reflectanceFactorizationTerm;
+
         if (luminance(payload.emission) > 0.0f) {
             auto weight = 1.0f;
             if (nee && !lightPdfIsZero) {
@@ -85,18 +91,12 @@ extern "C" __global__ void __raygen__() {
                 if (!brdf.isDirac && brdf.pdf > 0.0f && !traceOcclusion(surfacePoint, lightPoint)) {
                     const auto weight = balanceHeuristic(sample.pdf, brdf.pdf);
                     const auto weightedEmission = brdf.throughput * sample.emission * weight / sample.pdf;
-                    for (uint i = 0; i < trainBounceIdx; i++) {
+                    for (uint i = 0; i <= trainBounceIdx; i++) {
                         trainBounces[i].radiance += trainBounces[i].throughput * weightedEmission;
                     }
                 }
             //}
         }
-
-        const auto trainInput = encodeInput(hitPoint, wo, payload);
-        const auto trainIdx = pushNRCTrainInput(trainInput);
-        const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
-        trainBounces[trainBounceIdx].index = trainIdx;
-        trainBounces[trainBounceIdx].reflectanceFactorizationTerm = reflectanceFactorizationTerm;
 
         const auto sample = sampleDisney(RND_BSDF, RND_MICROFACET, RND_DIFFUSE, wo, n, inside, payload.baseColor, payload.metallic, alpha, payload.transmission);
         
