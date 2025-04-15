@@ -28,7 +28,6 @@ extern "C" __global__ void __raygen__() {
     const auto nee = params.lightTable && (params.flags & NEE_FLAG);
 
     Payload payload;
-    auto color = make_float3(0.0f);
     auto throughput = make_float3(1.0f);
     auto prevBrdfPdf = 1.0f;
     auto lightPdfIsZero = true;
@@ -42,6 +41,9 @@ extern "C" __global__ void __raygen__() {
         // Russian roulette
         const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
         if (RND_ROULETTE >= pContinue) break;
+        for (uint i = 0; i <= trainBounceIdx; i++) {
+            trainBounces[i].throughput /= pContinue;
+        }
         throughput /= pContinue;
 
         payload = trace(ray);
@@ -106,6 +108,7 @@ extern "C" __global__ void __raygen__() {
         for (uint i = 0; i <= trainBounceIdx; i++) {
             trainBounces[i].throughput *= sample.throughput;
         }
+        throughput *= sample.throughput;
     }
 
     for (uint i = 0; i < trainBounceIdx; i++) {
