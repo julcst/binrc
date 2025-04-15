@@ -124,3 +124,32 @@ bool computeAndSaveDirectionalAlbedo(const char* filename, uint width, uint heig
     // Return true if successful, false otherwise
     return result != 0;
 }
+
+void createLUTTexture(uint width, uint height, uint samples) {
+
+    cudaArray_t cuArray;
+    cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(8, 8, 8, 8, cudaChannelFormatKindFloat);
+    check(cudaMallocArray(&cuArray, &channelDesc, width, height));
+
+    cudaResourceDesc resDesc = {
+        .resType = cudaResourceTypeArray,
+        .res = { .array = cuArray },
+    };
+    cudaTextureDesc texDesc = {
+        .addressMode = { cudaAddressModeClamp, cudaAddressModeClamp, cudaAddressModeClamp },
+        .filterMode = cudaFilterModeLinear,
+        .readMode = cudaReadModeNormalizedFloat,
+        .sRGB = false,
+        .borderColor = { 0, 0, 0, 0 },
+        .normalizedCoords = true,
+        .maxAnisotropy = 0,
+        .mipmapFilterMode = cudaFilterModePoint,
+        .mipmapLevelBias = 0,
+        .minMipmapLevelClamp = 0.0f,
+        .maxMipmapLevelClamp = 0.0f,
+        .disableTrilinearOptimization = 0,
+        .seamlessCubemap = 0,
+    };
+    cudaTextureObject_t texObj;
+    check(cudaCreateTextureObject(&texObj, &resDesc, &texDesc, nullptr));
+}
