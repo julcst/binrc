@@ -24,12 +24,12 @@ set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 set(CUDA_LINK_LIBRARIES_KEYWORD PUBLIC)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-set(CMAKE_CUDA_COMPILER ${CUDAToolkit_NVCC_EXECUTABLE} CACHE PATH "Path to the CUDA compiler" FORCE)
-
-project(biNRC LANGUAGES CXX CUDA)
+project(biNRC LANGUAGES CXX)
 
 # Find dependencies
 find_package(CUDAToolkit 12 REQUIRED)
+set(CMAKE_CUDA_COMPILER ${CUDAToolkit_NVCC_EXECUTABLE} CACHE PATH "Path to the CUDA compiler" FORCE)
+enable_language(CUDA)
 
 include(FetchContent)
 FetchContent_Declare(
@@ -54,6 +54,7 @@ set(OPTIXIR
     src/optix/hit.cu
     src/optix/inference.cu
     src/optix/reference.cu
+    src/optix/train_forward.cu
 )
 add_library(optixir OBJECT ${OPTIXIR})
 target_link_libraries(optixir CUDA::cudart tiny-cuda-nn)
