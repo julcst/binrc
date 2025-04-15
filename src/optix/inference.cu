@@ -21,6 +21,7 @@ extern "C" __global__ void __raygen__() {
     const auto nee = false;
 
     Payload payload;
+    auto isPayloadValid = false;
     auto prevBrdfPdf = 1.0f;
     auto lightPdfIsZero = true;
     auto hitPoint = ray.origin;
@@ -46,6 +47,7 @@ extern "C" __global__ void __raygen__() {
         }
 
         payload = next;
+        isPayloadValid = true;
         n = payload.normal;
         wo = -ray.direction;
         const auto inside = dot(n, wo) < 0.0f;
@@ -89,7 +91,7 @@ extern "C" __global__ void __raygen__() {
         lightPdfIsZero = sample.isDirac || payload.transmission > 0.0f;
     }
 
-    if (isinf(payload.t)) {
+    if (!isPayloadValid) {
         params.inferenceThroughput[i] = make_float3(0.0f);
     } else {
         const auto nrcQuery = encodeInput(hitPoint, wo, payload);
