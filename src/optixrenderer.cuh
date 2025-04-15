@@ -24,6 +24,8 @@ using namespace glm;
 enum ProgramGroup {
     COMBINED,
     REFERENCE,
+    TRAIN_FORWARD,
+    INFERENCE,
     MISS,
     CLOSEST_HIT,
 };
@@ -46,6 +48,7 @@ public:
 
     Scene scene;
     std::vector<float> lossHistory;
+    bool enableTraining = false;
 
     inline Params& getParams() { return params.at(0); }
 
@@ -54,8 +57,8 @@ private:
     OptixPipeline pipeline;
 
     std::array<OptixModule, optixir::paths.size()> modules;
-    std::array<OptixShaderBindingTable, 2> sbts;
-    std::array<OptixProgramGroup, 4> programGroups;
+    std::array<OptixShaderBindingTable, 4> sbts;
+    std::array<OptixProgramGroup, 6> programGroups;
 
     tcnn::GPUMemory<Params> params {1, true};
     tcnn::GPUMemory<HitRecord> hitRecords;

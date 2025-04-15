@@ -8,7 +8,7 @@
 #include "cudamath.cuh"
 #include "sampling.cuh"
 
-extern "C" __global__ void __raygen__inference() {
+extern "C" __global__ void __raygen__() {
     const auto idx = optixGetLaunchIndex();
     const auto dim = optixGetLaunchDimensions();
     const auto i = idx.y * params.dim.x + idx.x;
@@ -17,7 +17,8 @@ extern "C" __global__ void __raygen__inference() {
     const auto uv = (make_float2(idx.x, idx.y) + RND_JITTER) / make_float2(dim.x, dim.y);
     auto ray = makeCameraRay(uv);
 
-    const auto nee = params.lightTable && (params.flags & NEE_FLAG);
+    //const auto nee = params.lightTable && (params.flags & NEE_FLAG);
+    const auto nee = false;
 
     Payload payload;
     auto prevBrdfPdf = 1.0f;
@@ -28,9 +29,8 @@ extern "C" __global__ void __raygen__inference() {
 
     float3 throughput = make_float3(1.0f);
     float3 inferencePlus = make_float3(0.0f);
-    float3 inferenceThroughput = make_float3(1.0f);
     
-    for (uint depth = 1; depth < MAX_BOUNCES; depth++) {
+    for (uint depth = 1; depth < 2; depth++) {
         // Russian roulette
         const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
         if (RND_ROULETTE >= pContinue) break;
@@ -46,7 +46,6 @@ extern "C" __global__ void __raygen__inference() {
         }
 
         payload = next;
-        inferenceThroughput = throughput;
         n = payload.normal;
         wo = -ray.direction;
         const auto inside = dot(n, wo) < 0.0f;
@@ -90,11 +89,13 @@ extern "C" __global__ void __raygen__inference() {
         lightPdfIsZero = sample.isDirac || payload.transmission > 0.0f;
     }
 
-    payload = trace(ray);
-    const auto inputIdx = i * NRC_INPUT_SIZE;
-    const auto nrcQuery = encodeInput(hitPoint, wo, payload);
-    pushNRCInput(params.inferenceInput + inputIdx, nrcQuery);
-    params.inferenceThroughput[i] = throughput;
-    
-    params.image[i] = mix(params.image[i], make_float4(max(inferencePlus, 0.0f), 1.0f), params.weight); // FIXME: Negative colors
+    if (isinf(payload.t)) {
+        params.inferenceThroughput[i] = make_float3(0.0f);
+    } else {
+        const auto nrcQuery = encodeInput(hitPoint, wo, payload);
+        writeNRCInput(params.inferenceInput, i, nrcQuery);
+        params.inferenceThroughput[i] = throughput;
+    }
+
+    params.image[i] = mix(params.image[i], make_float4(max(inferencePlus, 0.0f), 1.0f), params.weight);
 }

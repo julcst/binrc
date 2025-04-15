@@ -102,6 +102,7 @@ void MainApp::buildImGui() {
     ImGui::StatisticsWindow(delta, resolution);
 
     ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+
     std::string folder_str = folder.string();
     if (ImGui::InputText("Folder", &folder_str)) {
         folder = folder_str;
@@ -127,13 +128,16 @@ void MainApp::buildImGui() {
         }
         if (i < renderer.scene.cameras.size() - 1) ImGui::SameLine();
     }
+
     ImGui::SeparatorText("NRC");
+    ImGui::Checkbox("Enable Training", &renderer.enableTraining);
     reset |= ImGui::EnumCombo("Inference Mode", &renderer.getParams().inferenceMode, INFERENCE_MODES);
     ImGui::PlotLines("Loss", renderer.lossHistory.data(), renderer.lossHistory.size());
     if (ImGui::Button("Reset NRC")) {
         renderer.resetNRC();
         reset = true;
     }
+
     ImGui::End();
 
     if (reset) renderer.reset();

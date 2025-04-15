@@ -23,7 +23,7 @@ __device__ inline NRCInput encodeInput(const float3& position, const float3& wo,
     return encodeInput(position, wo, payload.normal, albedo, F0, payload.roughness * payload.roughness);
 }
 
-__device__ inline void pushNRCInput(float* to, const NRCInput& input) {
+__device__ inline void writeNRCInput(float* to, const NRCInput& input) {
     to[0] = input.position.x;
     to[1] = input.position.y;
     to[2] = input.position.z;
@@ -40,14 +40,22 @@ __device__ inline void pushNRCInput(float* to, const NRCInput& input) {
     to[13] = input.specular.z;
 }
 
-__device__ inline uint pushNRCTrainInput(const NRCInput& input) {
-    const auto i = atomicAdd(params.trainingIndexPtr, 1u);
-    pushNRCInput(params.trainingInput + (i % NRC_BATCH_SIZE) * NRC_INPUT_SIZE, input);
-    return i;
+__device__ inline void writeNRCInput(float* to, uint idx, const NRCInput& input) {
+    writeNRCInput(to + idx * NRC_INPUT_SIZE, input);
 }
 
-__device__ inline void pushNRCOutput(float* to, const NRCOutput& output) {
-    to[0] = output.radiance.x;
-    to[1] = output.radiance.y;
-    to[2] = output.radiance.z;
+__device__ inline uint pushNRCTrainInput(const NRCInput& input) {
+    const auto i = atomicAdd(params.trainingIndexPtr, 1u);
+    writeNRCInput(params.trainingInput + (i % NRC_BATCH_SIZE) * NRC_INPUT_SIZE, input);
+    return i % NRC_BATCH_SIZE;
+}
+
+__device__ inline void writeNRCOutput(float* to, const float3& radiance) {
+    to[0] = radiance.x;
+    to[1] = radiance.y;
+    to[2] = radiance.z;
+}
+
+__device__ inline void writeNRCOutput(float* to, const NRCOutput& output) {
+    writeNRCOutput(to, output.radiance);
 }

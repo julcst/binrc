@@ -90,6 +90,20 @@ OptixRenderer::OptixRenderer() {
             },
         },
         OptixProgramGroupDesc {
+            .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
+            .raygen = {
+                .module = modules[optixir::TRAIN_FORWARD],
+                .entryFunctionName = "__raygen__",
+            },
+        },
+        OptixProgramGroupDesc {
+            .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
+            .raygen = {
+                .module = modules[optixir::INFERENCE],
+                .entryFunctionName = "__raygen__",
+            },
+        },
+        OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
             .miss = {
                 .module = modules[optixir::HIT],
@@ -115,9 +129,11 @@ OptixRenderer::OptixRenderer() {
     // TODO: optixUtilComputeStackSizesSimplePathtracer?
 
     // Set up shader binding table
-    std::vector<RaygenRecord> raygenRecord(2);
-    check(optixSbtRecordPackHeader(programGroups[COMBINED], &raygenRecord[0]));
-    check(optixSbtRecordPackHeader(programGroups[REFERENCE], &raygenRecord[1]));
+    std::vector<RaygenRecord> raygenRecord(4);
+    check(optixSbtRecordPackHeader(programGroups[COMBINED], &raygenRecord[COMBINED]));
+    check(optixSbtRecordPackHeader(programGroups[REFERENCE], &raygenRecord[REFERENCE]));
+    check(optixSbtRecordPackHeader(programGroups[TRAIN_FORWARD], &raygenRecord[TRAIN_FORWARD]));
+    check(optixSbtRecordPackHeader(programGroups[INFERENCE], &raygenRecord[INFERENCE]));
     raygenRecords.resize_and_copy_from_host(raygenRecord);
 
     MissRecord missRecord;
@@ -198,23 +214,31 @@ __global__ void visualizeInference(Params* params) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= params->dim.x || y >= params->dim.y) return;
+
     const int i = y * params->dim.x + x;
     const int idxIn = i * NRC_INPUT_SIZE;
     const int idxOut = i * NRC_OUTPUT_SIZE;
     auto inference = make_float3(params->inferenceOutput[idxOut + 0], params->inferenceOutput[idxOut + 1], params->inferenceOutput[idxOut + 2]);
-    if (!isfinite(inference)) return;
+
+    const auto throughput = params->inferenceThroughput[i];
+
+    if (throughput.x <= 0.0f && throughput.y <= 0.0f && throughput.z <= 0.0f) return;
+
     if (params->inferenceMode == InferenceMode::RAW_CACHE) {
         params->image[i] = make_float4(inference, 1.0f);
     } else {
         const auto diffuse = make_float3(params->inferenceInput[idxIn + 8], params->inferenceInput[idxIn + 9], params->inferenceInput[idxIn + 10]);
         const auto specular = make_float3(params->inferenceInput[idxIn + 11], params->inferenceInput[idxIn + 12], params->inferenceInput[idxIn + 13]);
-        const auto throughput = params->inferenceThroughput[i];
         params->image[i] += params->weight * make_float4(inference * (diffuse + specular) * throughput, 1.0f);
     }
 }
 
 void OptixRenderer::train() {
-    // TODO: Permute the training data
+    // Generate training samples
+    check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params.data()), sizeof(Params), &sbts[TRAIN_FORWARD], NRC_BATCH_SIZE / TRAIN_DEPTH, 1, 1));
+    check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+
+    // Perform training steps
     for (uint32_t offset = 0; offset < NRC_BATCH_SIZE; offset += NRC_SUBBATCH_SIZE) {
         auto ctx = nrcModel.trainer->training_step(nrcTrainInput.slice_cols(offset, NRC_SUBBATCH_SIZE), nrcTrainOutput.slice_cols(offset, NRC_SUBBATCH_SIZE));
         float loss = nrcModel.trainer->loss(*ctx);
@@ -223,17 +247,21 @@ void OptixRenderer::train() {
 }
 
 void OptixRenderer::render(vec4* image, uvec2 dim) {
+
+    // Update parameters
     getParams().image = reinterpret_cast<float4*>(image);
     getParams().dim = make_uint2(dim.x, dim.y);
-    const auto prevTrainIndex = nrcTrainIndex.at(0);
-    
     ensureSobol(getParams().sample);
-    check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params.data()), sizeof(Params), &sbts[0], dim.x, dim.y, 1));
-    check(cudaDeviceSynchronize()); // Wait for the renderer to finish
 
-    if (!scene.isEmpty()) train();
+    if (!scene.isEmpty() && enableTraining) train();
 
-    if (getParams().inferenceMode != InferenceMode::NO_INFERENCE) {
+    if (getParams().inferenceMode == InferenceMode::NO_INFERENCE) { // Reference
+        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params.data()), sizeof(Params), &sbts[REFERENCE], dim.x, dim.y, 1));
+        check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+    } else {
+        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params.data()), sizeof(Params), &sbts[INFERENCE], dim.x, dim.y, 1));
+        check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+
         nrcModel.network->inference(nrcInferenceInput, nrcInferenceOutput);
 
         dim3 block(16, 16);
@@ -244,7 +272,6 @@ void OptixRenderer::render(vec4* image, uvec2 dim) {
     
     getParams().sample++;
     getParams().weight = 1.0f / static_cast<float>(getParams().sample);
-    //std::cout << nrcTrainIndex.at(0) - prevTrainIndex << std::endl;
 }
 
 void OptixRenderer::generateSobol(uint offset, uint n) {

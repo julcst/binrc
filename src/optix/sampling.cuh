@@ -280,7 +280,7 @@ __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, c
     const auto NdotH = abs(dot(n, H));
     const auto NdotV = dot(n, wo);
     const auto NdotL = dot(n, wi);
-    const auto cNdotL = maxf(NdotL, 0.0f);
+    const auto cNdotL = maxf(NdotL, 0.0f); // TODO: Return if NdotL < 0 and reflection
     const auto aNdotL = abs(NdotL);
     const auto HdotV = abs(dot(H, wo));
     const auto HdotL = abs(dot(H, wi));

@@ -156,11 +156,11 @@ extern "C" __global__ void __raygen__combined() {
     if (writeTrainingSample) {
         trainTarget.radiance *= reflectanceFactorizationTerm;
         const auto outputIdx = (trainIndex % NRC_BATCH_SIZE) * NRC_OUTPUT_SIZE;
-        pushNRCOutput(params.trainingTarget + outputIdx, trainTarget);
+        writeNRCOutput(params.trainingTarget + outputIdx, trainTarget);
     }
 
     const auto inputIdx = i * NRC_INPUT_SIZE;
-    pushNRCInput(params.inferenceInput + inputIdx, nrcQuery);
+    writeNRCInput(params.inferenceInput + inputIdx, nrcQuery);
     params.inferenceThroughput[i] = inferenceThroughput;
 
     if (!isfinite(color) || isnegative(color)) printf("Color is infinite or negative: %f %f %f\n", color.x, color.y, color.z);
