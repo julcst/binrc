@@ -58,8 +58,6 @@ extern "C" __global__ void __raygen__combined() {
 
         if (isinf(payload.t)) {
             color += throughput * payload.emission;
-            if (isnegative(throughput * payload.emission))
-                printf("Negative color 0: %f %f %f\n", throughput.x, throughput.y, throughput.z);
             trainTarget.radiance += trainThroughput * payload.emission;
             break; // Skybox
         }
@@ -77,8 +75,6 @@ extern "C" __global__ void __raygen__combined() {
                 weight = balanceHeuristic(prevBrdfPdf, lightPdf);
             }
             color += throughput * payload.emission * weight;
-            if (isnegative(throughput * payload.emission * weight))
-                printf("Negative color 1: %f %f %f\n", throughput.x, throughput.y, throughput.z);
             trainTarget.radiance += trainThroughput * payload.emission * weight;
         }
 
@@ -119,12 +115,8 @@ extern "C" __global__ void __raygen__combined() {
                 if (!brdf.isDirac && brdf.pdf > 0.0f && !traceOcclusion(surfacePoint, lightPoint)) {
                     const auto weight = balanceHeuristic(sample.pdf, brdf.pdf);
                     color += throughput * brdf.throughput * sample.emission * weight / sample.pdf;
-                    if (isnegative(throughput * brdf.throughput * sample.emission * weight / sample.pdf))
-                        printf("Negative color 2: %f %f %f %f %f %f %f %f %f %f %f %f\n",
-                               throughput.x, throughput.y, throughput.z,
-                               brdf.throughput.x, brdf.throughput.y, brdf.throughput.z,
-                               sample.emission.x, sample.emission.y, sample.emission.z,
-                               weight, sample.pdf);
+                    if (isnegative(brdf.throughput)) printf("Negative brdf.throughput: %f %f %f \n", brdf.throughput.x, brdf.throughput.y, brdf.throughput.z);
+                    if (sample.pdf < 0.0f) printf("Negative sample.pdf: %f \n", sample.pdf);
                     trainTarget.radiance += trainThroughput * brdf.throughput * sample.emission * weight / sample.pdf;
                 }
             //}
@@ -144,6 +136,8 @@ extern "C" __global__ void __raygen__combined() {
         
         ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
         throughput *= sample.throughput;
+        if (isnegative(sample.throughput)) printf("Negative sample.throughput: %f %f %f\n", sample.throughput.x, sample.throughput.y, sample.throughput.z);
+        if (sample.pdf < 0.0f) printf("Negative sample.pdf: %f \n", sample.pdf);
         trainThroughput *= sample.throughput;
         prevBrdfPdf = sample.pdf;
         lightPdfIsZero = sample.isDirac || payload.transmission > 0.0f;
@@ -171,8 +165,8 @@ extern "C" __global__ void __raygen__combined() {
 
     if (!isfinite(color) || isnegative(color)) printf("Color is infinite or negative: %f %f %f\n", color.x, color.y, color.z);
     if (params.inferenceMode == InferenceMode::NO_INFERENCE) {
-        params.image[i] = mix(params.image[i], make_float4(max(color, 0.0f), 1.0f), params.weight); // FIXME: Negative colors
+        params.image[i] = mix(params.image[i], make_float4(max(color, 0.0f), 1.0f), params.weight);
     } else {
-        params.image[i] = mix(params.image[i], make_float4(max(inferencePlus, 0.0f), 1.0f), params.weight); // FIXME: Negative colors
+        params.image[i] = mix(params.image[i], make_float4(max(inferencePlus, 0.0f), 1.0f), params.weight);
     }
 }

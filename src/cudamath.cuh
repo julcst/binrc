@@ -63,6 +63,10 @@ __host__ __device__ constexpr float step(float x) {
     return maxf(0.0f, x);
 }
 
+__host__ __device__ constexpr bool isnegative(float x) {
+    return x < 0.0f;
+}
+
 // Matrices
 
 struct float2x2 {
@@ -460,9 +464,11 @@ __host__ __device__ constexpr float3 refract(const float3& i, const float3& n, c
     const auto cosTheta_i  = dot(n, i);
     const auto sin2Theta_i = 1.0f - safesqrt(cosTheta_i);
     //const auto sin2Theta_t = sin2Theta_i * rsqrtf(eta);
-    const auto sin2Theta_t = sin2Theta_i / eta;
+    const auto sin2Theta_t = sin2Theta_i / sqrt(eta);
     const auto cosTheta_t = safesqrt(1.0f - sin2Theta_t); // NOTE: Important to prevent NaNs
-    return (cosTheta_i / eta - cosTheta_t) * n - i / eta;
+    const auto refracted = (cosTheta_i / eta - cosTheta_t) * n - i / eta;
+    //if (abs(pow2(refracted)) > 1e-3f) printf("Refracted vector is not normalized: %f %f %f cosThetaI %f sin2ThetaT %f \n", refracted.x, refracted.y, refracted.z, cosTheta_i, sin2Theta_i); // FIXME
+    return normalize(refracted);
 }
 
 __host__ __device__ constexpr bool isfinite(const float3& v) {

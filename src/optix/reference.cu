@@ -80,6 +80,5 @@ extern "C" __global__ void __raygen__reference() {
         lightPdfIsZero = sample.isDirac || payload.transmission > 0.0f;
     }
 
-    if (!isfinite(color) || isnegative(color)) printf("Color is infinite or negative: %f %f %f\n", color.x, color.y, color.z);
-    params.image[i] = mix(params.image[i], make_float4(max(color, 0.0f), 1.0f), params.weight); // FIXME: Negative colors
+    params.image[i] = mix(params.image[i], make_float4(max(color, 0.0f), 1.0f), params.weight);
 }

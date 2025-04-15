@@ -199,13 +199,13 @@ struct LightContext {
 __device__ constexpr float disneyPdf(const LightContext& ctx) {
     if (ctx.NdotL < 0.0f) return 0.0f; // TODO: Why is this necessary?
     const auto D = D_TrowbridgeReitz(ctx.NdotH, ctx.alpha2);
-    const auto lambdaV = Lambda_TrowbridgeReitz(ctx.NdotV, ctx.alpha2);
+    const auto lambdaV = Lambda_TrowbridgeReitz(max(ctx.NdotV, 0.0f), ctx.alpha2);
     const auto G1 = 1.0f / (1.0f + lambdaV);
     const auto VNDF = G1 * D;
-    const auto pdfSpecular = safediv(VNDF, 4.0f * ctx.NdotV);
+    const auto pdfSpecular = safediv(VNDF, 4.0f * max(ctx.NdotV, 0.0f));
     const auto pdfTransmission = safediv(VNDF * abs(ctx.HdotL), pow2(ctx.HdotL + ctx.HdotV / ctx.eta));
 
-    const auto pdfDiffuse = ctx.NdotL * INV_PI;
+    const auto pdfDiffuse = max(ctx.NdotL, 0.0f) * INV_PI;
 
     const auto pdf = ctx.pSpecular * pdfSpecular + ctx.pDiffuse * pdfDiffuse + ctx.pTransmission * pdfTransmission;
 
@@ -259,7 +259,7 @@ __device__ constexpr MISSampleResult sampleDisney(const float rType, const float
     }
 
     const auto H = normalize(wo + wi);
-    const auto pdf = disneyPdf({alpha * alpha, dot(n, H), NdotV, dot(n, wi), dot(H, wi), dot(H, wo), eta, pSpecular, pDiffuse, pTransmission});
+    const auto pdf = disneyPdf({alpha * alpha, abs(dot(n, H)), NdotV, dot(n, wi), dot(H, wi), dot(H, wo), eta, pSpecular, pDiffuse, pTransmission});
 
     const auto isDirac = alpha == 0.0f && pDiffuse == 0.0f;
 
@@ -277,31 +277,33 @@ __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, c
     const auto albedo = (1.0f - metallic) * baseColor;
     const auto alpha2 = alpha * alpha;
     const auto H = normalize(wo + wi);
-    const auto NdotH = dot(n, H);
+    const auto NdotH = abs(dot(n, H));
     const auto NdotV = dot(n, wo);
     const auto NdotL = dot(n, wi);
-    const auto HdotV = dot(H, wo);
-    const auto HdotL = dot(H, wi);
+    const auto cNdotL = maxf(NdotL, 0.0f);
+    const auto aNdotL = abs(NdotL);
+    const auto HdotV = abs(dot(H, wo));
+    const auto HdotL = abs(dot(H, wi));
     const auto eta = inside ? 1.0f / 1.5f : 1.5f / 1.0f;
 
     //if (NdotL <= 0.0f) return {{1.0f}, 1.0f};
 
     const auto F = F_SchlickApprox(HdotV, F0); // TODO: Different F0 inside and outside
     const auto D = D_TrowbridgeReitz(NdotH, alpha2);
-    const auto lambdaL = Lambda_TrowbridgeReitz(NdotL, alpha2);
+    const auto lambdaL = Lambda_TrowbridgeReitz(cNdotL, alpha2);
     const auto lambdaV = Lambda_TrowbridgeReitz(NdotV, alpha2);
     const auto G1 = 1.0f / (1.0f + lambdaV);
     const auto G = 1.0f / (1.0f + lambdaL + lambdaV);
     const auto specular = safediv(F * D * G, 4.0f * NdotV);
-    const auto transmission = safediv(albedo * max(1.0f - F, 0.0f) * D * G * HdotL * HdotV, NdotV * NdotL * pow2(HdotL + HdotV / eta));
+    const auto transmission = safediv(albedo * max(1.0f - F, 0.0f) * D * G * HdotL * HdotV, NdotV * aNdotL * pow2(HdotL + HdotV / eta));
     const auto VNDF = G1 * D;
     const auto pdfSpecular = safediv(VNDF, 4.0f * NdotV);
     const auto pdfTransmission = safediv(VNDF * abs(HdotL), pow2(HdotL + HdotV / eta));
 
     const auto FD90 = 0.5f + 2.0f * alpha * HdotV * HdotV;
-    const auto response = (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotL)) * (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotV));
-    const auto diffuse = albedo * response * NdotL * INV_PI;
-    const auto pdfDiffuse = NdotL * INV_PI;
+    const auto response = (1.0f + (FD90 - 1.0f) * pow5(1.0f - cNdotL)) * (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotV));
+    const auto diffuse = albedo * response * cNdotL * INV_PI;
+    const auto pdfDiffuse = cNdotL * INV_PI;
 
     const auto wSpecular = luminance(F_SchlickApprox(NdotV, F0));
     const auto wDiffuse = luminance(albedo);
@@ -312,10 +314,13 @@ __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, c
 
     const auto isDirac = alpha == 0.0f && wDiffuse == 0.0f;
 
-    if (isnegative(transmission)) {
-        printf("Transmission is negative: F %f %f %f D %f G %f HdotL %f HdotV %f NdotL %f NdotV %f NdotH %f\n",
-               F.x, F.y, F.z, D, G, HdotL, HdotV, NdotL, NdotV, NdotH);
-    }
+    if (isnegative(transmission)) printf("Transmission is negative: F %f %f %f D %f G %f HdotL %f HdotV %f NdotL %f NdotV %f NdotH %f\n", F.x, F.y, F.z, D, G, HdotL, HdotV, NdotL, NdotV, NdotH);
+    if (isnegative(specular)) printf("Specular is negative: F %f %f %f D %f G %f HdotL %f HdotV %f NdotL %f NdotV %f NdotH %f\n", F.x, F.y, F.z, D, G, HdotL, HdotV, NdotL, NdotV, NdotH);
+    if (isnegative(diffuse)) printf("Diffuse is negative: F %f %f %f D %f G %f HdotL %f HdotV %f NdotL %f NdotV %f NdotH %f\n", F.x, F.y, F.z, D, G, HdotL, HdotV, NdotL, NdotV, NdotH);
+    if (isnegative(pdfSpecular)) printf("pdfSpecular is negative: %f %f %f %f %f %f %f\n", pdfSpecular, NdotV, NdotL, HdotL, HdotV, lambdaL, lambdaV);
+    if (isnegative(pdfDiffuse)) printf("pdfDiffuse is negative: %f %f %f %f %f %f %f\n", pdfDiffuse, NdotV, NdotL, HdotL, HdotV, lambdaL, lambdaV);
+    if (isnegative(pdfTransmission)) printf("pdfTransmission is negative: %f %f %f %f %f %f %f\n", pdfTransmission, NdotV, NdotL, HdotL, HdotV, lambdaL, lambdaV);
+    if (HdotV - 1.0f > 1e-6f) printf("HdotV is greater than 1: %f H %f %f %f V %f %f %f\n", HdotV, H.x, H.y, H.z, wo.x, wo.y, wo.z);
 
     return {specular + mix(diffuse, transmission, transmissiveness), pdf, isDirac};
 }

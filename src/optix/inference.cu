@@ -95,9 +95,6 @@ extern "C" __global__ void __raygen__inference() {
     const auto nrcQuery = encodeInput(hitPoint, wo, payload);
     pushNRCInput(params.inferenceInput + inputIdx, nrcQuery);
     params.inferenceThroughput[i] = throughput;
-
-    // NOTE: We should not need to prevent NaNs
-    // FIXME: NaNs
-    //if (isfinite(color))
+    
     params.image[i] = mix(params.image[i], make_float4(max(inferencePlus, 0.0f), 1.0f), params.weight); // FIXME: Negative colors
 }
