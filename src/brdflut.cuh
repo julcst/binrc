@@ -92,45 +92,34 @@ __global__ void computeSpecularLUT(float4* data, uint width, uint height, uint s
 // Function to allocate a texture, compute the directional albedo, and save it to a file
 bool computeAndSaveDirectionalAlbedo(const char* filename, uint width, uint height, uint samples = 1024) {
     // Allocate device memory for the texture
-    float4* d_data = nullptr;
-    check(cudaMalloc(&d_data, width * height * sizeof(float4)));
+    float4* data = nullptr;
+    check(cudaMallocManaged(&data, width * height * sizeof(float4)));
     
     // Define the thread block and grid dimensions
     dim3 blockSize(16, 16);
     dim3 gridSize((width + blockSize.x - 1) / blockSize.x, (height + blockSize.y - 1) / blockSize.y);
     
     // Launch the kernel to compute the directional albedo
-    computeSpecularLUT<<<gridSize, blockSize>>>(d_data, width, height, samples);
+    computeSpecularLUT<<<gridSize, blockSize>>>(data, width, height, samples);
     check(cudaDeviceSynchronize());
     
-    // Allocate host memory for the texture
-    float4* h_data = new float4[width * height];
-    
-    // Copy data from device to host
-    check(cudaMemcpy(h_data, d_data, width * height * sizeof(float4), cudaMemcpyDeviceToHost));
-    
-    // Free device memory as soon as we're done with it
-    cudaFree(d_data);
-    
     // Convert to 8-bit per channel for saving (RGBA format)
-    unsigned char* image_data = new unsigned char[width * height * 4];
+    std::vector<unsigned char> image_data(width * height * 4);
     
     // Convert floating-point values to 8-bit unsigned char
     for (uint i = 0; i < width * height; ++i) {
-        image_data[i * 4 + 0] = (unsigned char)(fminf(fmaxf(h_data[i].x, 0.0f), 1.0f) * 255.0f); // R
-        image_data[i * 4 + 1] = (unsigned char)(fminf(fmaxf(h_data[i].y, 0.0f), 1.0f) * 255.0f); // G
-        image_data[i * 4 + 2] = (unsigned char)(fminf(fmaxf(h_data[i].z, 0.0f), 1.0f) * 255.0f); // B
-        image_data[i * 4 + 3] = (unsigned char)(fminf(fmaxf(h_data[i].w, 0.0f), 1.0f) * 255.0f); // A
+        image_data[i * 4 + 0] = (unsigned char)(fminf(fmaxf(data[i].x, 0.0f), 1.0f) * 255.0f); // R
+        image_data[i * 4 + 1] = (unsigned char)(fminf(fmaxf(data[i].y, 0.0f), 1.0f) * 255.0f); // G
+        image_data[i * 4 + 2] = (unsigned char)(fminf(fmaxf(data[i].z, 0.0f), 1.0f) * 255.0f); // B
+        image_data[i * 4 + 3] = (unsigned char)(fminf(fmaxf(data[i].w, 0.0f), 1.0f) * 255.0f); // A
     }
-    
-    // Free host float data as soon as we're done with it
-    delete[] h_data;
+
+    cudaFree(data); // Free device memory
     
     // Save image to file using stb_image_write
-    int result = stbi_write_png(filename, width, height, 4, image_data, width * 4);
+    int result = stbi_write_png(filename, width, height, 4, image_data.data(), width * 4);
     
     // Free image data
-    delete[] image_data;
     
     // Return true if successful, false otherwise
     return result != 0;
