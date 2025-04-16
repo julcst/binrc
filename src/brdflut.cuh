@@ -26,7 +26,8 @@ __host__ __device__ __forceinline__ float2 Hammersley(uint i, uint N) {
  * https://learnopengl.com/PBR/IBL/Specular-IBL
  * @return scale and bias to be applied to F0.
  */
-__host__ __device__ __forceinline__ float3 integrateSpecular(float alpha, float cosTheta, uint samples) {
+__host__ __device__ __forceinline__ float3 integrateSpecular(float roughness, float cosTheta, uint samples) {
+    const float alpha = roughness * roughness;
     const float alpha2 = alpha * alpha;
 
     // Create viewing vector
