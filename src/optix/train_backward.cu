@@ -10,6 +10,8 @@
 #include "sampling.cuh"
 
 extern "C" __global__ void __raygen__() {
+    if (!params.lightTable) return; // Cannot sample light without lights
+    
     const auto idx = optixGetLaunchIndex();
     const auto dim = optixGetLaunchDimensions();
     const auto i = idx.y * params.dim.x + idx.x;
