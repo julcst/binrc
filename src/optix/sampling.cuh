@@ -417,7 +417,10 @@ __device__ inline LightDirSample sampleLight(const float randSrc, const float2& 
     const auto tangentToWorld = buildTBN(n);
     const auto wo = tangentToWorld * sampleCosineHemisphere(randDir);
 
-    return {wo, n, position, emission};
+    // pdf = light.weight / light.area;
+    const auto weight = light.area / light.weight;
+
+    return {wo, n, position, emission * weight};
 }
 
 __device__ constexpr float balanceHeuristic(float pdf1, float pdf2) {
