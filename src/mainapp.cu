@@ -131,6 +131,8 @@ void MainApp::buildImGui() {
 
     ImGui::SeparatorText("NRC");
     ImGui::Checkbox("Enable Training", &renderer.enableTraining);
+    ImGui::FlagCheckbox("Enable Backward RR", &renderer.getParams().flags, BACKWARD_RR_FLAG);
+    ImGui::FlagCheckbox("Enable Forward RR", &renderer.getParams().flags, FORWARD_RR_FLAG);
     ImGui::SliderFloat("Training Direction", &renderer.trainingDirection, 0.0f, 1.0f, "%.2f");
     reset |= ImGui::EnumCombo("Inference Mode", &renderer.getParams().inferenceMode, INFERENCE_MODES);
     ImGui::PlotLines("Loss", renderer.lossHistory.data(), renderer.lossHistory.size());

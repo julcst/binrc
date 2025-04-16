@@ -22,6 +22,8 @@ constexpr uint TRANSMISSION_FLAG = 1 << 0;
 constexpr uint NEE_FLAG = 1 << 1;
 constexpr uint TRAINING_NEE_FLAG = 1 << 2;
 constexpr uint INFERENCE_NEE_FLAG = 1 << 3;
+constexpr uint FORWARD_RR_FLAG = 1 << 4;
+constexpr uint BACKWARD_RR_FLAG = 1 << 5;
 
 // TODO: Use half instead of float
 struct NRCInput {

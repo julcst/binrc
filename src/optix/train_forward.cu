@@ -39,12 +39,14 @@ extern "C" __global__ void __raygen__() {
         trainBounceIdx = depth - 1;
 
         // Russian roulette
-        const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
-        if (RND_ROULETTE >= pContinue) break;
-        for (uint i = 0; i < trainBounceIdx; i++) {
-            trainBounces[i].throughput /= pContinue;
+        if (params.flags & FORWARD_RR_FLAG) {
+            const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
+            if (RND_ROULETTE >= pContinue) break;
+            for (uint i = 0; i < trainBounceIdx; i++) {
+                trainBounces[i].throughput /= pContinue;
+            }
+            throughput /= pContinue;
         }
-        throughput /= pContinue;
 
         payload = trace(ray);
 
@@ -110,6 +112,8 @@ extern "C" __global__ void __raygen__() {
         }
         throughput *= sample.throughput;
     }
+
+    // TODO: Employ self learning
 
     for (uint i = 0; i < trainBounceIdx; i++) {
         writeNRCOutput(params.trainingTarget + trainBounces[i].index * NRC_OUTPUT_SIZE, trainBounces[i].radiance * trainBounces[i].reflectanceFactorizationTerm);

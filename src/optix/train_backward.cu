@@ -18,15 +18,17 @@ extern "C" __global__ void __raygen__() {
     const auto lightSample = sampleLight(PR1(0), PR2(1), PR2(3));
     auto ray = Ray{lightSample.position + lightSample.n * copysignf(params.sceneEpsilon, dot(lightSample.wo, lightSample.n)), lightSample.wo};
     auto radiance = lightSample.emission;
-    // printf("Light sample: %f %f %f\n", lightSample.emission.x, lightSample.emission.y, lightSample.emission.z); TODO: Is this in right scale?
+    // printf("Light sample: %f %f %f\n", lightSample.emission.x, lightSample.emission.y, lightSample.emission.z);
 
     Payload payload;
 
-    for (uint depth = 1; depth <= TRAIN_DEPTH; depth++) {
+    for (uint depth = 1; depth <= TRAIN_DEPTH + 1; depth++) {
         // Russian roulette
-        const float pContinue = min(luminance(radiance) * params.russianRouletteWeight, 1.0f);
-        if (RND_ROULETTE >= pContinue) break;
-        radiance /= pContinue;
+        if (params.flags & BACKWARD_RR_FLAG) {
+            const float pContinue = min(luminance(radiance) * params.russianRouletteWeight, 1.0f);
+            if (RND_ROULETTE >= pContinue) break;
+            radiance /= pContinue;
+        }
 
         payload = trace(ray);
 
@@ -43,7 +45,7 @@ extern "C" __global__ void __raygen__() {
 
         radiance *= sample.throughput;
 
-        // printf("Sample throughput: %f\n", pow2(sample.throughput)); FIXME: throughput > 1 makes radiance explode
+        // printf("Sample throughput: %f\n", pow2(sample.throughput));
 
         ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
 
