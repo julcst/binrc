@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optix_stubs.h>
 #include <cuda_runtime.h>
 #include <array>
 #include <string_view>

@@ -1,6 +1,9 @@
 #pragma once
 
+#include <cuda_runtime.h>
+
 #include "cudamath.cuh"
+#include "params.cuh"
 
 /**
  * Schlick's approximation for the Fresnel term (see https://en.wikipedia.org/wiki/Schlick%27s_approximation).
@@ -171,6 +174,7 @@ __device__ constexpr SampleResult sampleTrowbridgeReitzTransmission(const float2
     return {wi, transmission};
 }
 
+// FIXME: This fails the white furnace test
 __device__ constexpr SampleResult sampleBrentBurley(const float2& rand, const float3& wo, float cosThetaO, const float3& n, float alpha, const float3x3& tangentToWorld, const float3& albedo) {
     const auto wi = tangentToWorld * sampleCosineHemisphere(rand);
     const auto wm = normalize(wi + wo);

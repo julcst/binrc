@@ -65,6 +65,7 @@ set_target_properties(optixir PROPERTIES
 )
 
 set(SRC
+    src/brdflut.cu
     src/main.cu
     src/mainapp.cu
     src/optixrenderer.cu

@@ -20,6 +20,7 @@ using namespace glm;
 #include "optix/params.cuh"
 #include "scene.hpp"
 #include "optixir.hpp"
+#include "brdflut.cuh"
 
 enum ProgramGroup {
     COMBINED,
@@ -81,6 +82,8 @@ private:
     tcnn::GPUMatrix<float> nrcInferenceInput;
     tcnn::GPUMatrix<float> nrcInferenceOutput;
     tcnn::GPUMemory<float3> nrcInferenceThroughput;
+
+    BRDFLUT brdfLUT;
 
     void generateSobol(uint offset, uint n);
     void ensureSobol(uint sample);
