@@ -46,11 +46,9 @@ __host__ __device__ __forceinline__ float3 integrateSpecular(float roughness, fl
         const float3 wi = reflect(wo, wm);
         
         // Calculate the various dot products needed for BRDF evaluation
-        const float NdotL = wi.z;
-        const float HdotV = dot(wm, wo);
+        const float NdotL = max(wi.z, 0.0f); // TODO: Is this correct?
+        const float HdotV = abs(dot(wm, wo));
 
-        if (NdotL <= 0.0f) continue; // Below horizon
-        
         // Calculate the various BRDF components
         const float Ffactor = pow5(1.0f - HdotV);
         const float LambdaL = Lambda_TrowbridgeReitz(NdotL, alpha2);
@@ -61,7 +59,9 @@ __host__ __device__ __forceinline__ float3 integrateSpecular(float roughness, fl
         
         scale += (1.0f - Ffactor) * brdf;
         bias += Ffactor * brdf;
-        diffuse += sampleBrentBurley(rand, wo, NdotV, n, alpha, {}, make_float3(1.0f)).throughput.x;
+        
+        //diffuse += sampleBrentBurley(rand, wo, NdotV, n, alpha, {}, make_float3(1.0f)).throughput.x;
+        diffuse += sampleLambertian(rand, {}, make_float3(1.0f)).throughput.x;
     }
     scale /= float(samples);
     bias /= float(samples);

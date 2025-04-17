@@ -174,6 +174,12 @@ __device__ constexpr SampleResult sampleTrowbridgeReitzTransmission(const float2
     return {wi, transmission};
 }
 
+__device__ constexpr SampleResult sampleLambertian(const float2& rand, const float3x3& tangentToWorld, const float3& albedo) {
+    const auto wi = tangentToWorld * sampleCosineHemisphere(rand);
+    const auto diffuse = albedo;
+    return {wi, diffuse};
+}
+
 // FIXME: This fails the white furnace test
 __device__ constexpr SampleResult sampleBrentBurley(const float2& rand, const float3& wo, float cosThetaO, const float3& n, float alpha, const float3x3& tangentToWorld, const float3& albedo) {
     const auto wi = tangentToWorld * sampleCosineHemisphere(rand);
@@ -251,7 +257,8 @@ __device__ constexpr MISSampleResult sampleDisney(const float rType, const float
         // TODO: Proper weighting
         if (transmission < 0.5f) { // Sample Brent-Burley diffuse
             const auto tangentToWorld = buildTBN(n);
-            const auto sample = sampleBrentBurley(rDiffuse, wo, NdotV, n, alpha, tangentToWorld, albedo);
+            // const auto sample = sampleBrentBurley(rDiffuse, wo, NdotV, n, alpha, tangentToWorld, albedo);
+            const auto sample = sampleLambertian(rDiffuse, tangentToWorld, albedo);
             throughput = sample.throughput / pDiffuse;
             wi = sample.direction;
             isSpecular = false;
@@ -304,9 +311,9 @@ __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, c
     const auto pdfSpecular = safediv(VNDF, 4.0f * NdotV);
     const auto pdfTransmission = safediv(VNDF * abs(HdotL), pow2(HdotL + HdotV / eta));
 
-    const auto FD90 = 0.5f + 2.0f * alpha * HdotV * HdotV;
-    const auto response = (1.0f + (FD90 - 1.0f) * pow5(1.0f - cNdotL)) * (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotV));
-    const auto diffuse = albedo * response * cNdotL * INV_PI;
+    // const auto FD90 = 0.5f + 2.0f * alpha * HdotV * HdotV;
+    // const auto response = (1.0f + (FD90 - 1.0f) * pow5(1.0f - cNdotL)) * (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotV));
+    const auto diffuse = albedo * cNdotL * INV_PI;
     const auto pdfDiffuse = cNdotL * INV_PI;
 
     const auto wSpecular = luminance(F_SchlickApprox(NdotV, F0));

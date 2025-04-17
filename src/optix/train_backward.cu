@@ -28,7 +28,7 @@ extern "C" __global__ void __raygen__() {
         // Russian roulette
         if (params.flags & BACKWARD_RR_FLAG) {
             const float pContinue = min(luminance(radiance) * params.russianRouletteWeight, 1.0f);
-            if (RND_ROULETTE >= pContinue) break;
+            if (RND_ROULETTE >= pContinue) break; // FIXME: use random numbers independent from sampling
             radiance /= pContinue;
         }
 
