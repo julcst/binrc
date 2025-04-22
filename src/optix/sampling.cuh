@@ -363,7 +363,7 @@ __device__ inline EmissiveTriangle sampleLightTable(float r) {
 }
 
 __device__ inline EmissiveTriangle sampleLightTableUniform(float r) {
-    const uint index = r * params.lightTableSize;
+    const uint index = clamp(r * params.lightTableSize, 0, params.lightTableSize - 1);
     auto light = params.lightTable[index];
     light.weight = 1.0f / params.lightTableSize;
     return light;

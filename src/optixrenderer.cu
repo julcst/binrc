@@ -250,6 +250,9 @@ void OptixRenderer::train() {
     if (forwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params.data()), sizeof(Params), &sbts[TRAIN_FORWARD], forwardSamples, 1, 1));
     if (backwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params.data()), sizeof(Params), &sbts[TRAIN_BACKWARD], backwardSamples, 1, 1));
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+    
+    getParams().trainingRound++;
+    check(cudaDeviceSynchronize());
 
     // Perform training steps
     for (uint32_t offset = 0; offset < NRC_BATCH_SIZE; offset += NRC_SUBBATCH_SIZE) {

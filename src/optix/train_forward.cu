@@ -1,5 +1,6 @@
 #include <optix_device.h>
 #include <cuda_runtime.h>
+#include <curand_kernel.h>
 #include <array>
 
 #include "params.cuh"
@@ -16,14 +17,17 @@ struct TrainBounce {
     uint index = 0;
 };
 
+constexpr uint N_RANDS = 2 + (TRAIN_DEPTH) * 9;
+
 extern "C" __global__ void __raygen__() {
     const auto idx = optixGetLaunchIndex();
     const auto dim = optixGetLaunchDimensions();
     const auto i = idx.y * params.dim.x + idx.x;
-    const auto rotation = params.rotationTable[i];
+    
+    curandStatePhilox4_32_10_t state;
+    curand_init(0, i, params.trainingRound * N_RANDS, &state);
 
-    const auto uv = RND_JITTER;
-    auto ray = makeCameraRay(uv);
+    auto ray = makeCameraRay({curand_uniform(&state), curand_uniform(&state)});
 
     const auto nee = params.lightTable && (params.flags & NEE_FLAG);
 
@@ -41,7 +45,7 @@ extern "C" __global__ void __raygen__() {
         // Russian roulette
         if (params.flags & FORWARD_RR_FLAG) {
             const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
-            if (RND_ROULETTE >= pContinue) break;
+            if (curand_uniform(&state) >= pContinue) break;
             for (uint i = 0; i < trainBounceIdx; i++) {
                 trainBounces[i].throughput /= pContinue;
             }
@@ -86,7 +90,7 @@ extern "C" __global__ void __raygen__() {
 
         // Next event estimation
         if (nee) {
-            const auto sample = sampleLight(RND_LSRC, RND_LSAMP, hitPoint);
+            const auto sample = sampleLight(curand_uniform(&state), {curand_uniform(&state), curand_uniform(&state)}, hitPoint);
             const auto cosThetaS = dot(sample.wi, n);
             //if (abs(cosThetaS) > 0.0f && abs(sample.cosThetaL) > 0.0f) {
                 const auto brdf = evalDisney(wo, sample.wi, n, baseColor, metallic, alpha, payload.transmission, inside);
@@ -102,7 +106,8 @@ extern "C" __global__ void __raygen__() {
             //}
         }
 
-        const auto sample = sampleDisney(RND_BSDF, RND_MICROFACET, RND_DIFFUSE, wo, n, inside, payload.baseColor, payload.metallic, alpha, payload.transmission);
+        const auto r = curand_uniform4(&state);
+        const auto sample = sampleDisney(curand_uniform(&state), {r.x, r.y}, {r.z, r.w}, wo, n, inside, payload.baseColor, payload.metallic, alpha, payload.transmission);
         
         ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
         prevBrdfPdf = sample.pdf;

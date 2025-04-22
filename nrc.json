@@ -36,7 +36,7 @@
         "n_hidden_layers": 5
     },
     "loss": {
-        "otype": "RelativeL2Luminance" // L1 produces sharper Caustics
+        "otype": "RelativeL1" // L1 produces sharper Caustics // TODO: RelativeL1Luminance
     },
     "optimizer": {
         "otype": "EMA",

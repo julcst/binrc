@@ -123,6 +123,7 @@ struct Params {
     uint lightTableSize; // lightTableSize
 //////////////////////////////////////////////////
 
+    uint trainingRound = 0; // Current training round
     uint* trainingIndexPtr;
     float* trainingInput;
     float* trainingTarget;
