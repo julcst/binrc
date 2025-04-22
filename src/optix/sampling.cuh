@@ -263,7 +263,7 @@ __device__ constexpr MISSampleResult sampleDisney(const float rType, const float
             wi = sample.direction;
             isSpecular = false;
         } else {
-            const auto sample = sampleTrowbridgeReitzTransmission(rMicrofacet, wo, NdotV, n, alpha, F0, baseColor, eta);
+            const auto sample = sampleTrowbridgeReitzTransmission(rMicrofacet, wo, NdotV, n, alpha, F0, baseColor, eta); // TODO: Handle no refraction case
             throughput = sample.throughput / pTransmission;
             wi = sample.direction;
         }

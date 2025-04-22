@@ -20,7 +20,7 @@ __device__ inline NRCInput encodeInput(const float3& position, const float3& wo,
 __device__ inline NRCInput encodeInput(const float3& position, const float3& wo, const Payload& payload) {
     const auto F0 = mix(make_float3(0.04f), payload.baseColor, payload.metallic);
     const auto albedo = (1.0f - payload.metallic) * payload.baseColor;
-    return encodeInput(position, wo, payload.normal, albedo, F0, payload.roughness * payload.roughness);
+    return encodeInput(position, wo, payload.normal, albedo, F0, payload.roughness * payload.roughness); // TODO: Flip normal when inside?
 }
 
 __device__ inline void writeNRCInput(float* to, const NRCInput& input) {
