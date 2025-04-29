@@ -70,7 +70,7 @@ extern "C" __global__ void __raygen__() {
         const auto metallic = payload.metallic;
         const auto baseColor = payload.baseColor; // baseColor
 
-        const auto trainInput = encodeInput(hitPoint, wo, payload);
+        const auto trainInput = encodeInput(hitPoint, wo, n, payload);
         const auto trainIdx = pushNRCTrainInput(trainInput);
         const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
         trainBounces[trainBounceIdx].index = trainIdx;

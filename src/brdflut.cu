@@ -77,9 +77,9 @@ __global__ void computeSpecularLUT(cudaSurfaceObject_t surfObj, uint width, uint
 
     // Map pixel coordinates to viewing angle (cosTheta) and roughness (alpha)
     const float cosTheta = float(x) / (width - 1);  // [0, 1]
-    const float alpha = float(y) / (height - 1);    // [0, 1]
+    const float roughness = float(y) / (height - 1);    // [0, 1]
     
-    const auto result = integrateSpecular(alpha, cosTheta, samples);
+    const auto result = integrateSpecular(roughness, cosTheta, samples);
     
     // Store the result. Using float4 for compatibility with texture formats.
     // surf2Dwrite expects byte offset for x, not pixel index

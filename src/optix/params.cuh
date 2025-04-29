@@ -130,6 +130,8 @@ struct Params {
     float* inferenceInput;
     float* inferenceOutput;
     float3* inferenceThroughput;
+
+    cudaTextureObject_t brdfLUT;
 };
 extern "C" __constant__ const Params params;
 

@@ -94,7 +94,7 @@ extern "C" __global__ void __raygen__() {
     if (!isPayloadValid) {
         params.inferenceThroughput[i] = make_float3(0.0f);
     } else {
-        const auto nrcQuery = encodeInput(hitPoint, wo, payload);
+        const auto nrcQuery = encodeInput(hitPoint, wo, n, payload);
         writeNRCInput(params.inferenceInput, i, nrcQuery);
         params.inferenceThroughput[i] = throughput;
     }

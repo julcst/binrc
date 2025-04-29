@@ -174,6 +174,8 @@ OptixRenderer::OptixRenderer() {
     nrcTrainIndex = tcnn::GPUMemory<uint>(1, true);
     nrcTrainIndex.memset(0);
     params.trainingIndexPtr = nrcTrainIndex.data();
+
+    params.brdfLUT = brdfLUT.texObj;
 }
 
 OptixRenderer::~OptixRenderer() {
@@ -240,6 +242,8 @@ __global__ void visualizeInference(Params* params) {
     }
 }
 
+
+// TODO: Could do multiple smaller training steps per frame
 void OptixRenderer::train() {
     // Generate training samples
     const auto totalTrainingSamples = NRC_BATCH_SIZE / TRAIN_DEPTH;
