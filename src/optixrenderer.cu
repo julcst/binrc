@@ -160,8 +160,6 @@ OptixRenderer::OptixRenderer() {
         };
     }
 
-    params.copy_from_host({Params{}});
-
     nrcModel = tcnn::create_from_config(NRC_INPUT_SIZE, NRC_OUTPUT_SIZE, nlohmann::json::parse(Common::readFile("nrc.json"), nullptr, true, true));
     nrcTrainInput = tcnn::GPUMatrix<float>(NRC_INPUT_SIZE, NRC_BATCH_SIZE);
     nrcTrainOutput = tcnn::GPUMatrix<float>(NRC_OUTPUT_SIZE, NRC_BATCH_SIZE);
@@ -169,13 +167,13 @@ OptixRenderer::OptixRenderer() {
     std::cout << "Network: " << std::setw(2) << nrcModel.network->hyperparams()
               << "\nTrainer: " << std::setw(2) << nrcModel.trainer->hyperparams()
               << std::endl;
-
-    getParams().trainingInput = nrcTrainInput.data();
-    getParams().trainingTarget = nrcTrainOutput.data();
+    
+    params.trainingInput = nrcTrainInput.data();
+    params.trainingTarget = nrcTrainOutput.data();
 
     nrcTrainIndex = tcnn::GPUMemory<uint>(1, true);
     nrcTrainIndex.memset(0);
-    getParams().trainingIndexPtr = nrcTrainIndex.data();
+    params.trainingIndexPtr = nrcTrainIndex.data();
 }
 
 OptixRenderer::~OptixRenderer() {
@@ -201,21 +199,21 @@ void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
         sbt.hitgroupRecordCount = hitRecords.size();
     }
 
-    getParams().sceneMin = {aabb.min.x, aabb.min.y, aabb.min.z};
-    getParams().sceneScale = 1.0f / std::max(size.x, std::max(size.y, size.z));
-    getParams().materials = materials.data();
-    getParams().lightTable = lightTable.data();
-    getParams().lightTableSize = lightTable.size();
-    getParams().handle = sceneData.handle;
+    params.sceneMin = {aabb.min.x, aabb.min.y, aabb.min.z};
+    params.sceneScale = 1.0f / std::max(size.x, std::max(size.y, size.z));
+    params.materials = materials.data();
+    params.lightTable = lightTable.data();
+    params.lightTableSize = lightTable.size();
+    params.handle = sceneData.handle;
 
-    std::cout << "Min: (" << getParams().sceneMin.x << ", " << getParams().sceneMin.y << ", " << getParams().sceneMin.z << ") Scale: " << getParams().sceneScale << std::endl;
+    std::cout << "Min: (" << params.sceneMin.x << ", " << params.sceneMin.y << ", " << params.sceneMin.z << ") Scale: " << params.sceneScale << std::endl;
 
     reset();
     lossHistory.clear();
 }
 
 void OptixRenderer::setCamera(const mat4& clipToWorld) {
-    getParams().clipToWorld = glmToCuda(clipToWorld);
+    params.clipToWorld = glmToCuda(clipToWorld);
 }
 
 __global__ void visualizeInference(Params* params) {
@@ -247,15 +245,15 @@ void OptixRenderer::train() {
     const auto totalTrainingSamples = NRC_BATCH_SIZE / TRAIN_DEPTH;
     const uint backwardSamples = totalTrainingSamples * trainingDirection;
     const uint forwardSamples = totalTrainingSamples - backwardSamples;
-    if (forwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params.data()), sizeof(Params), &sbts[TRAIN_FORWARD], forwardSamples, 1, 1));
-    if (backwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params.data()), sizeof(Params), &sbts[TRAIN_BACKWARD], backwardSamples, 1, 1));
+    if (forwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_FORWARD], forwardSamples, 1, 1));
+    if (backwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_BACKWARD], backwardSamples, 1, 1));
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
     
-    getParams().trainingRound++;
-    check(cudaDeviceSynchronize());
+    params.trainingRound++;
 
     // Perform training steps
     for (uint32_t offset = 0; offset < NRC_BATCH_SIZE; offset += NRC_SUBBATCH_SIZE) {
+        // TODO: Use pdf
         auto ctx = nrcModel.trainer->training_step(nrcTrainInput.slice_cols(offset, NRC_SUBBATCH_SIZE), nrcTrainOutput.slice_cols(offset, NRC_SUBBATCH_SIZE));
         float loss = nrcModel.trainer->loss(*ctx);
         lossHistory.push_back(loss);
@@ -265,37 +263,41 @@ void OptixRenderer::train() {
 void OptixRenderer::render(vec4* image, uvec2 dim) {
 
     // Update parameters
-    getParams().image = reinterpret_cast<float4*>(image);
-    getParams().dim = make_uint2(dim.x, dim.y);
-    ensureSobol(getParams().sample);
+    params.image = reinterpret_cast<float4*>(image);
+    params.dim = make_uint2(dim.x, dim.y);
+    ensureSobol(params.sample);
+    
+    // Copy host parameters to device
+    paramsBuffer.copy_from_host(&params, 1);
+    check(cudaDeviceSynchronize()); // Wait for the copy to finish
 
     if (!scene.isEmpty() && enableTraining) train();
 
-    if (getParams().inferenceMode == InferenceMode::NO_INFERENCE) { // Reference
-        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params.data()), sizeof(Params), &sbts[REFERENCE], dim.x, dim.y, 1));
+    if (params.inferenceMode == InferenceMode::NO_INFERENCE) { // Reference
+        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[REFERENCE], dim.x, dim.y, 1));
         check(cudaDeviceSynchronize()); // Wait for the renderer to finish
     } else {
-        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(params.data()), sizeof(Params), &sbts[INFERENCE], dim.x, dim.y, 1));
+        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[INFERENCE], dim.x, dim.y, 1));
         check(cudaDeviceSynchronize()); // Wait for the renderer to finish
 
         nrcModel.network->inference(nrcInferenceInput, nrcInferenceOutput);
 
         dim3 block(16, 16);
         dim3 grid((dim.x + block.x - 1) / block.x, (dim.y + block.y - 1) / block.y);
-        visualizeInference<<<grid, block>>>(params.data());
+        visualizeInference<<<grid, block>>>(paramsBuffer.data());
         check(cudaDeviceSynchronize()); // Wait for the visualization to finish
     }
     
-    getParams().sample++;
-    getParams().weight = 1.0f / static_cast<float>(getParams().sample);
+    params.sample++;
+    params.weight = 1.0f / static_cast<float>(params.sample);
 }
 
 void OptixRenderer::generateSobol(uint offset, uint n) {
     randSequence.resize(n * RAND_SEQUENCE_DIMS);
 
-    getParams().sequenceStride = n;
-    getParams().sequenceOffset = offset;
-    getParams().randSequence = randSequence.data();
+    params.sequenceStride = n;
+    params.sequenceOffset = offset;
+    params.randSequence = randSequence.data();
 
     // NOTE: We rebuild the generator, this makes regeneration slow but saves memory
     curandGenerator_t generator;
@@ -308,7 +310,7 @@ void OptixRenderer::generateSobol(uint offset, uint n) {
 }
 
 void OptixRenderer::ensureSobol(uint sample) {
-    if (sample < getParams().sequenceOffset || sample >= getParams().sequenceOffset + getParams().sequenceStride) {
+    if (sample < params.sequenceOffset || sample >= params.sequenceOffset + params.sequenceStride) {
         // std::cout << std::format("Regenerating Sobol sequence for samples [{},{})", sample, sample + RAND_SEQUENCE_CACHE_SIZE) << std::endl;
         // C++17
         std::cout << "Regenerating Sobol sequence for samples [" << sample << "," << sample + RAND_SEQUENCE_CACHE_SIZE << ")" << std::endl;
@@ -334,17 +336,17 @@ void OptixRenderer::resize(uvec2 dim) {
     check(curandGenerateUniform(generator, reinterpret_cast<float*>(rotationTable.data()), rotationTable.size() * 2));
     check(curandDestroyGenerator(generator));
 
-    getParams().inferenceInput = nrcInferenceInput.data();
-    getParams().inferenceOutput = nrcInferenceOutput.data();
-    getParams().inferenceThroughput = nrcInferenceThroughput.data();
-    getParams().rotationTable = rotationTable.data();
+    params.inferenceInput = nrcInferenceInput.data();
+    params.inferenceOutput = nrcInferenceOutput.data();
+    params.inferenceThroughput = nrcInferenceThroughput.data();
+    params.rotationTable = rotationTable.data();
 
     check(cudaDeviceSynchronize()); // Wait for the generator to finish
 }
 
 void OptixRenderer::reset() {
-    getParams().sample = 0;
-    getParams().weight = 1.0f;
+    params.sample = 0;
+    params.weight = 1.0f;
 }
 
 void OptixRenderer::resetNRC() {

@@ -55,8 +55,7 @@ public:
     std::vector<float> lossHistory;
     bool enableTraining = false;
     float trainingDirection = 0.5f;
-
-    inline Params& getParams() { return params.at(0); }
+    Params params = {}; // NOTE: Initialization is important to prevent invalid pointers
 
 private:
     OptixDeviceContext context;
@@ -66,7 +65,7 @@ private:
     std::array<OptixShaderBindingTable, RAYGEN_COUNT> sbts;
     std::array<OptixProgramGroup, PROGRAM_GROUP_COUNT> programGroups;
 
-    tcnn::GPUMemory<Params> params {1, true}; // TODO: Make device only
+    tcnn::GPUMemory<Params> paramsBuffer {1};
     tcnn::GPUMemory<HitRecord> hitRecords;
     tcnn::GPUMemory<RaygenRecord> raygenRecords;
     tcnn::GPUMemory<MissRecord> missRecords;
