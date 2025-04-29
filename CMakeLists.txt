@@ -2,14 +2,15 @@ cmake_minimum_required(VERSION 3.28...3.31)
 
 set(DEBUG_CUDA OFF CACHE BOOL "Enable debugging for CUDA" FORCE)
 
-# FIXME: These should be cmake -D arguments but I am lazy
 set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures to compile for" FORCE)
-set(CMAKE_CUDA_HOST_COMPILER /usr/bin/gcc-13 CACHE PATH "Path to the host C++ compiler" FORCE)
+set(CMAKE_CUDA_HOST_COMPILER ${CMAKE_CXX_COMPILER} CACHE PATH "Path to the host C++ compiler" FORCE)
+
 if (UNIX)
     set(OPTIX_DIR ../NVIDIA-OptiX-SDK-9.0.0-linux64-x86_64 CACHE PATH "Path to the OptiX SDK" FORCE)
 elseif (WIN32)
     set(OPTIX_DIR "C:/ProgramData/NVIDIA Corporation/OptiX SDK 8.1.0" CACHE PATH "Path to the OptiX SDK" FORCE)
 endif()
+
 # Config
 set(GLM_ENABLE_FAST_MATH ON)
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --diag-suppress 20012 --use_fast_math") # Disables glm warnings
