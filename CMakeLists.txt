@@ -45,7 +45,7 @@ set(TCNN_BUILD_BENCHMARK OFF)
 set(TCNN_BUILD_EXAMPLES OFF)
 FetchContent_Declare(
     tinycudann
-    GIT_REPOSITORY https://github.com/NVlabs/tiny-cuda-nn
+    GIT_REPOSITORY https://github.com/julcst/tiny-cuda-nn
 )
 FetchContent_MakeAvailable(framework fastgltf tinycudann)
 

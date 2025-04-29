@@ -8,6 +8,7 @@
 __device__ inline NRCInput encodeInput(const float3& position, const float3& wo, const float3& wn, const float3& diffuse, const float3& specular, float alpha) {
     return {
         .position = params.sceneScale * (position - params.sceneMin),
+        //.wo = make_float2(0.0f),
         .wo = toNormSpherical(wo), // Switch to Octahedral
         .wn = toNormSpherical(wn), // TODO: Switch to Octahedral
         //.roughness = 1 - exp(-alpha),
