@@ -10,13 +10,6 @@
 #include "cudamath.cuh"
 #include "sampling.cuh"
 
-struct TrainBounce {
-    float3 radiance = make_float3(0.0f);
-    float3 throughput = make_float3(1.0f);
-    float3 reflectanceFactorizationTerm = make_float3(1.0f);
-    uint index = 0;
-};
-
 constexpr uint N_RANDS = 2 + (TRAIN_DEPTH) * 9;
 
 extern "C" __global__ void __raygen__() {
@@ -119,8 +112,12 @@ extern "C" __global__ void __raygen__() {
     }
 
     // TODO: Employ self learning
-
-    for (uint i = 0; i < trainBounceIdx; i++) {
-        writeNRCOutput(params.trainingTarget + trainBounces[i].index * NRC_OUTPUT_SIZE, trainBounces[i].radiance * trainBounces[i].reflectanceFactorizationTerm);
+    if (params.flags & SELF_LEARNING_FLAG) {
+        params.selfLearningBounces[i] = trainBounces;
+        memcpy(params.selfLearningQueries + i * NRC_INPUT_SIZE, params.trainingInput + trainBounces[trainBounceIdx].index * NRC_INPUT_SIZE, sizeof(float) * NRC_INPUT_SIZE);
+    } else {
+        for (uint i = 0; i < trainBounceIdx; i++) {
+            writeNRCOutput(params.trainingTarget + trainBounces[i].index * NRC_OUTPUT_SIZE, trainBounces[i].radiance * trainBounces[i].reflectanceFactorizationTerm);
+        }
     }
 }
