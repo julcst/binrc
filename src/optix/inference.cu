@@ -29,6 +29,7 @@ extern "C" __global__ void __raygen__() {
     auto wo = ray.direction;
 
     float3 throughput = make_float3(1.0f);
+    float3 prevThroughput = make_float3(0.0f);
     float3 inferencePlus = make_float3(0.0f);
     
     for (uint depth = 1; depth < 2; depth++) {
@@ -86,6 +87,7 @@ extern "C" __global__ void __raygen__() {
         const auto sample = sampleDisney(RND_BSDF, RND_MICROFACET, RND_DIFFUSE, wo, n, inside, payload.baseColor, payload.metallic, alpha, payload.transmission);
 
         ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
+        prevThroughput = throughput;
         throughput *= sample.throughput;
         prevBrdfPdf = sample.pdf;
         lightPdfIsZero = sample.isDirac || payload.transmission > 0.0f;
@@ -96,7 +98,7 @@ extern "C" __global__ void __raygen__() {
     } else {
         const auto nrcQuery = encodeInput(hitPoint, wo, n, payload);
         writeNRCInput(params.inferenceInput, i, nrcQuery);
-        params.inferenceThroughput[i] = throughput;
+        params.inferenceThroughput[i] = prevThroughput;
     }
 
     params.image[i] = mix(params.image[i], make_float4(max(inferencePlus, 0.0f), 1.0f), params.weight);

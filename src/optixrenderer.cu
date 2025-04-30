@@ -238,7 +238,7 @@ __global__ void visualizeInference(Params* params) {
         const auto diffuse = make_float3(params->inferenceInput[idxIn + 8], params->inferenceInput[idxIn + 9], params->inferenceInput[idxIn + 10]);
         const auto specular = make_float3(params->inferenceInput[idxIn + 11], params->inferenceInput[idxIn + 12], params->inferenceInput[idxIn + 13]);
         params->image[i] += params->weight * make_float4(inference * (diffuse + specular) * throughput, 1.0f);
-        // params->image[i] = make_float4(throughput, 1.0f); // FIXME: Looks wrong
+        // params->image[i] = make_float4(throughput, 1.0f);
     }
 }
 
