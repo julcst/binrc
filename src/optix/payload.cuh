@@ -2,18 +2,7 @@
 
 #include <optix_device.h>
 #include <cuda_runtime.h>
-
-struct Payload {
-    float3 baseColor; // Linear RGB base color
-    float3 normal; // World space normal, guaranteed to be normalized
-    float3 tangent; // World space tenagent, not normalized
-    float3 emission; // Linear RGB emission color
-    float roughness;
-    float metallic;
-    float transmission;
-    float area;
-    float t; // Distance of intersection on ray, set to INFINITY if no intersection
-};
+#include "params.cuh"
 
 __device__ inline void setBaseColor(const float3& value) {
     optixSetPayload_0(__float_as_uint(value.x));

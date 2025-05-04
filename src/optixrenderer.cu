@@ -26,6 +26,7 @@
 #include "cudaglm.cuh"
 #include "optix/params.cuh"
 #include "cudamath.cuh"
+#include "optix/nrc.cuh"
 
 OptixRenderer::OptixRenderer() {
     check(cudaFree(nullptr)); // Initialize CUDA for this device on this thread
@@ -170,6 +171,8 @@ OptixRenderer::OptixRenderer() {
     
     params.trainingInput = nrcTrainInput.data();
     params.trainingTarget = nrcTrainOutput.data();
+    params.selfLearningBounces = selfLearningBounces.data();
+    params.selfLearningQueries = selfLearningQueries.data();
 
     nrcTrainIndex = tcnn::GPUMemory<uint>(1, true);
     nrcTrainIndex.memset(0);
@@ -243,6 +246,23 @@ __global__ void visualizeInference(Params* params) {
 }
 
 
+__global__ void applySelfLearning(unsigned int numQueries, std::array<TrainBounce, TRAIN_DEPTH>* selfLearningBounces, float* nrcOutput, float* trainTarget) {
+    const auto i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= numQueries) return;
+
+    const int idxOut = i * NRC_OUTPUT_SIZE;
+
+    const auto bounces = selfLearningBounces[i];
+    const auto inference = make_float3(nrcOutput[idxOut + 0], nrcOutput[idxOut + 1], nrcOutput[idxOut + 2]);
+
+    for (const auto bounce : bounces) {
+        if (!bounce.isValid) continue;
+        printf("Bounce %d: (%f %f %f) * Inference (%f %f %f) + Radiance (%f %f %f)\n", bounce.index, bounce.throughput.x, bounce.throughput.y, bounce.throughput.z, 
+               inference.x, inference.y, inference.z, bounce.radiance.x, bounce.radiance.y, bounce.radiance.z);
+        writeNRCOutput(trainTarget, bounce.index, bounce.reflectanceFactorizationTerm * (inference * bounce.throughput + bounce.radiance));
+    }
+}
+
 // TODO: Could do multiple smaller training steps per frame
 void OptixRenderer::train() {
     // Generate training samples
@@ -252,6 +272,13 @@ void OptixRenderer::train() {
     if (forwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_FORWARD], forwardSamples, 1, 1));
     if (backwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_BACKWARD], backwardSamples, 1, 1));
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+
+    if (params.flags & SELF_LEARNING_FLAG) {
+        nrcModel.network->inference(selfLearningQueries, selfLearningInference);
+        const auto block = 256;
+        const auto grid = (forwardSamples + block - 1) / block;
+        applySelfLearning<<<grid, block>>>(forwardSamples, selfLearningBounces.data(), selfLearningInference.data(), nrcTrainOutput.data());
+    }
     
     params.trainingRound++;
 

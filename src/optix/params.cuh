@@ -48,6 +48,18 @@ constexpr uint NRC_SUBBATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY * 64 * 8 * 4;
 constexpr uint STEPS_PER_BATCH = 1;
 constexpr uint NRC_BATCH_SIZE = NRC_SUBBATCH_SIZE * STEPS_PER_BATCH;
 
+struct Payload {
+    float3 baseColor; // Linear RGB base color
+    float3 normal; // World space normal, guaranteed to be normalized
+    float3 tangent; // World space tenagent, not normalized
+    float3 emission; // Linear RGB emission color
+    float roughness;
+    float metallic;
+    float transmission;
+    float area;
+    float t; // Distance of intersection on ray, set to INFINITY if no intersection
+};
+
 struct VertexData {
     float3 position;
     float3 normal;
@@ -97,11 +109,13 @@ enum class InferenceMode : u_int8_t {
     VARIANCE_HEURISTIC,
 };
 
+// TODO: Make more compact
 struct TrainBounce {
     float3 radiance = make_float3(0.0f);
     float3 throughput = make_float3(1.0f);
-    float3 reflectanceFactorizationTerm = make_float3(1.0f);
+    float3 reflectanceFactorizationTerm = make_float3(0.0f);
     uint index = 0;
+    bool isValid = false; 
 };
 
 // NOTE: Because this includes pointers this should be zero-initialized using cudaMemset

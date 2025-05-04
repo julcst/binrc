@@ -325,13 +325,13 @@ __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, c
 
     const auto isDirac = alpha == 0.0f && wDiffuse == 0.0f;
 
-    if (isnegative(transmission)) printf("Transmission is negative: F %f %f %f D %f G %f HdotL %f HdotV %f NdotL %f NdotV %f NdotH %f\n", F.x, F.y, F.z, D, G, HdotL, HdotV, NdotL, NdotV, NdotH);
-    if (isnegative(specular)) printf("Specular is negative: F %f %f %f D %f G %f HdotL %f HdotV %f NdotL %f NdotV %f NdotH %f\n", F.x, F.y, F.z, D, G, HdotL, HdotV, NdotL, NdotV, NdotH);
-    if (isnegative(diffuse)) printf("Diffuse is negative: F %f %f %f D %f G %f HdotL %f HdotV %f NdotL %f NdotV %f NdotH %f\n", F.x, F.y, F.z, D, G, HdotL, HdotV, NdotL, NdotV, NdotH);
-    if (isnegative(pdfSpecular)) printf("pdfSpecular is negative: %f %f %f %f %f %f %f\n", pdfSpecular, NdotV, NdotL, HdotL, HdotV, lambdaL, lambdaV);
-    if (isnegative(pdfDiffuse)) printf("pdfDiffuse is negative: %f %f %f %f %f %f %f\n", pdfDiffuse, NdotV, NdotL, HdotL, HdotV, lambdaL, lambdaV);
-    if (isnegative(pdfTransmission)) printf("pdfTransmission is negative: %f %f %f %f %f %f %f\n", pdfTransmission, NdotV, NdotL, HdotL, HdotV, lambdaL, lambdaV);
-    if (HdotV - 1.0f > 1e-6f) printf("HdotV is greater than 1: %f H %f %f %f V %f %f %f\n", HdotV, H.x, H.y, H.z, wo.x, wo.y, wo.z);
+    // if (isnegative(transmission)) printf("Transmission is negative: F %f %f %f D %f G %f HdotL %f HdotV %f NdotL %f NdotV %f NdotH %f\n", F.x, F.y, F.z, D, G, HdotL, HdotV, NdotL, NdotV, NdotH);
+    // if (isnegative(specular)) printf("Specular is negative: F %f %f %f D %f G %f HdotL %f HdotV %f NdotL %f NdotV %f NdotH %f\n", F.x, F.y, F.z, D, G, HdotL, HdotV, NdotL, NdotV, NdotH);
+    // if (isnegative(diffuse)) printf("Diffuse is negative: F %f %f %f D %f G %f HdotL %f HdotV %f NdotL %f NdotV %f NdotH %f\n", F.x, F.y, F.z, D, G, HdotL, HdotV, NdotL, NdotV, NdotH);
+    // if (isnegative(pdfSpecular)) printf("pdfSpecular is negative: %f %f %f %f %f %f %f\n", pdfSpecular, NdotV, NdotL, HdotL, HdotV, lambdaL, lambdaV);
+    // if (isnegative(pdfDiffuse)) printf("pdfDiffuse is negative: %f %f %f %f %f %f %f\n", pdfDiffuse, NdotV, NdotL, HdotL, HdotV, lambdaL, lambdaV);
+    // if (isnegative(pdfTransmission)) printf("pdfTransmission is negative: %f %f %f %f %f %f %f\n", pdfTransmission, NdotV, NdotL, HdotL, HdotV, lambdaL, lambdaV);
+    // if (HdotV - 1.0f > 1e-6f) printf("HdotV is greater than 1: %f H %f %f %f V %f %f %f\n", HdotV, H.x, H.y, H.z, wo.x, wo.y, wo.z);
 
     return {specular + mix(diffuse, transmission, transmissiveness), pdf, isDirac};
 }

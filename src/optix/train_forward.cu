@@ -26,11 +26,14 @@ extern "C" __global__ void __raygen__() {
 
     Payload payload;
     auto throughput = make_float3(1.0f);
-    auto prevBrdfPdf = 1.0f;
     auto lightPdfIsZero = true;
     auto trainBounceIdx = 0;
+    MISSampleResult sample {ray.direction, make_float3(1.0f), 1.0f, true, true};
 
     std::array<TrainBounce, TRAIN_DEPTH> trainBounces;
+    for (uint i = 0; i < TRAIN_DEPTH; i++) {
+        trainBounces[i].isValid = false;
+    }
     
     for (uint depth = 1; depth <= TRAIN_DEPTH; depth++) {
         trainBounceIdx = depth - 1;
@@ -49,9 +52,13 @@ extern "C" __global__ void __raygen__() {
 
         if (isinf(payload.t)) {
             for (uint i = 0; i < trainBounceIdx; i++) {
-                trainBounces[i].radiance += trainBounces[i].throughput * payload.emission;
+                trainBounces[i].radiance += trainBounces[i].throughput * sample.throughput * payload.emission;
             }
             break; // Skybox
+        }
+
+        for (uint i = 0; i <= trainBounceIdx; i++) {
+            trainBounces[i].throughput *= sample.throughput;
         }
 
         auto n = payload.normal;
@@ -68,13 +75,14 @@ extern "C" __global__ void __raygen__() {
         const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
         trainBounces[trainBounceIdx].index = trainIdx;
         trainBounces[trainBounceIdx].reflectanceFactorizationTerm = reflectanceFactorizationTerm;
+        trainBounces[trainBounceIdx].isValid = true;
 
         if (luminance(payload.emission) > 0.0f) {
             auto weight = 1.0f;
             if (nee && !lightPdfIsZero) {
                 // NOTE: Maybe calculating the prevBrdfPdf here only when necessary is faster
                 const auto lightPdf = lightPdfUniform(wo, payload.t, n, payload.area);
-                weight = balanceHeuristic(prevBrdfPdf, lightPdf);
+                weight = balanceHeuristic(sample.pdf, lightPdf);
             }
             for (uint i = 0; i < trainBounceIdx; i++) {
                 trainBounces[i].radiance += trainBounces[i].throughput * payload.emission * weight;
@@ -100,21 +108,19 @@ extern "C" __global__ void __raygen__() {
         }
 
         const auto r = curand_uniform4(&state);
-        const auto sample = sampleDisney(curand_uniform(&state), {r.x, r.y}, {r.z, r.w}, wo, n, inside, payload.baseColor, payload.metallic, alpha, payload.transmission);
+        sample = sampleDisney(curand_uniform(&state), {r.x, r.y}, {r.z, r.w}, wo, n, inside, payload.baseColor, payload.metallic, alpha, payload.transmission);
         
         ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
-        prevBrdfPdf = sample.pdf;
         lightPdfIsZero = sample.isDirac || payload.transmission > 0.0f;
-        for (uint i = 0; i <= trainBounceIdx; i++) {
-            trainBounces[i].throughput *= sample.throughput;
-        }
         throughput *= sample.throughput;
     }
 
     // TODO: Employ self learning
     if (params.flags & SELF_LEARNING_FLAG) {
         params.selfLearningBounces[i] = trainBounces;
-        memcpy(params.selfLearningQueries + i * NRC_INPUT_SIZE, params.trainingInput + trainBounces[trainBounceIdx].index * NRC_INPUT_SIZE, sizeof(float) * NRC_INPUT_SIZE);
+        for (uint j = 0; j < NRC_INPUT_SIZE; j++) {
+            params.selfLearningQueries[i * NRC_INPUT_SIZE + j] = params.trainingInput[trainBounces[trainBounceIdx].index * NRC_INPUT_SIZE + j];
+        }
     } else {
         for (uint i = 0; i < trainBounceIdx; i++) {
             writeNRCOutput(params.trainingTarget + trainBounces[i].index * NRC_OUTPUT_SIZE, trainBounces[i].radiance * trainBounces[i].reflectanceFactorizationTerm);

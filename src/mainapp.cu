@@ -131,6 +131,7 @@ void MainApp::buildImGui() {
 
     ImGui::SeparatorText("NRC");
     ImGui::Checkbox("Enable Training", &renderer.enableTraining);
+    ImGui::FlagCheckbox("Enable Self Learning", &renderer.params.flags, SELF_LEARNING_FLAG);
     ImGui::FlagCheckbox("Enable Backward RR", &renderer.params.flags, BACKWARD_RR_FLAG);
     ImGui::FlagCheckbox("Enable Forward RR", &renderer.params.flags, FORWARD_RR_FLAG);
     ImGui::SliderFloat("Training Direction", &renderer.trainingDirection, 0.0f, 1.0f, "%.2f");
