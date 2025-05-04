@@ -70,12 +70,6 @@ extern "C" __global__ void __raygen__() {
         const auto metallic = payload.metallic;
         const auto baseColor = payload.baseColor; // baseColor
 
-        const auto trainInput = encodeInput(hitPoint, wo, n, payload);
-        const auto trainIdx = pushNRCTrainInput(trainInput);
-        const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
-        trainBounces[trainBounceIdx].index = trainIdx;
-        trainBounces[trainBounceIdx].reflectanceFactorizationTerm = reflectanceFactorizationTerm;
-
         if (luminance(payload.emission) > 0.0f) {
             auto weight = 1.0f;
             if (nee && !lightPdfIsZero) {
@@ -116,6 +110,12 @@ extern "C" __global__ void __raygen__() {
             trainBounces[i].throughput *= sample.throughput;
         }
         throughput *= sample.throughput;
+
+        const auto trainInput = encodeInput(hitPoint, !sample.isSpecular || (params.flags & DIFFUSE_ENCODING_FLAG) ? make_float3(NAN) : wo, n, payload);
+        const auto trainIdx = pushNRCTrainInput(trainInput);
+        const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
+        trainBounces[trainBounceIdx].index = trainIdx;
+        trainBounces[trainBounceIdx].reflectanceFactorizationTerm = reflectanceFactorizationTerm;
     }
 
     // TODO: Employ self learning

@@ -133,6 +133,7 @@ void MainApp::buildImGui() {
     ImGui::Checkbox("Enable Training", &renderer.enableTraining);
     ImGui::FlagCheckbox("Enable Backward RR", &renderer.params.flags, BACKWARD_RR_FLAG);
     ImGui::FlagCheckbox("Enable Forward RR", &renderer.params.flags, FORWARD_RR_FLAG);
+    ImGui::FlagCheckbox("Enable Diffuse Encoding", &renderer.params.flags, DIFFUSE_ENCODING_FLAG);
     ImGui::SliderFloat("Training Direction", &renderer.trainingDirection, 0.0f, 1.0f, "%.2f");
     reset |= ImGui::EnumCombo("Inference Mode", &renderer.params.inferenceMode, INFERENCE_MODES);
     ImGui::PlotLines("Loss", renderer.lossHistory.data(), renderer.lossHistory.size());
