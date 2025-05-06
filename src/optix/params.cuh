@@ -141,6 +141,7 @@ struct MissData {};
 struct HitData {
     uint3* indexBuffer;      // Pointer to triangle indices         // NOTE: This is owned memory and must be freed
     VertexData* vertexData;  // Pointer to vertex data              // NOTE: This is owned memory and must be freed
+    float* cdfBuffer;        // Pointer to CDF buffer               // NOTE: This is owned memory and must be freed
     uint materialID;         // Index into the materials array
 };
 

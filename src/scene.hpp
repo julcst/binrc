@@ -10,6 +10,8 @@
 #include <glm/glm.hpp>
 using namespace glm;
 
+#include <tiny-cuda-nn/gpu_memory.h>
+
 #include "optix/params.cuh"
 #include "cudautil.hpp"
 
@@ -52,16 +54,37 @@ struct AABB {
 };
 
 struct Geometry {
-    OptixTraversableHandle handle;
-    CUdeviceptr gasBuffer; // NOTE: This is owned memory and must be freed
-    CUdeviceptr indexBuffer; // NOTE: This is owned memory and must be freed
-    CUdeviceptr vertexData; // NOTE: This is owned memory and must be freed
+    OptixTraversableHandle handle = 0;
+    CUdeviceptr gasBuffer = 0;
+    CUdeviceptr indexBuffer = 0;
+    CUdeviceptr vertexBuffer = 0;
+    CUdeviceptr cdfBuffer = 0;
+    float totalArea = 0.0f;
     uint sbtOffset;
     std::optional<Emitter> emitter;
     AABB aabb;
-    Geometry(OptixTraversableHandle handle, CUdeviceptr gasBuffer, CUdeviceptr indexBuffer, CUdeviceptr vertexData, uint sbtOffset, std::optional<Emitter> emitter, AABB aabb)
-        : handle(handle), gasBuffer(gasBuffer), indexBuffer(indexBuffer), vertexData(vertexData), sbtOffset(sbtOffset), emitter(emitter), aabb(aabb) {}
-    ~Geometry();
+
+    // RAII
+    Geometry() = default;
+    Geometry(const Geometry&) = delete;
+    Geometry& operator=(const Geometry&) = delete;
+    Geometry(Geometry&& other) :
+        handle(other.handle), gasBuffer(other.gasBuffer), indexBuffer(other.indexBuffer),
+        vertexBuffer(other.vertexBuffer), cdfBuffer(other.cdfBuffer), totalArea(other.totalArea),
+        sbtOffset(other.sbtOffset), emitter(std::move(other.emitter)), aabb(other.aabb) {
+        other.handle = 0;
+        other.gasBuffer = 0;
+        other.indexBuffer = 0;
+        other.vertexBuffer = 0;
+        other.cdfBuffer = 0;
+    }
+    Geometry& operator=(Geometry&& other) = delete;
+    ~Geometry() {
+        check(cudaFree(reinterpret_cast<void*>(gasBuffer)));
+        check(cudaFree(reinterpret_cast<void*>(indexBuffer)));
+        check(cudaFree(reinterpret_cast<void*>(vertexBuffer)));
+        check(cudaFree(reinterpret_cast<void*>(cdfBuffer)));
+    }
 };
 
 struct SceneData {
@@ -69,6 +92,7 @@ struct SceneData {
     std::vector<Material> materials;
     std::vector<EmissiveTriangle> lightTable;
     OptixTraversableHandle handle;
+    float totalArea = 0.0f;
 };
 
 struct cudaArray_RAII {
@@ -110,13 +134,16 @@ struct Scene {
     std::vector<std::pair<std::string, glm::mat4>> cameras;
 
     // Buffers managed by the scene
-    CUdeviceptr iasBuffer = 0;
+    CUdeviceptr iasBuffer = 0; // NOTE: This is owned memory and must be freed
     std::vector<std::vector<Geometry>> geometryTable;
     std::vector<cudaArray_RAII> images; // NOTE: This is owned memory and must be freed
     std::vector<cudaTextureObject_RAII> textures; // NOTE: This is owned memory and must be freed
 
     Scene() = default;
-    ~Scene();
+    ~Scene() {
+        check(cudaFree(reinterpret_cast<void*>(iasBuffer)));
+    }
+
     Scene(const Scene&) = delete;
     Scene& operator=(const Scene&) = delete;
     Scene(Scene&&) = delete;

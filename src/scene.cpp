@@ -30,16 +30,6 @@ using namespace glm;
 #include "cudaglm.cuh"
 #include "cudamath.cuh"
 
-Geometry::~Geometry() {
-    check(cudaFree(reinterpret_cast<void*>(gasBuffer)));
-    check(cudaFree(reinterpret_cast<void*>(indexBuffer)));
-    check(cudaFree(reinterpret_cast<void*>(vertexData)));
-}
-
-Scene::~Scene() {
-    check(cudaFree(reinterpret_cast<void*>(iasBuffer)));
-}
-
 std::tuple<OptixTraversableHandle, CUdeviceptr> buildGAS(OptixDeviceContext ctx, const std::vector<OptixBuildInput>& buildInputs) {
     // Allocate memory for acceleration structure
     OptixAccelBuildOptions accelOptions = {
@@ -293,6 +283,7 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
 
     // Build geometry and free previous geometry buffers
     std::vector<std::vector<Geometry>> newGeometryTable(asset->meshes.size());
+    float totalArea = 0.0f;
 
     uint geometryID = 0;
     float lightTableSum = 0.0f;
@@ -301,14 +292,16 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
         for (const auto& primitive : mesh.primitives) {
             if (!primitive.materialIndex.has_value()) throw std::runtime_error("Primitive has no material index");
 
-            AABB aabb;
+            Geometry geometry;
+            geometry.sbtOffset = geometryID;
             auto& posAcc = asset->accessors[primitive.findAttribute("POSITION")->accessorIndex];
             std::vector<vec4> vertices(posAcc.count);
             std::vector<VertexData> vertexData(vertices.size());
+            
             fastgltf::iterateAccessorWithIndex<vec3>(asset.get(), posAcc, [&](const vec3& vertex, auto i) {
                 vertices[i] = vec4(vertex, 1.0f);
                 vertexData[i].position = glmToCuda(vertex);
-                aabb.extend(vertex);
+                geometry.aabb.extend(vertex);
             });
             auto& normalAcc = asset->accessors.at(primitive.findAttribute("NORMAL")->accessorIndex);
             fastgltf::iterateAccessorWithIndex<vec3>(asset.get(), normalAcc, [&](const vec3& normal, auto i) {
@@ -329,17 +322,44 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
                 indices[i] = index;
             });
 
-            const auto [handle, gasBuffer, indexBuffer] = buildGAS(ctx, vertices, indices);
+            const auto nFaces = indices.size() / 3;
+            std::vector<float> cdf(nFaces);
+            geometry.totalArea = 0.0f;
+            for (uint i = 0; i < nFaces; i++) {
+                const auto i0 = indices[i * 3 + 0];
+                const auto i1 = indices[i * 3 + 1];
+                const auto i2 = indices[i * 3 + 2];
+                const auto v0 = vertices[i0];
+                const auto v1 = vertices[i1];
+                const auto v2 = vertices[i2];
+                const float area = 0.5f * length(cross(vec3(v1 - v0), vec3(v2 - v0)));
+                geometry.totalArea += area;
+                cdf[i] = geometry.totalArea;
+            }
+            totalArea += geometry.totalArea;
 
-            CUdeviceptr vertexDataBuffer;
-            check(cudaMalloc(reinterpret_cast<void**>(&vertexDataBuffer), vertexData.size() * sizeof(VertexData)));
-            check(cudaMemcpy(reinterpret_cast<void*>(vertexDataBuffer), vertexData.data(), vertexData.size() * sizeof(VertexData), cudaMemcpyHostToDevice));
+            // Normalize CDF
+            float invTotalArea = 1.0f / geometry.totalArea;
+            for (uint i = 0; i < nFaces; i++) {
+                cdf[i] *= invTotalArea;
+            }
+
+            const auto [handle, gasBuffer, indexBuffer] = buildGAS(ctx, vertices, indices);
+            geometry.handle = handle;
+            geometry.gasBuffer = gasBuffer;
+            geometry.indexBuffer = indexBuffer;
+
+            check(cudaMalloc(reinterpret_cast<void**>(&geometry.vertexBuffer), vertexData.size() * sizeof(VertexData)));
+            check(cudaMemcpy(reinterpret_cast<void*>(geometry.vertexBuffer), vertexData.data(), vertexData.size() * sizeof(VertexData), cudaMemcpyHostToDevice));
+            check(cudaMalloc(reinterpret_cast<void**>(&geometry.cdfBuffer), cdf.size() * sizeof(float)));
+            check(cudaMemcpy(reinterpret_cast<void*>(geometry.cdfBuffer), cdf.data(), cdf.size() * sizeof(float), cudaMemcpyHostToDevice));
 
             uint materialID = primitive.materialIndex.value();
 
             hitRecords[geometryID].data = HitData {
-                .indexBuffer = reinterpret_cast<uint3*>(indexBuffer),
-                .vertexData = reinterpret_cast<VertexData*>(vertexDataBuffer),
+                .indexBuffer = reinterpret_cast<uint3*>(geometry.indexBuffer),
+                .vertexData = reinterpret_cast<VertexData*>(geometry.vertexBuffer),
+                .cdfBuffer = reinterpret_cast<float*>(geometry.cdfBuffer),
                 .materialID = materialID,
             };
 
@@ -348,9 +368,9 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
 
             std::cout << (isEmissive ? "Loaded emissive geometry " : "Loaded geometry ") << geometryID << " with " << vertices.size() << " vertices and " << indices.size() / 3 << " triangles" << std::endl;
 
-            const auto emitter = isEmissive ? std::optional<Emitter>(Emitter { emission, std::move(vertices), std::move(indices), std::move(vertexData) }) : std::nullopt;
+            geometry.emitter = isEmissive ? std::optional<Emitter>(Emitter { emission, std::move(vertices), std::move(indices), std::move(vertexData) }) : std::nullopt;
 
-            newGeometryTable[i].emplace_back(handle, gasBuffer, vertexDataBuffer, indexBuffer, geometryID, emitter, aabb);
+            newGeometryTable[i].push_back(std::move(geometry));
             geometryID++;
         }
     }
@@ -461,6 +481,7 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
         .materials = std::move(materials),
         .lightTable = std::move(lightTable),
         .handle = handle,
+        .totalArea = totalArea,
     };
 }
 

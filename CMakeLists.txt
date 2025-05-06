@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28...3.31)
 
-set(DEBUG_CUDA OFF CACHE BOOL "Enable debugging for CUDA" FORCE)
+set(DEBUG_CUDA ON CACHE BOOL "Enable debugging for CUDA" FORCE)
 
 set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures to compile for" FORCE)
 set(CMAKE_CUDA_HOST_COMPILER ${CMAKE_CXX_COMPILER} CACHE PATH "Path to the host C++ compiler" FORCE)
