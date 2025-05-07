@@ -97,6 +97,24 @@ enum class InferenceMode : u_int8_t {
     VARIANCE_HEURISTIC,
 };
 
+struct RaygenData {};
+struct MissData {};
+struct HitData {
+    uint3* indexBuffer;      // Pointer to triangle indices         // NOTE: This is owned memory and must be freed
+    VertexData* vertexData;  // Pointer to vertex data              // NOTE: This is owned memory and must be freed
+    float* cdfBuffer;        // Pointer to CDF buffer               // NOTE: This is owned memory and must be freed
+    uint materialID;         // Index into the materials array
+    uint triangleCount;      // Number of triangles in the object
+};
+
+struct Instance {
+    HitData geometry; // Hit data for the instance
+    float4x4 localToWorld; // Local to world matrix
+    float3x3 normalToWorld; // Normal to world matrix
+    float pdf; // PDF of sampling the instance = area / totalArea
+    float cdf; // CDF of sampling the instance
+};
+
 // NOTE: Because this includes pointers this should be zero-initialized using cudaMemset
 struct Params {
     float4* image; // A copied pointer to the image buffer
@@ -132,18 +150,12 @@ struct Params {
     float* inferenceOutput;
     float3* inferenceThroughput;
 
+    Instance* instances; // Pointer to the instances
+    uint instanceCount; // Number of instances
+
     cudaTextureObject_t brdfLUT;
 };
 extern "C" __constant__ const Params params;
-
-struct RaygenData {};
-struct MissData {};
-struct HitData {
-    uint3* indexBuffer;      // Pointer to triangle indices         // NOTE: This is owned memory and must be freed
-    VertexData* vertexData;  // Pointer to vertex data              // NOTE: This is owned memory and must be freed
-    float* cdfBuffer;        // Pointer to CDF buffer               // NOTE: This is owned memory and must be freed
-    uint materialID;         // Index into the materials array
-};
 
 template <typename T>
 struct Record {

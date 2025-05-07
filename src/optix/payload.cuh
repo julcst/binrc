@@ -12,7 +12,7 @@ struct Payload {
     float metallic;
     float transmission;
     float area;
-    float t; // Distance of intersection on ray, set to INFINITY if no intersection
+    float t = INFINITY; // Distance of intersection on ray, set to INFINITY if no intersection
 };
 
 __device__ inline void setBaseColor(const float3& value) {

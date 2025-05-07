@@ -73,6 +73,7 @@ private:
     tcnn::GPUMemory<float2> rotationTable;
     tcnn::GPUMemory<Material> materials;
     tcnn::GPUMemory<EmissiveTriangle> lightTable;
+    tcnn::GPUMemory<Instance> instances;
 
     tcnn::TrainableModel nrcModel; // TODO: Explore half inputs and outputs
     tcnn::GPUMatrix<float> nrcTrainInput;

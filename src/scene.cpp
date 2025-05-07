@@ -361,6 +361,7 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
                 .vertexData = reinterpret_cast<VertexData*>(geometry.vertexBuffer),
                 .cdfBuffer = reinterpret_cast<float*>(geometry.cdfBuffer),
                 .materialID = materialID,
+                .triangleCount = static_cast<uint>(indices.size() / 3),
             };
 
             float emission = luminance(materials.at(materialID).emission);
@@ -376,10 +377,12 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
     }
 
     std::vector<EmissiveTriangle> lightTable;
-    std::vector<OptixInstance> instances(nInstances);
+    std::vector<OptixInstance> optixInstances(nInstances);
+    std::vector<Instance> instances(nInstances);
     cameras.clear();
     
     uint i = 0;
+    float sceneArea = 0.0f;
     for (const auto& node : asset->nodes) {
         auto mat = fastgltf::math::fmat4x4(1.0f);
         auto* trs = std::get_if<fastgltf::TRS>(&node.transform);
@@ -389,14 +392,18 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
         } else if (matrix) {
             mat = *matrix;
         }
-        const auto transform = mat4(toVec4(mat.col(0)), toVec4(mat.col(1)), toVec4(mat.col(2)), toVec4(mat.col(3)));
+
+        const auto localToWorld = mat4(toVec4(mat.col(0)), toVec4(mat.col(1)), toVec4(mat.col(2)), toVec4(mat.col(3)));
+        const auto normalToWorld = transpose(inverse(mat3(localToWorld)));
 
         if (auto m = node.meshIndex; m.has_value()) {
             auto mesh = asset->meshes[m.value()];
             for (uint j = 0; j < mesh.primitives.size(); j++) {
                 const auto& primitive = mesh.primitives[j];
                 auto& geometry = newGeometryTable[m.value()][j];
-                instances[i] = OptixInstance {
+                geometry.aabb.transform(localToWorld);
+
+                optixInstances[i] = OptixInstance {
                     .transform = {
                         mat.row(0)[0], mat.row(0)[1], mat.row(0)[2], mat.row(0)[3],
                         mat.row(1)[0], mat.row(1)[1], mat.row(1)[2], mat.row(1)[3],
@@ -408,22 +415,30 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
                     .flags = OPTIX_INSTANCE_FLAG_NONE,
                     .traversableHandle = geometry.handle,
                 };
-                geometry.aabb.transform(transform);
+
+                const auto area = glm::determinant(localToWorld) * geometry.totalArea; // The determinant of the transformation matrix gives the scaling factor
+                sceneArea += area;
+                instances[i] = Instance {
+                    .geometry = hitRecords[geometry.sbtOffset].data,
+                    .localToWorld = glmToCuda(localToWorld),
+                    .normalToWorld = glmToCuda(normalToWorld),
+                    .pdf = area,
+                    .cdf = sceneArea,
+                };
 
                 if (geometry.emitter.has_value()) {
                     const auto& emitter = geometry.emitter.value();
-                    const auto normalTransform = transpose(inverse(mat3(transform)));
                     lightTable.reserve(lightTable.size() + emitter.indices.size() / 3);
                     for (uint j = 0; j < emitter.indices.size(); j += 3) {
                         const auto i0 = emitter.indices[j + 0];
                         const auto i1 = emitter.indices[j + 1];
                         const auto i2 = emitter.indices[j + 2];
-                        const auto v0 = vec3(transform * emitter.vertices[i0]);
-                        const auto v1 = vec3(transform * emitter.vertices[i1]);
-                        const auto v2 = vec3(transform * emitter.vertices[i2]);
-                        const auto n0 = normalTransform * cudaToGlm(emitter.vertexData[i0].normal);
-                        const auto n1 = normalTransform * cudaToGlm(emitter.vertexData[i1].normal);
-                        const auto n2 = normalTransform * cudaToGlm(emitter.vertexData[i2].normal);
+                        const auto v0 = vec3(localToWorld * emitter.vertices[i0]);
+                        const auto v1 = vec3(localToWorld * emitter.vertices[i1]);
+                        const auto v2 = vec3(localToWorld * emitter.vertices[i2]);
+                        const auto n0 = normalToWorld * cudaToGlm(emitter.vertexData[i0].normal);
+                        const auto n1 = normalToWorld * cudaToGlm(emitter.vertexData[i1].normal);
+                        const auto n2 = normalToWorld * cudaToGlm(emitter.vertexData[i2].normal);
                         float area = 0.5f * length(cross(v1 - v0, v2 - v0));
                         float weight = area * emitter.emission;
                         lightTableSum += weight;
@@ -446,7 +461,7 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
         }
         if (auto c = node.cameraIndex; c.has_value()) {
             const auto& camera = asset->cameras[c.value()];
-            const auto cameraToWorld = transform;
+            const auto cameraToWorld = localToWorld;
             const auto cameraToClip = std::visit(overloaded {
                 [&](const fastgltf::Camera::Perspective& perspective) {
                     return glm::perspective(perspective.yfov, 1.0f, perspective.znear, perspective.zfar.value_or(MAX_T));
@@ -460,6 +475,14 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
         }
     }
 
+    // Renormalize instances
+    for (uint i = 0; i < instances.size(); i++) {
+        auto& instance = instances[i];
+        instance.pdf /= totalArea;
+        instance.cdf /= totalArea;
+        std::cout << "Instance " << i << " uses " << instance.pdf << " area, cdf " << instance.cdf << std::endl;
+    }
+
     // Normalize light table
     const auto norm = 1.0f / lightTableSum;
     for (auto& light : lightTable) {
@@ -468,7 +491,7 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
         std::cout << "Light: " << light.v0 << " " << light.v1 << " " << light.v2 << " " << light.weight << " -- " << light.cdf << std::endl;
     }
 
-    const auto [handle, newIASBuffer] = buildIAS(ctx, instances);
+    const auto [handle, newIASBuffer] = buildIAS(ctx, optixInstances);
 
     check(cudaFree(reinterpret_cast<void*>(iasBuffer)));
     iasBuffer = newIASBuffer;
@@ -480,6 +503,7 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
         .hitRecords = std::move(hitRecords),
         .materials = std::move(materials),
         .lightTable = std::move(lightTable),
+        .instances = std::move(instances),
         .handle = handle,
         .totalArea = totalArea,
     };

@@ -3,6 +3,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <curand.h>
+#include <curand_kernel.h>
 
 #include <optix.h>
 #include <optix_host.h>
@@ -26,6 +27,7 @@
 #include "cudaglm.cuh"
 #include "optix/params.cuh"
 #include "cudamath.cuh"
+#include "optix/sampling.cuh"
 
 OptixRenderer::OptixRenderer() {
     check(cudaFree(nullptr)); // Initialize CUDA for this device on this thread
@@ -184,6 +186,18 @@ OptixRenderer::~OptixRenderer() {
     check(optixDeviceContextDestroy(context));
 }
 
+__global__ void testSceneSampling(const uint sampleCount, const Instance* instances, const uint instanceCount, const Material* materials) {
+    const uint i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= sampleCount) return;
+
+    curandStatePhilox4_32_10_t state;
+    curand_init(0, i, 0, &state);
+    const auto rand = curand_uniform4(&state);
+
+    const auto surf = sampleScene(instances, instanceCount, materials, rand.x, make_float2(rand.z, rand.w));
+    printf("Sample %d: %f %f %f %f %f %f %f %f %f\n", i, surf.position.x, surf.position.y, surf.position.z, surf.normal.x, surf.normal.y, surf.normal.z, surf.baseColor.x, surf.baseColor.y, surf.baseColor.z);
+}
+
 void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
     auto sceneData = scene.loadGLTF(context, path);
     const auto aabb = scene.getAABB();
@@ -194,6 +208,7 @@ void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
     hitRecords.resize_and_copy_from_host(sceneData.hitRecords);
     materials.resize_and_copy_from_host(sceneData.materials);
     lightTable.resize_and_copy_from_host(sceneData.lightTable);
+    instances.resize_and_copy_from_host(sceneData.instances);
 
     for (auto& sbt : sbts) {
         sbt.hitgroupRecordBase = reinterpret_cast<CUdeviceptr>(hitRecords.data());
@@ -209,6 +224,12 @@ void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
     params.handle = sceneData.handle;
 
     std::cout << "Min: (" << params.sceneMin.x << ", " << params.sceneMin.y << ", " << params.sceneMin.z << ") Scale: " << params.sceneScale << std::endl;
+
+    // Test scene sampling
+    const uint sampleCount = 10;
+    const uint blockSize = 256;
+    const uint blockCount = (sampleCount + blockSize - 1) / blockSize;
+    testSceneSampling<<<blockCount, blockSize>>>(sampleCount, instances.data(), instances.size(), materials.data());
 
     reset();
     lossHistory.clear();

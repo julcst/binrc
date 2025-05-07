@@ -19,6 +19,23 @@ __host__ __device__ constexpr float4 glmToCuda(const glm::vec4& v) {
     return {v.x, v.y, v.z, v.w};
 }
 
+__host__ __device__ constexpr float3x3 glmToCuda(const glm::mat3& m) {
+    return make_float3x3(
+        glmToCuda(m[0]),
+        glmToCuda(m[1]),
+        glmToCuda(m[2])
+    );
+}
+
+__host__ __device__ constexpr float4x4 glmToCuda(const glm::mat4& m) {
+    return make_float4x4(
+        glmToCuda(m[0]),
+        glmToCuda(m[1]),
+        glmToCuda(m[2]),
+        glmToCuda(m[3])
+    );
+}
+
 __host__ __device__ constexpr int2 glmToCuda(const glm::ivec2& v) {
     return {v.x, v.y};
 }
@@ -41,15 +58,6 @@ __host__ __device__ constexpr uint3 glmToCuda(const glm::uvec3& v) {
 
 __host__ __device__ constexpr uint4 glmToCuda(const glm::uvec4& v) {
     return {v.x, v.y, v.z, v.w};
-}
-
-__host__ __device__ constexpr float4x4 glmToCuda(const glm::mat4& m) {
-    return make_float4x4(
-        glmToCuda(m[0]),
-        glmToCuda(m[1]),
-        glmToCuda(m[2]),
-        glmToCuda(m[3])
-    );
 }
 
 // Conversion CUDA -> glm

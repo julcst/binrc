@@ -91,6 +91,7 @@ struct SceneData {
     std::vector<HitRecord> hitRecords;
     std::vector<Material> materials;
     std::vector<EmissiveTriangle> lightTable;
+    std::vector<Instance> instances;
     OptixTraversableHandle handle;
     float totalArea = 0.0f;
 };
