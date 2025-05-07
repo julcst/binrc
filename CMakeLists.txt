@@ -35,7 +35,7 @@ enable_language(CUDA)
 include(FetchContent)
 FetchContent_Declare(
     framework
-    URL https://github.com/julcst/gltemplate/archive/v1.6.tar.gz
+    URL https://github.com/julcst/gltemplate/archive/v1.6b.tar.gz
 )
 FetchContent_Declare(
     fastgltf

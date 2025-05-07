@@ -246,14 +246,18 @@ __global__ void visualizeInference(Params* params) {
 }
 
 
-__global__ void applySelfLearning(unsigned int numQueries, std::array<TrainBounce, TRAIN_DEPTH>* selfLearningBounces, float* nrcOutput, float* trainTarget) {
+__global__ void applySelfLearning(unsigned int numQueries, std::array<TrainBounce, TRAIN_DEPTH>* selfLearningBounces, float* nrcQueries, float* nrcOutput, float* trainTarget) {
     const auto i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= numQueries) return;
 
+    const int idxIn = i * NRC_INPUT_SIZE;
     const int idxOut = i * NRC_OUTPUT_SIZE;
 
     const auto bounces = selfLearningBounces[i];
-    const auto inference = make_float3(nrcOutput[idxOut + 0], nrcOutput[idxOut + 1], nrcOutput[idxOut + 2]);
+    auto inference = make_float3(nrcOutput[idxOut + 0], nrcOutput[idxOut + 1], nrcOutput[idxOut + 2]);
+    const auto diffuse = make_float3(nrcQueries[idxIn + 8], nrcQueries[idxIn + 9], nrcQueries[idxIn + 10]);
+    const auto specular = make_float3(nrcQueries[idxIn + 11], nrcQueries[idxIn + 12], nrcQueries[idxIn + 13]);
+    inference *= (diffuse + specular);
 
     for (const auto bounce : bounces) {
         if (!bounce.isValid) continue;
@@ -277,7 +281,7 @@ void OptixRenderer::train() {
         nrcModel.network->inference(selfLearningQueries, selfLearningInference);
         const auto block = 256;
         const auto grid = (forwardSamples + block - 1) / block;
-        applySelfLearning<<<grid, block>>>(forwardSamples, selfLearningBounces.data(), selfLearningInference.data(), nrcTrainOutput.data());
+        applySelfLearning<<<grid, block>>>(forwardSamples, selfLearningBounces.data(), selfLearningQueries.data(), selfLearningInference.data(), nrcTrainOutput.data());
     }
     
     params.trainingRound++;
