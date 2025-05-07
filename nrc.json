@@ -20,7 +20,7 @@
             // },
             {
                 "n_dims_to_encode": 5,
-                "otype": "OneBlob",
+                "otype": "OneBlobDiffuse",
                 "n_bins": 4
             },
             {
