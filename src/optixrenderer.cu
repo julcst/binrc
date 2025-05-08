@@ -278,7 +278,7 @@ void OptixRenderer::train() {
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
 
     if (params.flags & SELF_LEARNING_FLAG) {
-        nrcModel.network->inference(selfLearningQueries, selfLearningInference);
+        nrcModel.network->inference(selfLearningQueries, selfLearningInference, false); // Do not apply EMA here
         const auto block = 256;
         const auto grid = (forwardSamples + block - 1) / block;
         applySelfLearning<<<grid, block>>>(forwardSamples, selfLearningBounces.data(), selfLearningQueries.data(), selfLearningInference.data(), nrcTrainOutput.data());
