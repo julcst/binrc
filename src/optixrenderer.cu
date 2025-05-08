@@ -261,8 +261,8 @@ __global__ void applySelfLearning(unsigned int numQueries, std::array<TrainBounc
 
     for (const auto bounce : bounces) {
         if (!bounce.isValid) continue;
-        printf("Bounce %d: (%f %f %f) * Inference (%f %f %f) + Radiance (%f %f %f)\n", bounce.index, bounce.throughput.x, bounce.throughput.y, bounce.throughput.z, 
-               inference.x, inference.y, inference.z, bounce.radiance.x, bounce.radiance.y, bounce.radiance.z);
+        /*printf("Bounce %d: (%f %f %f) * Inference (%f %f %f) + Radiance (%f %f %f)\n", bounce.index, bounce.throughput.x, bounce.throughput.y, bounce.throughput.z, 
+               inference.x, inference.y, inference.z, bounce.radiance.x, bounce.radiance.y, bounce.radiance.z);*/
         writeNRCOutput(trainTarget, bounce.index, bounce.reflectanceFactorizationTerm * (inference * bounce.throughput + bounce.radiance));
     }
 }
