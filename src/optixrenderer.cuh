@@ -32,6 +32,12 @@ enum ProgramGroup {
     CLOSEST_HIT,
 };
 
+enum class LightTrainingMode {
+    NAIVE,
+    BALANCED,
+    PHOTON_MAPPING,
+};
+
 constexpr size_t RAYGEN_COUNT = 5;
 constexpr size_t PROGRAM_GROUP_COUNT = RAYGEN_COUNT + 2;
 
@@ -56,6 +62,7 @@ public:
     bool enableTraining = false;
     float trainingDirection = 0.5f;
     Params params = {}; // NOTE: Initialization is important to prevent invalid pointers
+    LightTrainingMode lightTrainingMode = LightTrainingMode::NAIVE;
 
 private:
     OptixDeviceContext context;

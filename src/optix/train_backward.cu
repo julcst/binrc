@@ -27,10 +27,11 @@ extern "C" __global__ void __raygen__() {
     auto ray = Ray{lightSample.position + lightSample.n * copysignf(params.sceneEpsilon, dot(lightSample.wo, lightSample.n)), lightSample.wo};
     auto radiance = lightSample.emission * INV_PI;
     // printf("Light sample: %f %f %f\n", lightSample.emission.x, lightSample.emission.y, lightSample.emission.z);
+    radiance *= 2.0f; // Balancing
 
     Payload payload;
 
-    for (uint depth = 1; depth <= TRAIN_DEPTH + 1; depth++) {
+    for (uint depth = 1; depth <= TRAIN_DEPTH; depth++) {
         // Russian roulette
         if (params.flags & BACKWARD_RR_FLAG) {
             const float pContinue = min(luminance(radiance) * params.russianRouletteWeight, 1.0f);
@@ -58,12 +59,12 @@ extern "C" __global__ void __raygen__() {
 
         ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
 
-        if (depth > 1) {
+        //if (depth > 1) {
             const auto trainInput = encodeInput(hitPoint, !sample.isSpecular || (params.flags & DIFFUSE_ENCODING_FLAG) ? make_float3(NAN) : sample.direction, n, payload);
             const auto trainIdx = pushNRCTrainInput(trainInput);
             const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
             writeNRCOutput(params.trainingTarget, trainIdx, reflectanceFactorizationTerm * radiance);
-        }
+        //}
 
         radiance += payload.emission;
     }

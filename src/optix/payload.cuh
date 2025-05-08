@@ -3,6 +3,8 @@
 #include <optix_device.h>
 #include <cuda_runtime.h>
 
+#include "params.cuh"
+
 struct Payload {
     float3 baseColor; // Linear RGB base color
     float3 normal; // World space normal, guaranteed to be normalized

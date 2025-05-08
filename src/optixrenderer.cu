@@ -226,7 +226,7 @@ void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
     std::cout << "Min: (" << params.sceneMin.x << ", " << params.sceneMin.y << ", " << params.sceneMin.z << ") Scale: " << params.sceneScale << std::endl;
 
     // Test scene sampling
-    const uint sampleCount = 10;
+    const uint sampleCount = 100;
     const uint blockSize = 256;
     const uint blockCount = (sampleCount + blockSize - 1) / blockSize;
     testSceneSampling<<<blockCount, blockSize>>>(sampleCount, instances.data(), instances.size(), materials.data());
@@ -263,15 +263,73 @@ __global__ void visualizeInference(Params* params) {
     }
 }
 
+__device__ inline void writeNRCInput(float* dest, uint idx, const NRCInput& input) {
+    auto to = dest + idx * NRC_INPUT_SIZE;
+    to[0] = input.position.x;
+    to[1] = input.position.y;
+    to[2] = input.position.z;
+    to[3] = input.wo.x;
+    to[4] = input.wo.y;
+    to[5] = input.wn.x;
+    to[6] = input.wn.y;
+    to[7] = input.roughness;
+    to[8] = input.diffuse.x;
+    to[9] = input.diffuse.y;
+    to[10] = input.diffuse.z;
+    to[11] = input.specular.x;
+    to[12] = input.specular.y;
+    to[13] = input.specular.z;
+}
+
+__device__ inline void writeNRCOutput(float* dest, uint idx, const float3& radiance) {
+    auto to = dest + idx * NRC_OUTPUT_SIZE;
+    to[0] = radiance.x;
+    to[1] = radiance.y;
+    to[2] = radiance.z;
+}
+
+__device__ inline NRCInput encodeInput(const Params* params, const float3& wo, const Surface& surf, const cudaTextureObject_t brdfLUT) {
+    const auto F0 = mix(make_float3(0.04f), surf.baseColor, surf.metallic);
+    const auto lut = tex2D<float4>(brdfLUT, surf.roughness, dot(surf.normal, wo));
+    const auto specular = F0 * lut.x + lut.y;
+    const auto albedo = (1.0f - surf.metallic) * surf.baseColor;
+    return {
+        .position = params->sceneScale * (surf.position - params->sceneMin),
+        .wo = toNormSpherical(wo),
+        .wn = toNormSpherical(surf.normal),
+        .roughness = surf.roughness * surf.roughness,
+        .diffuse = albedo,
+        .specular = specular,
+    };
+}
+
+__global__ void generateDummySamples(const uint sampleCount, Params* params, const Instance* instances, const uint instanceCount, const Material* materials) {
+    const uint i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= sampleCount) return;
+
+    curandStatePhilox4_32_10_t state;
+    curand_init(0, i, params->trainingRound * 5, &state);
+    const auto rand = curand_uniform4(&state);
+
+    const auto surf = sampleScene(instances, instanceCount, materials, rand.x, {rand.y, rand.z});
+    const auto wo = buildTBN(surf.normal) * sampleCosineHemisphere({rand.w, curand_uniform(&state)});
+
+    const auto input = encodeInput(params, wo, surf, params->brdfLUT);
+    const auto idx = atomicAdd(params->trainingIndexPtr, 1u) % NRC_BATCH_SIZE;
+    writeNRCInput(params->trainingInput, idx, input);
+    writeNRCOutput(params->trainingTarget, idx, make_float3(0.0f));
+}
 
 // TODO: Could do multiple smaller training steps per frame
 void OptixRenderer::train() {
     // Generate training samples
     const auto totalTrainingSamples = NRC_BATCH_SIZE / TRAIN_DEPTH;
-    const uint backwardSamples = totalTrainingSamples * trainingDirection;
+    const uint backwardSamples = totalTrainingSamples * trainingDirection / 2;
     const uint forwardSamples = totalTrainingSamples - backwardSamples;
+    const uint dummySamples = backwardSamples * TRAIN_DEPTH;
     if (forwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_FORWARD], forwardSamples, 1, 1));
     if (backwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_BACKWARD], backwardSamples, 1, 1));
+    if (dummySamples) generateDummySamples<<<(dummySamples + 255) / 256, 256>>>(dummySamples, paramsBuffer.data(), instances.data(), instances.size(), materials.data());
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
     
     params.trainingRound++;

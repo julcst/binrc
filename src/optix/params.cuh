@@ -34,7 +34,7 @@ struct NRCInput {
     float2 wn = {0.0f, 0.0f};
     float roughness = 0.0f;
     float3 diffuse = {0.0f, 0.0f, 0.0f};
-    float3 specular = {0.0f, 0.0f, 0.0f};
+    float3 specular = {0.0f, 0.0f, 0.0f}; // TODO: Add Transmission
 };
 
 struct NRCOutput {
@@ -149,9 +149,6 @@ struct Params {
     float* inferenceInput;
     float* inferenceOutput;
     float3* inferenceThroughput;
-
-    Instance* instances; // Pointer to the instances
-    uint instanceCount; // Number of instances
 
     cudaTextureObject_t brdfLUT;
 };

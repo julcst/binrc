@@ -8,8 +8,8 @@
 __device__ inline NRCInput encodeInput(const float3& position, const float3& wo, const float3& wn, const float3& diffuse, const float3& specular, float alpha) {
     return {
         .position = params.sceneScale * (position - params.sceneMin),
-        .wo = make_float2(wo),
-        //.wo = toNormSpherical(wo), // Switch to Octahedral
+        //.wo = make_float2(NAN),
+        .wo = toNormSpherical(wo), // Switch to Octahedral
         .wn = toNormSpherical(wn), // TODO: Switch to Octahedral
         //.roughness = 1 - exp(-alpha),
         .roughness = alpha,
@@ -23,7 +23,7 @@ __device__ inline NRCInput encodeInput(const float3& position, const float3& wo,
     const auto lut = tex2D<float4>(params.brdfLUT, payload.roughness, dot(n, wo));
     const auto specular = F0 * lut.x + lut.y;
     const auto albedo = (1.0f - payload.metallic) * payload.baseColor;
-    return encodeInput(position, wo, n, albedo, specular, payload.roughness * payload.roughness); // TODO: Flip normal when inside?
+    return encodeInput(position, wo, n, albedo, specular, payload.roughness * payload.roughness);
 }
 
 __device__ inline void writeNRCInput(float* to, const NRCInput& input) {
