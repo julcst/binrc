@@ -85,7 +85,8 @@ private:
     tcnn::TrainableModel nrcModel; // TODO: Explore half inputs and outputs
     tcnn::GPUMatrix<float> nrcTrainInput;
     tcnn::GPUMatrix<float> nrcTrainOutput;
-    tcnn::GPUMemory<uint> nrcTrainIndex;
+    tcnn::GPUMemory<uint> nrcTrainIndex {1};
+    tcnn::GPUMemory<uint> nrcLightSamples {1};
     tcnn::GPUMatrix<float> nrcInferenceInput;
     tcnn::GPUMatrix<float> nrcInferenceOutput;
     tcnn::GPUMemory<float3> nrcInferenceThroughput;

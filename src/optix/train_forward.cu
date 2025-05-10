@@ -111,7 +111,7 @@ extern "C" __global__ void __raygen__() {
         }
         throughput *= sample.throughput;
 
-        const auto trainInput = encodeInput(hitPoint, !sample.isSpecular || (params.flags & DIFFUSE_ENCODING_FLAG) ? make_float3(NAN) : wo, n, payload);
+        const auto trainInput = encodeInput(hitPoint, !sample.isSpecular && (params.flags & DIFFUSE_ENCODING_FLAG) ? make_float3(NAN) : wo, n, payload);
         const auto trainIdx = pushNRCTrainInput(trainInput);
         const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
         trainBounces[trainBounceIdx].index = trainIdx;

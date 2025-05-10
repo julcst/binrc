@@ -173,9 +173,11 @@ OptixRenderer::OptixRenderer() {
     params.trainingInput = nrcTrainInput.data();
     params.trainingTarget = nrcTrainOutput.data();
 
-    nrcTrainIndex = tcnn::GPUMemory<uint>(1, true);
     nrcTrainIndex.memset(0);
     params.trainingIndexPtr = nrcTrainIndex.data();
+
+    nrcLightSamples.memset(0);
+    params.lightSamples = nrcLightSamples.data();
 
     params.brdfLUT = brdfLUT.texObj;
 }
@@ -322,16 +324,25 @@ __global__ void generateDummySamples(const uint sampleCount, Params* params, con
 
 // TODO: Could do multiple smaller training steps per frame
 void OptixRenderer::train() {
+    nrcLightSamples.memset(0);
+    check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+
     // Generate training samples
     const auto totalTrainingSamples = NRC_BATCH_SIZE / TRAIN_DEPTH;
     const uint backwardSamples = totalTrainingSamples * trainingDirection / 2;
     const uint forwardSamples = totalTrainingSamples - backwardSamples;
-    const uint dummySamples = backwardSamples * TRAIN_DEPTH;
     if (forwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_FORWARD], forwardSamples, 1, 1));
-    if (backwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_BACKWARD], backwardSamples, 1, 1));
-    if (dummySamples) generateDummySamples<<<(dummySamples + 255) / 256, 256>>>(dummySamples, paramsBuffer.data(), instances.data(), instances.size(), materials.data());
+    if (backwardSamples) {
+        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_BACKWARD], backwardSamples, 1, 1));
+    }
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
     
+    uint dummySamples = 0;
+    nrcLightSamples.copy_to_host(&dummySamples);
+    std::cout << "Dummy samples: " << dummySamples << std::endl;
+    if (dummySamples) generateDummySamples<<<(dummySamples + 255) / 256, 256>>>(dummySamples, paramsBuffer.data(), instances.data(), instances.size(), materials.data());
+    check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+
     params.trainingRound++;
 
     // Perform training steps

@@ -27,6 +27,7 @@ extern "C" __global__ void __raygen__() {
     auto hitPoint = ray.origin;
     auto n = make_float3(0.0f);
     auto wo = ray.direction;
+    auto diffuse = false;
 
     float3 throughput = make_float3(1.0f);
     float3 prevThroughput = make_float3(0.0f);
@@ -85,6 +86,7 @@ extern "C" __global__ void __raygen__() {
 
         // Sampling
         const auto sample = sampleDisney(RND_BSDF, RND_MICROFACET, RND_DIFFUSE, wo, n, inside, payload.baseColor, payload.metallic, alpha, payload.transmission);
+        diffuse = !sample.isSpecular;
 
         ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
         prevThroughput = throughput;
@@ -96,7 +98,7 @@ extern "C" __global__ void __raygen__() {
     if (!isPayloadValid) {
         params.inferenceThroughput[i] = make_float3(0.0f);
     } else {
-        const auto nrcQuery = encodeInput(hitPoint, wo, n, payload);
+        const auto nrcQuery = encodeInput(hitPoint, diffuse && (params.flags & DIFFUSE_ENCODING_FLAG) ? make_float3(NAN) : wo, n, payload);
         writeNRCInput(params.inferenceInput, i, nrcQuery);
         params.inferenceThroughput[i] = prevThroughput;
     }

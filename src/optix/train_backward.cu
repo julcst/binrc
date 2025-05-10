@@ -60,10 +60,11 @@ extern "C" __global__ void __raygen__() {
         ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
 
         //if (depth > 1) {
-            const auto trainInput = encodeInput(hitPoint, !sample.isSpecular || (params.flags & DIFFUSE_ENCODING_FLAG) ? make_float3(NAN) : sample.direction, n, payload);
+            const auto trainInput = encodeInput(hitPoint, !sample.isSpecular && (params.flags & DIFFUSE_ENCODING_FLAG) ? make_float3(NAN) : sample.direction, n, payload);
             const auto trainIdx = pushNRCTrainInput(trainInput);
             const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
             writeNRCOutput(params.trainingTarget, trainIdx, reflectanceFactorizationTerm * radiance);
+            atomicAdd(params.lightSamples, 1u);
         //}
 
         radiance += payload.emission;

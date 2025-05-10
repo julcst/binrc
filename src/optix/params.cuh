@@ -143,6 +143,7 @@ struct Params {
 //////////////////////////////////////////////////
 
     uint trainingRound = 0; // Current training round
+    uint* lightSamples; // Number of light samples
     uint* trainingIndexPtr;
     float* trainingInput;
     float* trainingTarget;
