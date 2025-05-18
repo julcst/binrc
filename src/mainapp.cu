@@ -50,7 +50,7 @@ std::vector<std::filesystem::path> scanFolder(const std::filesystem::path& folde
     }
 }
 
-MainApp::MainApp() : App(800, 600) {
+MainApp::MainApp() : App(800, 800) {
     printCudaDevices();
 
     fullscreenTriangle.load(Mesh::FULLSCREEN_VERTICES, Mesh::FULLSCREEN_INDICES);
@@ -102,42 +102,54 @@ void MainApp::buildImGui() {
     ImGui::StatisticsWindow(delta, resolution);
 
     ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+    bool reset = false;
 
-    std::string folder_str = folder.string();
-    if (ImGui::InputText("Folder", &folder_str)) {
-        folder = folder_str;
-        scenes = scanFolder(folder);
-        sceneID = 0;
+    if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen)) {
+        std::string folder_str = folder.string();
+        if (ImGui::InputText("Folder", &folder_str)) {
+            folder = folder_str;
+            scenes = scanFolder(folder);
+            sceneID = 0;
+        }
+        if (ImGui::FileCombo("Scene##2", &sceneID, scenes)) {
+            renderer.loadGLTF(scenes.at(sceneID));
+        }
+        ImGui::SliderFloat("Scene Epsilon", &renderer.params.sceneEpsilon, 1e-6f, 1e-1f, "%f", ImGuiSliderFlags_Logarithmic);
+        for (size_t i = 0; i < renderer.scene.cameras.size(); i++) {
+            if (ImGui::Button(renderer.scene.cameras[i].first.c_str())) {
+                auto scale = mat4(1.0f);
+                scale[0][0] = camera.aspectRatio;
+                const auto clipToWorld = renderer.scene.cameras[i].second * scale;
+                renderer.setCamera(clipToWorld);
+                reset = true;
+            }
+            if (i < renderer.scene.cameras.size() - 1) ImGui::SameLine();
+        }
     }
-    if (ImGui::FileCombo("Scene", &sceneID, scenes)) {
-        renderer.loadGLTF(scenes.at(sceneID));
+
+    if (ImGui::CollapsingHeader("Rendering", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Sample: %d", renderer.params.sample);
+        if (ImGui::SliderFloat("Exposure", &exposure, 0.1f, 10.0f, "%.1f", ImGuiSliderFlags_Logarithmic)) blitProgram.set(1, exposure);
+        reset |= ImGui::EnumCombo("Inference Mode", &renderer.params.inferenceMode, INFERENCE_MODES);
+
+        switch (renderer.params.inferenceMode) {
+            case InferenceMode::NO_INFERENCE:
+                ImGui::SliderFloat("Russian Roulette", &renderer.params.russianRouletteWeight, 1.0f, 10.0f, "%.1f");
+                reset |= ImGui::FlagCheckbox("Enable NEE", &renderer.params.flags, NEE_FLAG);
+                reset |= ImGui::FlagCheckbox("Enable Transmission", &renderer.params.flags, TRANSMISSION_FLAG);
+                break;
+        }
     }
-    ImGui::Text("Sample: %d", renderer.params.sample);
-    if (ImGui::SliderFloat("Exposure", &exposure, 0.1f, 10.0f, "%.1f", ImGuiSliderFlags_Logarithmic)) blitProgram.set(1, exposure);
-    ImGui::SliderFloat("Russian Roulette", &renderer.params.russianRouletteWeight, 1.0f, 10.0f, "%.1f");
-    ImGui::SliderFloat("Scene Epsilon", &renderer.params.sceneEpsilon, 1e-6f, 1e-1f, "%f", ImGuiSliderFlags_Logarithmic);
-    bool reset = ImGui::FlagCheckbox("Enable NEE", &renderer.params.flags, NEE_FLAG);
-    reset |= ImGui::FlagCheckbox("Enable Transmission", &renderer.params.flags, TRANSMISSION_FLAG);
-    for (size_t i = 0; i < renderer.scene.cameras.size(); i++) {
-        if (ImGui::Button(renderer.scene.cameras[i].first.c_str())) {
-            auto scale = mat4(1.0f);
-            scale[0][0] = camera.aspectRatio;
-            const auto clipToWorld = renderer.scene.cameras[i].second * scale;
-            renderer.setCamera(clipToWorld);
+
+    if (ImGui::CollapsingHeader("NRC", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Checkbox("Enable Training", &renderer.enableTraining);
+        ImGui::FlagCheckbox("Enable Diffuse Encoding", &renderer.params.flags, DIFFUSE_ENCODING_FLAG);
+        ImGui::SliderFloat("Training Direction", &renderer.trainingDirection, 0.0f, 1.0f, "%.2f");
+        ImGui::PlotLines("Loss", renderer.lossHistory.data(), renderer.lossHistory.size());
+        if (ImGui::Button("Reset NRC")) {
+            renderer.resetNRC();
             reset = true;
         }
-        if (i < renderer.scene.cameras.size() - 1) ImGui::SameLine();
-    }
-
-    ImGui::SeparatorText("NRC");
-    ImGui::Checkbox("Enable Training", &renderer.enableTraining);
-    ImGui::FlagCheckbox("Enable Diffuse Encoding", &renderer.params.flags, DIFFUSE_ENCODING_FLAG);
-    ImGui::SliderFloat("Training Direction", &renderer.trainingDirection, 0.0f, 1.0f, "%.2f");
-    reset |= ImGui::EnumCombo("Inference Mode", &renderer.params.inferenceMode, INFERENCE_MODES);
-    ImGui::PlotLines("Loss", renderer.lossHistory.data(), renderer.lossHistory.size());
-    if (ImGui::Button("Reset NRC")) {
-        renderer.resetNRC();
-        reset = true;
     }
 
     if (ImGui::CollapsingHeader("Eye Training", ImGuiTreeNodeFlags_DefaultOpen)) {
