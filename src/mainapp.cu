@@ -131,8 +131,6 @@ void MainApp::buildImGui() {
 
     ImGui::SeparatorText("NRC");
     ImGui::Checkbox("Enable Training", &renderer.enableTraining);
-    ImGui::FlagCheckbox("Enable Backward RR", &renderer.params.flags, BACKWARD_RR_FLAG);
-    ImGui::FlagCheckbox("Enable Forward RR", &renderer.params.flags, FORWARD_RR_FLAG);
     ImGui::FlagCheckbox("Enable Diffuse Encoding", &renderer.params.flags, DIFFUSE_ENCODING_FLAG);
     ImGui::SliderFloat("Training Direction", &renderer.trainingDirection, 0.0f, 1.0f, "%.2f");
     reset |= ImGui::EnumCombo("Inference Mode", &renderer.params.inferenceMode, INFERENCE_MODES);
@@ -140,6 +138,19 @@ void MainApp::buildImGui() {
     if (ImGui::Button("Reset NRC")) {
         renderer.resetNRC();
         reset = true;
+    }
+
+    if (ImGui::CollapsingHeader("Eye Training", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::FlagCheckbox("Russian Roulette##2", &renderer.params.flags, FORWARD_RR_FLAG);
+    }
+
+    if (ImGui::CollapsingHeader("Light Training", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::FlagCheckbox("Russian Roulette##3", &renderer.params.flags, BACKWARD_RR_FLAG);
+        float balancing = 100.0f - 100.0f / renderer.params.balanceWeight;
+        if (ImGui::SliderFloat("Balancing Samples", &balancing, 0.0f, 100.0f, "%.0f%%")) {
+            renderer.params.balanceWeight = 100.0f / (100.0f - balancing);
+        }
+        ImGui::Text("(Balancing Weight: %.2f)", renderer.params.balanceWeight);
     }
 
     ImGui::End();

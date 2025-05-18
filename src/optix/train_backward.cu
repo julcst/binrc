@@ -27,7 +27,7 @@ extern "C" __global__ void __raygen__() {
     auto ray = Ray{lightSample.position + lightSample.n * copysignf(params.sceneEpsilon, dot(lightSample.wo, lightSample.n)), lightSample.wo};
     auto radiance = lightSample.emission * INV_PI;
     // printf("Light sample: %f %f %f\n", lightSample.emission.x, lightSample.emission.y, lightSample.emission.z);
-    radiance *= 2.0f; // Balancing
+    radiance *= params.balanceWeight; // Balancing
 
     Payload payload;
 
@@ -51,6 +51,7 @@ extern "C" __global__ void __raygen__() {
         const auto alpha = payload.roughness * payload.roughness;
 
         const auto r = curand_uniform4(&state);
+        // FIXME: Wrong IOR
         const auto sample = sampleDisney(curand_uniform(&state), {r.x, r.y}, {r.z, r.w}, wi, n, inside, payload.baseColor, payload.metallic, alpha, payload.transmission);
 
         radiance *= sample.throughput;

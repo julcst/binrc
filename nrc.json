@@ -29,8 +29,8 @@
         ]
     },
     "network": {
-        //"otype": "FullyFusedMLP",
-        "otpye": "CutlassMLP",
+        "otype": "FullyFusedMLP",
+        //"otpye": "CutlassMLP",
         "activation": "ReLU",
         "output_activation": "None",
         "n_neurons": 64,

@@ -44,9 +44,10 @@ struct NRCOutput {
 constexpr int PAYLOAD_SIZE = 4 * 3 + 5;
 constexpr uint NRC_INPUT_SIZE = 3 * 3 + 2 * 2 + 1;
 constexpr uint NRC_OUTPUT_SIZE = 3;
-constexpr uint NRC_SUBBATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY * 64 * 8 * 8;
-constexpr uint STEPS_PER_BATCH = 1;
-constexpr uint NRC_BATCH_SIZE = NRC_SUBBATCH_SIZE * STEPS_PER_BATCH;
+constexpr uint NRC_BATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY * 64 * 8;
+constexpr uint STEPS_PER_BATCH = 1; // NOTE: Does not seem to improve performance
+constexpr uint NRC_SUBBATCH_SIZE = NRC_BATCH_SIZE / STEPS_PER_BATCH;
+static_assert(NRC_SUBBATCH_SIZE % tcnn::BATCH_SIZE_GRANULARITY == 0, "NRC_SUBBATCH_SIZE must be divisible by tcnn::BATCH_SIZE_GRANULARITY");
 
 struct VertexData {
     float3 position;
@@ -144,6 +145,7 @@ struct Params {
 
     uint trainingRound = 0; // Current training round
     uint* lightSamples; // Number of light samples
+    float balanceWeight = 2.0f; // Weight for light sampling balancing
     uint* trainingIndexPtr;
     float* trainingInput;
     float* trainingTarget;

@@ -328,20 +328,23 @@ void OptixRenderer::train() {
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
 
     // Generate training samples
+    const float balanceRatio = 1.0f / params.balanceWeight;
     const auto totalTrainingSamples = NRC_BATCH_SIZE / TRAIN_DEPTH;
-    const uint backwardSamples = totalTrainingSamples * trainingDirection / 2;
-    const uint forwardSamples = totalTrainingSamples - backwardSamples;
+    const uint forwardSamples = totalTrainingSamples * (1.0f - trainingDirection);
+    const uint backwardSamples = (totalTrainingSamples - forwardSamples) * balanceRatio;
     if (forwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_FORWARD], forwardSamples, 1, 1));
     if (backwardSamples) {
         check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_BACKWARD], backwardSamples, 1, 1));
     }
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
     
-    uint dummySamples = 0;
-    nrcLightSamples.copy_to_host(&dummySamples);
-    std::cout << "Dummy samples: " << dummySamples << std::endl;
+    uint nL = 0; // Real number of light samples
+    nrcLightSamples.copy_to_host(&nL);
+    // (nL + nD) * r = nL    and    r = 1 / w    =>    nD = nL * w - nL
+    uint nD = nL * params.balanceWeight - nL;
+    //std::cout << "nL: " << nL << " nD: " << nD << std::endl;
     // FIXME: Upsides too dark
-    if (dummySamples) generateDummySamples<<<(dummySamples + 255) / 256, 256>>>(dummySamples, paramsBuffer.data(), instances.data(), instances.size(), materials.data());
+    if (nD) generateDummySamples<<<(nD + 255) / 256, 256>>>(nD, paramsBuffer.data(), instances.data(), instances.size(), materials.data());
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
 
     params.trainingRound++;
@@ -349,6 +352,7 @@ void OptixRenderer::train() {
     // Perform training steps
     for (uint32_t offset = 0; offset < NRC_BATCH_SIZE; offset += NRC_SUBBATCH_SIZE) {
         // TODO: Use pdf
+        // TODO: Limit training to the samples generated in this step to improve performance
         auto ctx = nrcModel.trainer->training_step(nrcTrainInput.slice_cols(offset, NRC_SUBBATCH_SIZE), nrcTrainOutput.slice_cols(offset, NRC_SUBBATCH_SIZE));
         float loss = nrcModel.trainer->loss(*ctx);
         lossHistory.push_back(loss);
