@@ -416,7 +416,7 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
                     .traversableHandle = geometry.handle,
                 };
 
-                const auto area = glm::determinant(localToWorld) * geometry.totalArea; // The determinant of the transformation matrix gives the scaling factor
+                const auto area = glm::pow(glm::determinant(mat3(localToWorld)), 2.0f / 3.0f) * geometry.totalArea; // The determinant of the transformation matrix gives the scaling factor
                 sceneArea += area;
                 instances[i] = Instance {
                     .geometry = hitRecords[geometry.sbtOffset].data,

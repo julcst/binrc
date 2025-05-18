@@ -98,6 +98,7 @@ extern "C" __global__ void __raygen__() {
     if (!isPayloadValid) {
         params.inferenceThroughput[i] = make_float3(0.0f);
     } else {
+        // FIXME: Diffuse encoding too bright
         const auto nrcQuery = encodeInput(hitPoint, diffuse && (params.flags & DIFFUSE_ENCODING_FLAG) ? make_float3(NAN) : wo, n, payload);
         writeNRCInput(params.inferenceInput, i, nrcQuery);
         params.inferenceThroughput[i] = prevThroughput;

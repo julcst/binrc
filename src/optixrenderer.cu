@@ -340,6 +340,7 @@ void OptixRenderer::train() {
     uint dummySamples = 0;
     nrcLightSamples.copy_to_host(&dummySamples);
     std::cout << "Dummy samples: " << dummySamples << std::endl;
+    // FIXME: Upsides too dark
     if (dummySamples) generateDummySamples<<<(dummySamples + 255) / 256, 256>>>(dummySamples, paramsBuffer.data(), instances.data(), instances.size(), materials.data());
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
 

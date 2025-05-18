@@ -449,13 +449,16 @@ __device__ __forceinline__ Instance sampleInstance(const Instance* instances, co
     uint left = 0;
     uint right = instanceCount - 1;
     while (left < right) {
-        const uint mid = (left + right) / 2;
+        const uint mid = left + (right - left) / 2;
         if (instances[mid].cdf < rand) {
             left = mid + 1;
         } else {
             right = mid;
         }
     }
+    // Sanity checks
+    if (rand > instances[left].cdf) printf("sampleInstance rand %f > cdf[i] %f\n", rand, instances[left].cdf);
+    if (left > 0 && rand < instances[left - 1].cdf) printf("sampleInstance rand %f < cdf[i-1] %f\n", rand, instances[left - 1].cdf);
     return instances[left];
 }
 
@@ -463,13 +466,16 @@ __device__ __forceinline__ uint sampleMeshTriangleIndex(const HitData& mesh, con
     uint left = 0;
     uint right = mesh.triangleCount - 1;
     while (left < right) {
-        const uint mid = (left + right) / 2;
-        if (mesh.cdfBuffer[left] < rand) {
+        const uint mid = left + (right - left) / 2;
+        if (mesh.cdfBuffer[mid] < rand) {
             left = mid + 1;
         } else {
             right = mid;
         }
     }
+    // Sanity checks
+    if (rand > mesh.cdfBuffer[left]) printf("sampleMeshTriangleIndex rand %f > cdf[i] %f\n", rand, mesh.cdfBuffer[left]);
+    if (left > 0 && rand < mesh.cdfBuffer[left - 1]) printf("sampleMeshTriangleIndex rand %f < cdf[i-1] %f\n", rand, mesh.cdfBuffer[left - 1]);
     return left;
 }
 
@@ -527,6 +533,7 @@ __device__ __forceinline__ Surface getSurface(const Material* materials, const I
 __device__ __forceinline__ Surface sampleScene(const Instance* instances, const uint instanceCount, const Material* materials, const float randSrc, const float2& randSurf) {
     Instance inst = sampleInstance(instances, instanceCount, randSrc);
     const float randTri = (inst.cdf - randSrc) / inst.pdf;
+    if (randTri > 1.0f || randTri < 0.0f) printf("randTri (%f - %f) / %f = %f\n", inst.cdf, randSrc, inst.pdf, randTri);
     const auto triangleIndex = sampleMeshTriangleIndex(inst.geometry, randTri);
     const auto bary = sampleBarycentrics(randSurf);
     return getSurface(materials, inst, triangleIndex, bary);

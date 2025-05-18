@@ -67,6 +67,6 @@ extern "C" __global__ void __raygen__() {
             atomicAdd(params.lightSamples, 1u);
         //}
 
-        radiance += payload.emission;
+        radiance += payload.emission; // TODO: Do not train bounce emission
     }
 }
