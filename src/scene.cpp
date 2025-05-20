@@ -243,6 +243,7 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
             .roughness = material.pbrData.roughnessFactor,
             .metallic = material.pbrData.metallicFactor,
             .transmission = 0.0f,
+            .isThinWalled = false,
             .baseMap = 0,
             .normalMap = 0,
             .mrMap = 0,
@@ -250,7 +251,9 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
 
         if (material.transmission) {
             materials[i].transmission = material.transmission->transmissionFactor;
-            std::cout << "Transmission factor: " << material.transmission->transmissionFactor << "\n";
+            bool hasVolume = material.volume && material.volume->thicknessFactor > 0.0f;
+            materials[i].isThinWalled = !hasVolume;
+            std::cout << "Transmission factor: " << material.transmission->transmissionFactor << " Has Volume: " << hasVolume << "\n";
         }
 
         std::cout << "Roughness: " << material.pbrData.roughnessFactor << "\n";

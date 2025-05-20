@@ -460,16 +460,26 @@ __host__ __device__ constexpr float3 reflect(const float3& i, const float3& n) {
     return 2.0f * dot(n, i) * n - i;
 }
 
-// TODO: Handle no refraction case
-__host__ __device__ constexpr float3 refract(const float3& i, const float3& n, const float eta) {
-    const auto cosTheta_i  = dot(n, i);
-    const auto sin2Theta_i = 1.0f - safesqrt(cosTheta_i);
-    //const auto sin2Theta_t = sin2Theta_i * rsqrtf(eta);
-    const auto sin2Theta_t = sin2Theta_i / sqrt(eta);
-    const auto cosTheta_t = safesqrt(1.0f - sin2Theta_t); // NOTE: Important to prevent NaNs
-    const auto refracted = (cosTheta_i / eta - cosTheta_t) * n - i / eta;
-    //if (abs(pow2(refracted)) > 1e-3f) printf("Refracted vector is not normalized: %f %f %f cosThetaI %f sin2ThetaT %f \n", refracted.x, refracted.y, refracted.z, cosTheta_i, sin2Theta_i); // FIXME
-    return normalize(refracted);
+// // TODO: Handle no refraction case
+// __host__ __device__ constexpr float3 refract(const float3& i, const float3& n, const float eta) {
+//     const auto cosTheta_i  = dot(n, i);
+//     const auto sin2Theta_i = 1.0f - safesqrt(cosTheta_i);
+//     //const auto sin2Theta_t = sin2Theta_i * rsqrtf(eta);
+//     const auto sin2Theta_t = sin2Theta_i / sqrt(eta);
+//     const auto cosTheta_t = safesqrt(1.0f - sin2Theta_t); // NOTE: Important to prevent NaNs
+//     const auto refracted = (cosTheta_i / eta - cosTheta_t) * n - i / eta;
+//     //if (abs(pow2(refracted)) > 1e-3f) printf("Refracted vector is not normalized: %f %f %f cosThetaI %f sin2ThetaT %f \n", refracted.x, refracted.y, refracted.z, cosTheta_i, sin2Theta_i); // FIXME
+//     return normalize(refracted);
+// }
+
+// NOTE: This standard refraction function does not handle microfacet roughness for thin surfaces with eta = 1
+__host__ __device__ constexpr float3 refract(const float3 &I, const float3 &N, float eta) {
+    const float cosThetaI = dot(I, N);
+    const float k = 1.0f - eta * eta * (1.0f - cosThetaI * cosThetaI);
+    if (k < 0.0f) return {0.0f}; // Total internal reflection
+    const float cI = -eta;
+    const float cN = eta * cosThetaI - sqrt(k);
+    return cI * I + cN * N;
 }
 
 __host__ __device__ constexpr bool isfinite(const float3& v) {

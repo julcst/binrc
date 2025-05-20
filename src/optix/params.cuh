@@ -62,6 +62,7 @@ struct Material {
     float roughness;
     float metallic;
     float transmission;
+    bool isThinWalled;
     cudaTextureObject_t baseMap;
     cudaTextureObject_t normalMap;
     cudaTextureObject_t mrMap;
