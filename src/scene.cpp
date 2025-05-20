@@ -16,6 +16,8 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/string_cast.hpp>
 using namespace glm;
 
 #include <vector>
@@ -336,6 +338,9 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
                 const auto v1 = vertices[i1];
                 const auto v2 = vertices[i2];
                 const float area = 0.5f * length(cross(vec3(v1 - v0), vec3(v2 - v0)));
+                if (area == 0.0f) {
+                    std::cerr << "Degenerate triangle: " << i0 << ", " << i1 << ", " << i2 << ": " << area << " v0: " << glm::to_string(v0) << " v1: " << glm::to_string(v1) << " v2: " << glm::to_string(v2) << std::endl;
+                }
                 geometry.totalArea += area;
                 cdf[i] = geometry.totalArea;
             }
@@ -343,7 +348,7 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
 
             // Normalize CDF
             float invTotalArea = 1.0f / geometry.totalArea;
-            for (uint i = 0; i < nFaces; i++) {
+            for (uint i = 0; i < cdf.size(); i++) {
                 cdf[i] *= invTotalArea;
             }
 
@@ -370,7 +375,7 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
             float emission = luminance(materials.at(materialID).emission);
             bool isEmissive = emission > 0.0f;
 
-            std::cout << (isEmissive ? "Loaded emissive geometry " : "Loaded geometry ") << geometryID << " with " << vertices.size() << " vertices and " << indices.size() / 3 << " triangles" << std::endl;
+            std::cout << (isEmissive ? "Loaded emissive geometry " : "Loaded geometry ") << geometryID << " (" << mesh.name << ") with " << vertices.size() << " vertices and " << indices.size() / 3 << " triangles" << std::endl;
 
             geometry.emitter = isEmissive ? std::optional<Emitter>(Emitter { emission, std::move(vertices), std::move(indices), std::move(vertexData) }) : std::nullopt;
 
