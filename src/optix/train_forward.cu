@@ -105,7 +105,7 @@ extern "C" __global__ void __raygen__() {
         
         ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
         prevBrdfPdf = sample.pdf;
-        lightPdfIsZero = sample.isDirac || payload.transmission > 0.0f;
+        lightPdfIsZero = sample.isDirac;
         for (uint i = 0; i <= trainBounceIdx; i++) {
             trainBounces[i].throughput *= sample.throughput;
         }

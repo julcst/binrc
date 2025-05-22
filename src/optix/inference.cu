@@ -92,7 +92,7 @@ extern "C" __global__ void __raygen__() {
         prevThroughput = throughput;
         throughput *= sample.throughput;
         prevBrdfPdf = sample.pdf;
-        lightPdfIsZero = sample.isDirac || payload.transmission > 0.0f;
+        lightPdfIsZero = sample.isDirac;
     }
 
     if (!isPayloadValid) {

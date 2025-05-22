@@ -466,6 +466,7 @@ __host__ __device__ constexpr float3 reflect(const float3& i, const float3& n) {
 //     const auto sin2Theta_i = 1.0f - safesqrt(cosTheta_i);
 //     //const auto sin2Theta_t = sin2Theta_i * rsqrtf(eta);
 //     const auto sin2Theta_t = sin2Theta_i / sqrt(eta);
+//     if (sin2Theta_t >= 1.0f) return {0.0f}; // Total internal reflection
 //     const auto cosTheta_t = safesqrt(1.0f - sin2Theta_t); // NOTE: Important to prevent NaNs
 //     const auto refracted = (cosTheta_i / eta - cosTheta_t) * n - i / eta;
 //     //if (abs(pow2(refracted)) > 1e-3f) printf("Refracted vector is not normalized: %f %f %f cosThetaI %f sin2ThetaT %f \n", refracted.x, refracted.y, refracted.z, cosTheta_i, sin2Theta_i); // FIXME
@@ -488,6 +489,10 @@ __host__ __device__ constexpr bool isfinite(const float3& v) {
 
 __host__ __device__ constexpr bool isnegative(const float3& v) {
     return v.x < 0.0f && v.y < 0.0f && v.z < 0.0f;
+}
+
+__host__ __device__ constexpr bool isnonzero(const float3& v) {
+    return v.x != 0.0f || v.y != 0.0f || v.z != 0.0f;
 }
 
 __host__ __device__ constexpr float luminance(const float3& linearRGB) {
