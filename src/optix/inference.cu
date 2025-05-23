@@ -7,6 +7,7 @@
 #include "nrc.cuh"
 #include "cudamath.cuh"
 #include "sampling.cuh"
+#include "principled_brdf.cuh"
 
 extern "C" __global__ void __raygen__() {
     const auto idx = optixGetLaunchIndex();
@@ -79,7 +80,7 @@ extern "C" __global__ void __raygen__() {
                 const auto lightPoint = sample.position - sample.n * copysignf(params.sceneEpsilon, dot(sample.wi, sample.n));
                 if (!brdf.isDirac && brdf.pdf > 0.0f && !traceOcclusion(surfacePoint, lightPoint)) {
                     const auto weight = balanceHeuristic(sample.pdf, brdf.pdf);
-                    inferencePlus += throughput * brdf.throughput * sample.emission * weight / sample.pdf;
+                    inferencePlus += throughput * brdf.throughput * sample.emission * weight;
                 }
             //}
         }

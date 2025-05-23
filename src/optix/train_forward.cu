@@ -9,6 +9,7 @@
 #include "nrc.cuh"
 #include "cudamath.cuh"
 #include "sampling.cuh"
+#include "principled_brdf.cuh"
 
 struct TrainBounce {
     float3 radiance = make_float3(0.0f);

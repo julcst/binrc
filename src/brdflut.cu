@@ -2,6 +2,7 @@
 #include <cudamath.cuh>
 #include <optix/sampling.cuh>
 #include <optix/params.cuh>
+#include <optix/principled_brdf.cuh>
 
 __host__ __device__ __forceinline__ float RadicalInverse_VdC(uint bits)  {
     bits = (bits << 16u) | (bits >> 16u);

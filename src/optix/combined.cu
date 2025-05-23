@@ -7,6 +7,7 @@
 #include "nrc.cuh"
 #include "cudamath.cuh"
 #include "sampling.cuh"
+#include "principled_brdf.cuh"
 
 extern "C" __global__ void __raygen__combined() {
     const auto idx = optixGetLaunchIndex();

@@ -6,6 +6,7 @@
 #include "common.cuh"
 #include "cudamath.cuh"
 #include "sampling.cuh"
+#include "principled_brdf.cuh"
 
 extern "C" __global__ void __raygen__reference() {
     const auto idx = optixGetLaunchIndex();
@@ -77,7 +78,7 @@ extern "C" __global__ void __raygen__reference() {
         ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
         throughput *= sample.throughput;
         prevBrdfPdf = sample.pdf;
-        lightPdfIsZero = sample.isDirac || payload.transmission > 0.0f;
+        lightPdfIsZero = sample.isDirac;
     }
 
     params.image[i] = mix(params.image[i], make_float4(max(color, 0.0f), 1.0f), params.weight);

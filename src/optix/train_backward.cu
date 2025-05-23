@@ -9,6 +9,7 @@
 #include "nrc.cuh"
 #include "cudamath.cuh"
 #include "sampling.cuh"
+#include "principled_brdf.cuh"
 
 constexpr uint N_RANDS = 5 + (TRAIN_DEPTH + 1) * 6;
 
