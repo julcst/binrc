@@ -47,7 +47,12 @@ FetchContent_Declare(
     tinycudann
     GIT_REPOSITORY https://github.com/julcst/tiny-cuda-nn
 )
-FetchContent_MakeAvailable(framework fastgltf tinycudann)
+FetchContent_Declare(
+    cuco
+    GIT_REPOSITORY https://github.com/NVIDIA/cuCollections
+    GIT_TAG dev
+)
+FetchContent_MakeAvailable(framework fastgltf tinycudann cuco)
 
 # Build the OptiX IR
 set(OPTIXIR
@@ -59,7 +64,7 @@ set(OPTIXIR
     src/optix/train_forward.cu
 )
 add_library(optixir OBJECT ${OPTIXIR})
-target_link_libraries(optixir CUDA::cudart CUDA::curand tiny-cuda-nn)
+target_link_libraries(optixir CUDA::cudart CUDA::curand tiny-cuda-nn cuco)
 target_include_directories(optixir PRIVATE src ${OPTIX_DIR}/include ${CUDAToolkit_INCLUDE_DIRS})
 set_target_properties(optixir PROPERTIES
     CUDA_OPTIX_COMPILATION ON
