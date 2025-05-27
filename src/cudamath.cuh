@@ -130,6 +130,14 @@ __host__ __device__ constexpr float3 operator*(const float3x3& m, const float3& 
     };
 }
 
+__host__ __device__ constexpr float3 operator*(const float3& v, const float3x3& m) {
+    return {
+        m[0].x * v.x + m[0].y * v.y + m[0].z * v.z,
+        m[1].x * v.x + m[1].y * v.y + m[1].z * v.z,
+        m[2].x * v.x + m[2].y * v.y + m[2].z * v.z
+    };
+}
+
 // float4x4
 
 __host__ __device__ constexpr float4 operator*(const float4x4& m, const float4& v) {

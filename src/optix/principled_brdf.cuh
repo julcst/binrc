@@ -60,6 +60,16 @@ __device__ constexpr float G1_TrowbridgeReitz(float NdotV, float alpha2) {
     return 1.0f / (1.0f + lambdaV);
 }
 
+__device__ constexpr float G1_Smith(float NdotV, float alpha2) {
+    return 2.0f * NdotV / (sqrt(alpha2 + (1.0f - alpha2) * NdotV * NdotV) + NdotV);
+}
+
+__device__ constexpr float G2_Smith(float NdotL, float NdotV, float alpha2) {
+    const auto denomA = NdotV * sqrt(alpha2 + (1.0f - alpha2) * NdotL * NdotL);
+    const auto denomB = NdotL * sqrt(alpha2 + (1.0f - alpha2) * NdotV * NdotV);
+    return 2.0f * NdotL * NdotV / (denomA + denomB);
+}
+
 __device__ constexpr float VNDF_TrowbridgeReitz(float NdotV, float NdotH, float HdotV, float alpha2) {
     const auto G1 = G1_TrowbridgeReitz(NdotV, alpha2);
     const auto cosTheta = NdotV;
@@ -131,15 +141,38 @@ __device__ constexpr float3 sampleVNDFTrowbridgeReitz(const float2& rand, const 
 }
 
 // From: https://auzaiffe.wordpress.com/2024/04/15/vndf-importance-sampling-an-isotropic-distribution/
-__device__ constexpr float pdfVNDF(float3 wo, float3 wi, float alpha2, float3 n) {
-    float3 wm = normalize(wo + wi);
-    float zm = dot(wm, n);
-    float zi = dot(wi, n);
-    float nrm = rsqrt((zi * zi) * (1.0f - alpha2) + alpha2);
-    float sigmaStd = (zi * nrm) * 0.5f + 0.5f;
+__device__ constexpr float pdfVNDF(float NdotL, float HdotN, float alpha2, float3 n) {
+    float nrm = rsqrt((NdotL * NdotL) * (1.0f - alpha2) + alpha2);
+    float sigmaStd = (NdotL * nrm) * 0.5f + 0.5f;
     float sigmaI = sigmaStd / nrm;
-    float nrmN = (zm * zm) * (alpha2 - 1.0f) + 1.0f;
+    float nrmN = (HdotN * HdotN) * (alpha2 - 1.0f) + 1.0f;
     return alpha2 / (PI * 4.0f * nrmN * nrmN * sigmaI);
+}
+
+__device__ constexpr float2 sampleUniformDiskPolar(const float2& rand) {
+    const auto r = sqrt(rand.x);
+    const auto theta = 2.0f * PI * rand.y;
+    return {r * cos(theta), r * sin(theta)};
+}
+
+// From: https://www.pbr-book.org/4ed/Reflection_Models/Roughness_Using_Microfacet_Theory
+__device__ constexpr float3 sampleWm(const float2& rand, const float3& w, const float alpha) {
+    auto wh = normalize(make_float3(alpha * w.x, alpha * w.y, w.z)); // Transform w to hemisphere
+    if (wh.z < 0.0f) wh = -wh; // Flip to face forward
+    const auto basis = buildTBN(wh); // Find orthonormal basis
+    auto p = sampleUniformDiskPolar(rand); // Sample disk
+    // Warp hemispherical projection for visible normal sampling
+    float h = sqrt(1.0f - pow2(p.x));
+    p.y = mix((1.0f + wh.z) * 0.5f, h, p.y);
+    // Reproject to hemisphere and transform normal to ellipsoid configuration>> 
+    float pz = sqrt(max(0.0f, 1.0f - dot(p, p)));
+    float3 nh = basis * make_float3(p.x, p.y, pz);
+    return normalize(make_float3(alpha * nh.x, alpha * nh.y, max(1e-6f, nh.z)));
+}
+
+__device__ constexpr float3 sampleWm(const float2& rand, const float3& w, const float3& n, const float alpha) {
+    const auto TBN = buildTBN(n);
+    return TBN * sampleWm(rand, w * TBN, alpha);
 }
 
 struct Sample {
@@ -214,8 +247,8 @@ __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, c
 
     const auto F = F_SchlickApprox(abs(HdotV), F0);
     const auto D = D_TrowbridgeReitz(NdotH, alpha2);
-    const auto lambdaL = Lambda_TrowbridgeReitz(NdotL, alpha2); // abs?
-    const auto lambdaV = Lambda_TrowbridgeReitz(NdotV, alpha2); // abs?
+    const auto lambdaL = Lambda_TrowbridgeReitz(HdotL, alpha2); // abs?
+    const auto lambdaV = Lambda_TrowbridgeReitz(HdotV, alpha2); // abs?
     // const auto G1 = 1.0f / (1.0f + lambdaV);
     // const auto G = 1.0f / (1.0f + lambdaL + lambdaV);
     const auto invG1 = 1.0f + lambdaV;
@@ -298,8 +331,8 @@ struct LightParams {
     float NdotV;
     float NdotL;
     bool sameHemisphere;
-    bool woIsInside;
     float eta;
+    float3 n;
 };
 
 __device__ constexpr LightParams calcLightParams(const float3& wo, const float3& wi, const float3& n) {
@@ -308,7 +341,8 @@ __device__ constexpr LightParams calcLightParams(const float3& wo, const float3&
     const auto sameHemisphere = NdotV * NdotL >= 0.0f;
     const auto woIsInside = dot(n, wo) < 0.0f;
     const auto eta = woIsInside ? 1.5f : 1.0f / 1.5f;
-    return {abs(NdotV), abs(NdotL), sameHemisphere, woIsInside, eta};
+    const auto surfaceN = woIsInside ? -n : n; // Flip normal if inside
+    return {abs(NdotV), abs(NdotL), sameHemisphere, eta, surfaceN};
 }
 
 __device__ constexpr float3 calcMicrofacetNormal(const float3& wo, const float3& wi, const float3& n, float eta) {
@@ -347,11 +381,13 @@ __device__ constexpr BRDFResult evalDisneyWeighted(const float3& wo, const float
 
     const auto F = F_SchlickApprox(abs(HdotV), mat.F0);
     const auto D = mat.alpha2 == 0 ? 1.0f: D_TrowbridgeReitz(NdotH, mat.alpha2);
-    const auto lambdaL = Lambda_TrowbridgeReitz(NdotL, mat.alpha2); // abs?
-    const auto lambdaV = Lambda_TrowbridgeReitz(NdotV, mat.alpha2); // abs?
+    const auto lambdaL = Lambda_TrowbridgeReitz(HdotL, mat.alpha2); // abs? // HdotL or NdotL?
+    const auto lambdaV = Lambda_TrowbridgeReitz(HdotV, mat.alpha2); // abs? // HdotV or NdotV?
     const auto invG1 = 1.0f + lambdaV;
     const auto invG = 1.0f + lambdaL + lambdaV;
-    const auto VNDF = pdfVNDF(wo, wi, mat.alpha2, n);
+    // const auto G1 = G1_Smith(NdotV, mat.alpha2);
+    // const auto G = G2_Smith(NdotL, NdotV, mat.alpha2);
+    // const auto VNDF = pdfVNDF(NdotV, NdotH, mat.alpha2, n);
 
     auto pdf = 0.0f;
     auto throughput = make_float3(0.0f);
@@ -359,11 +395,15 @@ __device__ constexpr BRDFResult evalDisneyWeighted(const float3& wo, const float
     if (sameHemisphere) {
         // Outgoing and incoming on same hemisphere => Diffuse + Specular
         //const auto specular = F * (1.0f + lambdaV) / ((1.0f + lambdaL + lambdaV) * pSpecular); // = specular / pdf = F * (G2 / G1) / pSpecular
-        // const auto specular = F * safediv(D, invG * 4.0f * NdotV * NdotL);
+        //const auto specular = F * safediv(D * G, 4.0f * NdotV * NdotL);
+        //const auto specular = F * safediv(D * G, 4.0f * NdotV * NdotL);
         const auto specular = F * safediv(D, invG * 4.0f * NdotV);
         throughput += specular;
         // NOTE: D / invG1 = D * G1 = VNDF
-        // const auto pdfSpecular = safediv(D, invG1 * 4.0f * HdotV);
+        //const auto pdfSpecular = safediv(VNDF, 4.0f * HdotV);
+        //const auto pdfSpecular = safediv(1.0f, 4.0f * D * NdotV * HdotV * HdotV);
+        // This is the VNDF
+        //const auto pdfSpecular = safediv(D * HdotL, invG1 * 4.0f * NdotL);
         const auto pdfSpecular = safediv(D, invG1 * 4.0f * NdotV);
         pdf += weights.specular * pdfSpecular;
 

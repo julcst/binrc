@@ -48,7 +48,7 @@ extern "C" __global__ void __raygen__reference() {
             if (nee && !lightPdfIsZero) {
                 // NOTE: Maybe calculating the prevBrdfPdf here only when necessary is faster
                 const auto lightPdf = lightPdfUniform(wo, payload.t, n, payload.area);
-                weight = balanceHeuristic(prevBrdfPdf, lightPdf);
+                weight = powerHeuristic(prevBrdfPdf, lightPdf);
             }
             color += throughput * payload.emission * weight;
         }
@@ -67,7 +67,7 @@ extern "C" __global__ void __raygen__reference() {
                 const auto surfacePoint = hitPoint + n * copysignf(params.sceneEpsilon, cosThetaS);
                 const auto lightPoint = sample.position - sample.n * copysignf(params.sceneEpsilon, dot(sample.wi, sample.n));
                 if (!brdf.isDirac && brdf.pdf > 0.0f && !traceOcclusion(surfacePoint, lightPoint)) {
-                    const auto weight = balanceHeuristic(sample.pdf, brdf.pdf);
+                    const auto weight = powerHeuristic(sample.pdf, brdf.pdf);
                     color += throughput * brdf.throughput * sample.emission * weight / sample.pdf;
                 }
             //}
