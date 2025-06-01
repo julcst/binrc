@@ -66,9 +66,13 @@ extern "C" __global__ void __raygen__reference() {
                 const auto brdf = evalDisney(wo, sample.wi, n, baseColor, metallic, alpha, payload.transmission, inside);
                 const auto surfacePoint = hitPoint + n * copysignf(params.sceneEpsilon, cosThetaS);
                 const auto lightPoint = sample.position - sample.n * copysignf(params.sceneEpsilon, dot(sample.wi, sample.n));
-                if (!brdf.isDirac && brdf.pdf > 0.0f && !traceOcclusion(surfacePoint, lightPoint)) {
+                if (!brdf.isDirac && brdf.pdf > 1e-6f && !traceOcclusion(surfacePoint, lightPoint)) {
                     const auto weight = powerHeuristic(sample.pdf, brdf.pdf);
-                    color += throughput * brdf.throughput * sample.emission * weight / sample.pdf;
+                    const auto contribution = throughput * brdf.throughput * sample.emission * weight / sample.pdf;
+                    if (luminance(contribution) < 100.0f) // Filter out fireflies
+                        color += contribution;
+                    else
+                        printf("Warning: Light sample contribution is too high: %f %f %f %f %f\n", luminance(contribution), luminance(brdf.throughput), weight, sample.pdf, brdf.pdf);
                 }
             //}
         }
