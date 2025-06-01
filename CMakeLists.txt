@@ -64,6 +64,7 @@ set(OPTIXIR
     src/optix/train_forward.cu
 )
 add_library(optixir OBJECT ${OPTIXIR})
+add_compile_definitions(_CCCL_DISABLE_INT128 _LIBCUDACXX_HAS_NO_INT128)
 target_link_libraries(optixir CUDA::cudart CUDA::curand tiny-cuda-nn cuco)
 target_include_directories(optixir PRIVATE src ${OPTIX_DIR}/include ${CUDAToolkit_INCLUDE_DIRS})
 set_target_properties(optixir PROPERTIES
@@ -80,7 +81,7 @@ set(SRC
 
 # Add the executable
 add_executable(${PROJECT_NAME} ${SRC})
-target_link_libraries(${PROJECT_NAME} CUDA::cudart CUDA::curand framework fastgltf tiny-cuda-nn)
+target_link_libraries(${PROJECT_NAME} CUDA::cudart CUDA::curand framework fastgltf tiny-cuda-nn cuco)
 target_include_directories(${PROJECT_NAME} PUBLIC src ${OPTIX_DIR}/include ${CUDAToolkit_INCLUDE_DIRS})
 
 # Set compiler flags

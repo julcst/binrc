@@ -5,7 +5,7 @@
 
 template <typename T>
 struct SpatialHash {
-    // Key: Cell index
+    // Key: Cell index // NOTE: Maybe Morton codes improve cache efficiency?
     using Key = unsigned int;
     constexpr static Key EMPTY_KEY = 0xFFFFFFFF;
     constexpr static unsigned int MAX_GRID_SIZE = std::cbrt(1 << 32 - 1);
@@ -25,7 +25,7 @@ struct SpatialHash {
         float3 max;
         float cellSize; // = 1 / cellRes;
         float cellRes; // = 1 / cellSize;
-        cuco::static_multimap<Key, Value> map;
+        cuco::static_multimap<Key, Value>::device_view map;
         thrust::device_vector<T> values;
 
         __device__ __forceinline__ void insert(const Key& key, const Value& value) {
@@ -46,6 +46,10 @@ struct SpatialHash {
         }
 
         __device__ __forceinline__ void search(const float3& position, const float radius) const {
+            cooperative_groups::thread_block_tile<ProbeSequence::cg_size> flushingTile;
+            cooperative_groups::thread_block_tile<ProbeSequence::cg_size> probingTile;
+            uint32_t flushingCounter = 0;
+            
             const auto minCell = toCell(position - radius);
             const auto maxCell = toCell(position + radius);
             char3 currentCell;
@@ -63,6 +67,7 @@ struct SpatialHash {
                         
                         Key k = toKey(currentCell);
                         // TODO: Search
+                        // map.retrieve(flushingTile, probingTile, &flushingCounter, 
                     }
                 }
             }
