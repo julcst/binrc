@@ -11,13 +11,6 @@
 #include "sampling.cuh"
 #include "principled_brdf.cuh"
 
-struct TrainBounce {
-    float3 radiance = make_float3(0.0f);
-    float3 throughput = make_float3(1.0f);
-    float3 reflectanceFactorizationTerm = make_float3(1.0f);
-    uint index = 0;
-};
-
 constexpr uint N_RANDS = 2 + (TRAIN_DEPTH) * 9;
 
 extern "C" __global__ void __raygen__() {
@@ -36,7 +29,7 @@ extern "C" __global__ void __raygen__() {
     auto throughput = make_float3(1.0f);
     auto lightPdfIsZero = true;
     auto trainBounceIdx = 0;
-    MISSampleResult sample {ray.direction, make_float3(1.0f), 1.0f, true, true};
+    SampleResult sample {ray.direction, make_float3(1.0f), 1.0f, true, true};
 
     std::array<TrainBounce, TRAIN_DEPTH> trainBounces;
     for (uint i = 0; i < TRAIN_DEPTH; i++) {
@@ -78,13 +71,6 @@ extern "C" __global__ void __raygen__() {
         const auto metallic = payload.metallic;
         const auto baseColor = payload.baseColor; // baseColor
 
-        const auto trainInput = encodeInput(hitPoint, wo, n, payload);
-        const auto trainIdx = pushNRCTrainInput(trainInput);
-        const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
-        trainBounces[trainBounceIdx].index = trainIdx;
-        trainBounces[trainBounceIdx].reflectanceFactorizationTerm = reflectanceFactorizationTerm;
-        trainBounces[trainBounceIdx].isValid = true;
-
         if (luminance(payload.emission) > 0.0f) {
             auto weight = 1.0f;
             if (nee && !lightPdfIsZero) {
@@ -119,7 +105,6 @@ extern "C" __global__ void __raygen__() {
         sample = sampleDisney(curand_uniform(&state), {r.x, r.y}, {r.z, r.w}, wo, n, inside, payload.baseColor, payload.metallic, alpha, payload.transmission);
         
         ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
-        prevBrdfPdf = sample.pdf;
         lightPdfIsZero = sample.isDirac;
         for (uint i = 0; i <= trainBounceIdx; i++) {
             trainBounces[i].throughput *= sample.throughput;
@@ -131,9 +116,10 @@ extern "C" __global__ void __raygen__() {
         const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
         trainBounces[trainBounceIdx].index = trainIdx;
         trainBounces[trainBounceIdx].reflectanceFactorizationTerm = reflectanceFactorizationTerm;
+        trainBounces[trainBounceIdx].isValid = true;
     }
 
-    // TODO: Employ self learning
+    // TODO: Keep 1/16 of learning paths unbiased from self-learning
     if (params.flags & SELF_LEARNING_FLAG) {
         params.selfLearningBounces[i] = trainBounces;
         for (uint j = 0; j < NRC_INPUT_SIZE; j++) {
