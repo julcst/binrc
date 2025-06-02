@@ -172,6 +172,8 @@ OptixRenderer::OptixRenderer() {
     
     params.trainingInput = nrcTrainInput.data();
     params.trainingTarget = nrcTrainOutput.data();
+    params.selfLearningBounces = selfLearningBounces.data();
+    params.selfLearningQueries = selfLearningQueries.data();
 
     nrcTrainIndex.memset(0);
     params.trainingIndexPtr = nrcTrainIndex.data();
@@ -322,6 +324,27 @@ __global__ void generateDummySamples(const uint sampleCount, Params* params, con
     writeNRCOutput(params->trainingTarget, idx, make_float3(0.0f));
 }
 
+__global__ void applySelfLearning(unsigned int numQueries, std::array<TrainBounce, TRAIN_DEPTH>* selfLearningBounces, float* nrcQueries, float* nrcOutput, float* trainTarget) {
+    const auto i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= numQueries) return;
+
+    const int idxIn = i * NRC_INPUT_SIZE;
+    const int idxOut = i * NRC_OUTPUT_SIZE;
+
+    const auto bounces = selfLearningBounces[i];
+    auto inference = make_float3(nrcOutput[idxOut + 0], nrcOutput[idxOut + 1], nrcOutput[idxOut + 2]);
+    const auto diffuse = make_float3(nrcQueries[idxIn + 8], nrcQueries[idxIn + 9], nrcQueries[idxIn + 10]);
+    const auto specular = make_float3(nrcQueries[idxIn + 11], nrcQueries[idxIn + 12], nrcQueries[idxIn + 13]);
+    inference *= (diffuse + specular);
+
+    for (const auto bounce : bounces) {
+        if (!bounce.isValid) continue;
+        /*printf("Bounce %d: (%f %f %f) * Inference (%f %f %f) + Radiance (%f %f %f)\n", bounce.index, bounce.throughput.x, bounce.throughput.y, bounce.throughput.z, 
+               inference.x, inference.y, inference.z, bounce.radiance.x, bounce.radiance.y, bounce.radiance.z);*/
+        writeNRCOutput(trainTarget, bounce.index, bounce.reflectanceFactorizationTerm * (inference * bounce.throughput + bounce.radiance));
+    }
+}
+
 // TODO: Could do multiple smaller training steps per frame
 void OptixRenderer::train() {
     nrcLightSamples.memset(0);
@@ -347,6 +370,13 @@ void OptixRenderer::train() {
     if (nD) generateDummySamples<<<(nD + 255) / 256, 256>>>(nD, paramsBuffer.data(), instances.data(), instances.size(), materials.data());
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
 
+    if (params.flags & SELF_LEARNING_FLAG) {
+        nrcModel.network->inference(selfLearningQueries, selfLearningInference, false); // Do not apply EMA here
+        const auto block = 256;
+        const auto grid = (forwardSamples + block - 1) / block;
+        applySelfLearning<<<grid, block>>>(forwardSamples, selfLearningBounces.data(), selfLearningQueries.data(), selfLearningInference.data(), nrcTrainOutput.data());
+    }
+    
     params.trainingRound++;
 
     // Perform training steps

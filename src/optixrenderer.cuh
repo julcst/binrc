@@ -84,6 +84,10 @@ private:
     tcnn::GPUMatrix<float> nrcInferenceOutput;
     tcnn::GPUMemory<float3> nrcInferenceThroughput;
 
+    tcnn::GPUMemory<std::array<TrainBounce, TRAIN_DEPTH>> selfLearningBounces {NRC_BATCH_SIZE};
+    tcnn::GPUMatrix<float> selfLearningInference {NRC_OUTPUT_SIZE, NRC_BATCH_SIZE};
+    tcnn::GPUMatrix<float> selfLearningQueries {NRC_INPUT_SIZE, NRC_BATCH_SIZE};
+
     BRDFLUT brdfLUT;
 
     void generateSobol(uint offset, uint n);

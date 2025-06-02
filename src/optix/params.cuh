@@ -25,6 +25,7 @@ constexpr uint TRAINING_NEE_FLAG = 1 << 2;
 constexpr uint INFERENCE_NEE_FLAG = 1 << 3;
 constexpr uint FORWARD_RR_FLAG = 1 << 4;
 constexpr uint BACKWARD_RR_FLAG = 1 << 5;
+constexpr uint SELF_LEARNING_FLAG = 1 << 6;
 constexpr uint DIFFUSE_ENCODING_FLAG = 1 << 7;
 
 // TODO: Use half instead of float
@@ -117,6 +118,15 @@ struct Instance {
     float cdf; // CDF of sampling the instance
 };
 
+// TODO: Make more compact
+struct TrainBounce {
+    float3 radiance = make_float3(0.0f);
+    float3 throughput = make_float3(1.0f);
+    float3 reflectanceFactorizationTerm = make_float3(0.0f);
+    uint index = 0;
+    bool isValid = false; 
+};
+
 // NOTE: Because this includes pointers this should be zero-initialized using cudaMemset
 struct Params {
     float4* image; // A copied pointer to the image buffer
@@ -153,6 +163,9 @@ struct Params {
     float* inferenceInput;
     float* inferenceOutput;
     float3* inferenceThroughput;
+
+    std::array<TrainBounce, TRAIN_DEPTH>* selfLearningBounces;
+    float* selfLearningQueries;
 
     cudaTextureObject_t brdfLUT;
 };

@@ -144,6 +144,7 @@ void MainApp::buildImGui() {
     if (ImGui::CollapsingHeader("NRC", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Checkbox("Enable Training", &renderer.enableTraining);
         ImGui::FlagCheckbox("Enable Diffuse Encoding", &renderer.params.flags, DIFFUSE_ENCODING_FLAG);
+        ImGui::FlagCheckbox("Enable Self Learning", &renderer.params.flags, SELF_LEARNING_FLAG);
         ImGui::SliderFloat("Training Direction", &renderer.trainingDirection, 0.0f, 1.0f, "%.2f");
         ImGui::PlotLines("Loss", renderer.lossHistory.data(), renderer.lossHistory.size());
         if (ImGui::Button("Reset NRC")) {
