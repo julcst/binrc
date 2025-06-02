@@ -69,10 +69,7 @@ extern "C" __global__ void __raygen__reference() {
                 if (!brdf.isDirac && brdf.pdf > 1e-6f && !traceOcclusion(surfacePoint, lightPoint)) {
                     const auto weight = powerHeuristic(sample.pdf, brdf.pdf);
                     const auto contribution = throughput * brdf.throughput * sample.emission * weight / sample.pdf;
-                    if (luminance(contribution) < 100.0f) // Filter out fireflies
-                        color += contribution;
-                    else
-                        printf("Warning: Light sample contribution is too high: %f %f %f %f %f\n", luminance(contribution), luminance(brdf.throughput), weight, sample.pdf, brdf.pdf);
+                    color += contribution;
                 }
             //}
         }

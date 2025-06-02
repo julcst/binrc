@@ -279,12 +279,12 @@ __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, c
         // if (isnegative(pdfDiffuse)) printf("pdfDiffuse is negative: %f %f %f %f %f\n", pdfDiffuse, NdotV, NdotL, lambdaL, lambdaV);
     } else if (pTransmission > 0.0f) {
         // Transmission
-        const auto transmission = albedo * (1.0f - F) * safediv(transmissiveness * D * abs(HdotL * HdotV), invG * NdotV * NdotL * pow2(HdotL + HdotV / eta));
+        const auto transmission = albedo * (1.0f - F) * safediv(transmissiveness * D * abs(HdotL * HdotV), max(invG * NdotV * NdotL * pow2(HdotL + HdotV / eta), 1e-3f)); // Prevent numerical artifacts
         throughput += transmission;
         const auto pdfTransmission = safediv(D, invG1 * pow2(HdotL + HdotV / eta)); // Missing * abs(HdotL) ?
         pdf += pTransmission * pdfTransmission;
 
-        // if (luminance(transmission) > 100.0f) printf("Transmission is larger than 100: T %f %f %f pdf %f D %f invG %f NV %f NL %f HV %f HL %f\n", transmission.x, transmission.y, transmission.z, pdfTransmission, D, invG, NdotV, NdotL, HdotV, HdotL);
+        // if (luminance(transmission) > 100.0f) printf("Transmission is larger than 100: T %f %f %f pdf %f D %f invG %f NV %f NL %f pow2(HdotL + HdotV / eta) %f HV %f HL %f\n", transmission.x, transmission.y, transmission.z, pdfTransmission, D, invG, NdotV, NdotL, pow2(HdotL + HdotV / eta), HdotV, HdotL);
         // if (isnegative(transmission)) printf("Transmission is negative: F %f %f %f D %f G %f HdotL %f HdotV %f NdotL %f NdotV %f NdotH %f\n", F.x, F.y, F.z, D, G, HdotL, HdotV, NdotL, NdotV, NdotH);
         // if (isnegative(pdfTransmission)) printf("pdfTransmission is negative: %f %f %f %f %f %f %f\n", pdfTransmission, NdotV, NdotL, HdotL, HdotV, lambdaL, lambdaV);
     }
