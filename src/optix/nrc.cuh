@@ -18,12 +18,14 @@ __device__ inline NRCInput encodeInput(const float3& position, const float3& wo,
     };
 }
 
-__device__ inline NRCInput encodeInput(const float3& position, const float3& wo, const float3& n, const Payload& payload) {
+__device__ inline NRCInput encodeInput(const float3& position, bool diffuseEncoding, const float3& wo, const Payload& payload) {
     const auto F0 = mix(make_float3(0.04f), payload.baseColor, payload.metallic);
-    const auto lut = tex2D<float4>(params.brdfLUT, payload.roughness, dot(n, wo));
+    const auto NdotV = dot(payload.normal, wo);
+    const auto n = NdotV < 0.0f ? -payload.normal : payload.normal;
+    const auto lut = tex2D<float4>(params.brdfLUT, payload.roughness, abs(NdotV));
     const auto specular = F0 * lut.x + lut.y;
     const auto albedo = (1.0f - payload.metallic) * payload.baseColor;
-    return encodeInput(position, wo, n, albedo, specular, payload.roughness * payload.roughness);
+    return encodeInput(position, diffuseEncoding ? make_float3(NAN) : wo, n, albedo, specular, payload.roughness * payload.roughness);
 }
 
 __device__ inline void writeNRCInput(float* to, const NRCInput& input) {

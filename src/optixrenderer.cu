@@ -80,13 +80,6 @@ OptixRenderer::OptixRenderer() {
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
             .raygen = {
-                .module = modules[optixir::COMBINED],
-                .entryFunctionName = "__raygen__combined",
-            },
-        },
-        OptixProgramGroupDesc {
-            .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
-            .raygen = {
                 .module = modules[optixir::REFERENCE],
                 .entryFunctionName = "__raygen__reference",
             },
@@ -139,7 +132,6 @@ OptixRenderer::OptixRenderer() {
 
     // Set up shader binding table
     std::vector<RaygenRecord> raygenRecord(sbts.size());
-    check(optixSbtRecordPackHeader(programGroups[COMBINED], &raygenRecord[COMBINED]));
     check(optixSbtRecordPackHeader(programGroups[REFERENCE], &raygenRecord[REFERENCE]));
     check(optixSbtRecordPackHeader(programGroups[TRAIN_FORWARD], &raygenRecord[TRAIN_FORWARD]));
     check(optixSbtRecordPackHeader(programGroups[TRAIN_BACKWARD], &raygenRecord[TRAIN_BACKWARD]));

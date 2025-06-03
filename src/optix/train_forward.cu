@@ -61,11 +61,7 @@ extern "C" __global__ void __raygen__() {
         for (uint i = 0; i <= trainBounceIdx; i++) {
             trainBounces[i].throughput *= sample.throughput;
         }
-
-        auto n = payload.normal;
         const auto wo = -ray.direction;
-        const auto inside = dot(n, wo) < 0.0f;
-        n = inside ? -n : n;
         const auto hitPoint = ray.origin + payload.t * ray.direction;
         const auto alpha = payload.roughness * payload.roughness;
         const auto metallic = payload.metallic;
@@ -75,7 +71,7 @@ extern "C" __global__ void __raygen__() {
             auto weight = 1.0f;
             if (nee && !lightPdfIsZero) {
                 // NOTE: Maybe calculating the prevBrdfPdf here only when necessary is faster
-                const auto lightPdf = lightPdfUniform(wo, payload.t, n, payload.area);
+                const auto lightPdf = lightPdfUniform(wo, payload.t, payload.normal, payload.area);
                 weight = balanceHeuristic(sample.pdf, lightPdf);
             }
             for (uint i = 0; i < trainBounceIdx; i++) {
@@ -86,10 +82,9 @@ extern "C" __global__ void __raygen__() {
         // Next event estimation
         if (nee) {
             const auto sample = sampleLight(curand_uniform(&state), {curand_uniform(&state), curand_uniform(&state)}, hitPoint);
-            const auto cosThetaS = dot(sample.wi, n);
             //if (abs(cosThetaS) > 0.0f && abs(sample.cosThetaL) > 0.0f) {
-                const auto brdf = evalDisney(wo, sample.wi, n, baseColor, metallic, alpha, payload.transmission, inside);
-                const auto surfacePoint = hitPoint + n * copysignf(params.sceneEpsilon, cosThetaS);
+                const auto brdf = evalDisney(wo, sample.wi, payload.normal, baseColor, metallic, alpha, payload.transmission);
+                const auto surfacePoint = hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.wi, payload.normal));
                 const auto lightPoint = sample.position - sample.n * copysignf(params.sceneEpsilon, dot(sample.wi, sample.n));
                 if (!brdf.isDirac && brdf.pdf > 0.0f && !traceOcclusion(surfacePoint, lightPoint)) {
                     const auto weight = balanceHeuristic(sample.pdf, brdf.pdf);
@@ -102,16 +97,16 @@ extern "C" __global__ void __raygen__() {
         }
 
         const auto r = curand_uniform4(&state);
-        sample = sampleDisney(curand_uniform(&state), {r.x, r.y}, {r.z, r.w}, wo, n, inside, payload.baseColor, payload.metallic, alpha, payload.transmission);
+        sample = sampleDisney(curand_uniform(&state), {r.x, r.y}, {r.z, r.w}, wo, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);
         
-        ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
+        ray = Ray{hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.direction, payload.normal)), sample.direction};
         lightPdfIsZero = sample.isDirac;
         for (uint i = 0; i <= trainBounceIdx; i++) {
             trainBounces[i].throughput *= sample.throughput;
         }
         throughput *= sample.throughput;
 
-        const auto trainInput = encodeInput(hitPoint, !sample.isSpecular && (params.flags & DIFFUSE_ENCODING_FLAG) ? make_float3(NAN) : wo, n, payload);
+        const auto trainInput = encodeInput(hitPoint, !sample.isSpecular && (params.flags & DIFFUSE_ENCODING_FLAG), wo, payload);
         const auto trainIdx = pushNRCTrainInput(trainInput);
         const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
         trainBounces[trainBounceIdx].index = trainIdx;

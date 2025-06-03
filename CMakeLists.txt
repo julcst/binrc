@@ -56,12 +56,12 @@ FetchContent_MakeAvailable(framework fastgltf tinycudann cuco)
 
 # Build the OptiX IR
 set(OPTIXIR
-    src/optix/combined.cu
     src/optix/hit.cu
     src/optix/inference.cu
     src/optix/reference.cu
     src/optix/train_backward.cu
     src/optix/train_forward.cu
+    src/optix/sppm_rtx.cu
 )
 add_library(optixir OBJECT ${OPTIXIR})
 add_compile_definitions(_CCCL_DISABLE_INT128 _LIBCUDACXX_HAS_NO_INT128)

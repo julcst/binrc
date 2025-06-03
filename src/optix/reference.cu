@@ -38,16 +38,13 @@ extern "C" __global__ void __raygen__reference() {
             break; // Skybox
         }
 
-        auto n = payload.normal;
         const auto wo = -ray.direction;
-        const auto inside = dot(n, wo) < 0.0f;
-        n = inside ? -n : n;
 
         if (luminance(payload.emission) > 0.0f) {
             auto weight = 1.0f;
             if (nee && !lightPdfIsZero) {
                 // NOTE: Maybe calculating the prevBrdfPdf here only when necessary is faster
-                const auto lightPdf = lightPdfUniform(wo, payload.t, n, payload.area);
+                const auto lightPdf = lightPdfUniform(wo, payload.t, payload.normal, payload.area);
                 weight = powerHeuristic(prevBrdfPdf, lightPdf);
             }
             color += throughput * payload.emission * weight;
@@ -61,22 +58,21 @@ extern "C" __global__ void __raygen__reference() {
         // Next event estimation
         if (nee) {
             const auto sample = sampleLight(RND_LSRC, RND_LSAMP, hitPoint);
-            const auto cosThetaS = dot(sample.wi, n);
             //if (abs(cosThetaS) > 0.0f && abs(sample.cosThetaL) > 0.0f) {
-                const auto brdf = evalDisney(wo, sample.wi, n, baseColor, metallic, alpha, payload.transmission, inside);
-                const auto surfacePoint = hitPoint + n * copysignf(params.sceneEpsilon, cosThetaS);
-                const auto lightPoint = sample.position - sample.n * copysignf(params.sceneEpsilon, dot(sample.wi, sample.n));
-                if (!brdf.isDirac && brdf.pdf > 1e-6f && !traceOcclusion(surfacePoint, lightPoint)) {
-                    const auto weight = powerHeuristic(sample.pdf, brdf.pdf);
-                    const auto contribution = throughput * brdf.throughput * sample.emission * weight / sample.pdf;
-                    color += contribution;
-                }
+            const auto brdf = evalDisney(wo, sample.wi, payload.normal, baseColor, metallic, alpha, payload.transmission);
+            const auto surfacePoint = hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.wi, payload.normal));
+            const auto lightPoint = sample.position - sample.n * copysignf(params.sceneEpsilon, dot(sample.wi, sample.n));
+            if (!brdf.isDirac && brdf.pdf > 0.0f && !traceOcclusion(surfacePoint, lightPoint)) {
+                const auto weight = powerHeuristic(sample.pdf, brdf.pdf);
+                const auto contribution = throughput * brdf.throughput * sample.emission * weight / sample.pdf;
+                color += contribution;
+            }
             //}
         }
 
-        const auto sample = sampleDisney(RND_BSDF, RND_MICROFACET, RND_DIFFUSE, wo, n, inside, payload.baseColor, payload.metallic, alpha, payload.transmission);
+        const auto sample = sampleDisney(RND_BSDF, RND_MICROFACET, RND_DIFFUSE, wo, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);
         
-        ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
+        ray = Ray{hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.direction, payload.normal)), sample.direction};
         throughput *= sample.throughput;
         prevBrdfPdf = sample.pdf;
         lightPdfIsZero = sample.isDirac;

@@ -199,101 +199,6 @@ __device__ constexpr Sample sampleBrentBurley(const float2& rand, const float3& 
     return {wi, diffuse};
 }
 
-struct BRDFResult {
-    float3 throughput;
-    float pdf;
-    bool isDirac;
-};
-
-__device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, const float3& n, const float3& baseColor, float metallic, float alpha, float transmissiveness, bool inside) {
-    const auto F0 = mix(make_float3(0.04f), baseColor, metallic); // TODO: Is F0 different inside and outside?
-    const auto albedo = (1.0f - metallic) * baseColor;
-    const auto alpha2 = alpha * alpha;
-    auto NdotV = dot(n, wo);
-    auto NdotL = dot(n, wi);
-    const auto sameHemisphere = NdotV * NdotL >= 0.0f;
-    //const auto inside = dot(n, wo) < 0.0f;
-    const auto eta = inside ? 1.5f : 1.0f / 1.5f;
-
-    float3 wm = make_float3(0.0f);
-    if (sameHemisphere) {
-        wm = normalize(wo + wi); // Microfacet normal in reflection case
-    } else {
-        wm = normalize(wo + wi / eta); // Microfacet normal in transmission case
-        if (dot(wm, n) < 0.0f) {
-            wm = -wm; // TODO: Check if this is correct
-        }
-    }
-    const auto NdotH = abs(dot(n, wm));
-    const auto HdotV = dot(wm, wo);
-    const auto HdotL = dot(wm, wi);
-
-    //if (NdotL <= 0.0f) return {{1.0f}, 1.0f};
-
-    const auto wSpecular = luminance(F_SchlickApprox(abs(NdotV), F0));
-    const auto wDiffuse = luminance(albedo);
-    const auto pSpecular = safediv(wSpecular, wSpecular + wDiffuse);
-    const auto pDiffuse = (1.0f - pSpecular) * (1.0f - transmissiveness);
-    const auto pTransmission = (1.0f - pSpecular) * transmissiveness;
-
-    const auto isDirac = alpha == 0.0f && wDiffuse == 0.0f;
-
-    if (NdotL == 0.0f || NdotV == 0.0f || dot(wm, wm) == 0.0f) return {{make_float3(0.0f)}, 0.0f, isDirac};
-    // Discard backfacing samples
-    if (HdotL * NdotL < 0.0f || HdotV * NdotV < 0.0f) return {{make_float3(0.0f)}, 0.0f, isDirac}; // TODO: Check if this is correct
-
-    NdotV = abs(NdotV);
-    NdotL = abs(NdotL); // Always abs?
-
-    const auto F = F_SchlickApprox(abs(HdotV), F0);
-    const auto D = D_TrowbridgeReitz(NdotH, alpha2);
-    const auto lambdaL = Lambda_TrowbridgeReitz(HdotL, alpha2); // abs?
-    const auto lambdaV = Lambda_TrowbridgeReitz(HdotV, alpha2); // abs?
-    // const auto G1 = 1.0f / (1.0f + lambdaV);
-    // const auto G = 1.0f / (1.0f + lambdaL + lambdaV);
-    const auto invG1 = 1.0f + lambdaV;
-    const auto invG = 1.0f + lambdaL + lambdaV;
-
-    auto pdf = 0.0f;
-    auto throughput = make_float3(0.0f);
-
-    if (sameHemisphere) {
-        // Outgoing and incoming on same hemisphere => Diffuse + Specular
-        const auto specular = F * safediv(D, invG * 4.0f * NdotV); // TODO: Handle dirac
-        throughput += specular;
-        // NOTE: D_VNDF = D * G1 * HdotV / NdotV
-        const auto pdfSpecular = safediv(D, invG1 * 4.0f * NdotV); // = D_VNDF / (4 * HdotV)
-        pdf += pSpecular * pdfSpecular;
-
-        // This would be Burley's diffuse but it is not energy conserving
-        // const auto FD90 = 0.5f + 2.0f * alpha * HdotV * HdotV;
-        // const auto response = (1.0f + (FD90 - 1.0f) * pow5(1.0f - cNdotL)) * (1.0f + (FD90 - 1.0f) * pow5(1.0f - NdotV));
-        const auto diffuse = albedo * ((1.0f - transmissiveness) * NdotL * INV_PI);
-        throughput += diffuse;
-        const auto pdfDiffuse = NdotL * INV_PI;
-        pdf += pDiffuse * pdfDiffuse;
-
-        // if (isnegative(specular)) printf("Specular is negative: F %f %f %f D %f G %f NdotL %f NdotV %f NdotH %f\n", F.x, F.y, F.z, D, G, NdotL, NdotV, NdotH);
-        // if (isnegative(diffuse)) printf("Diffuse is negative: F %f %f %f D %f G %f NdotL %f NdotV %f NdotH %f\n", F.x, F.y, F.z, D, G, NdotL, NdotV, NdotH);
-        // if (isnegative(pdfSpecular)) printf("pdfSpecular is negative: %f %f %f %f %f\n", pdfSpecular, NdotV, NdotL, lambdaL, lambdaV);
-        // if (isnegative(pdfDiffuse)) printf("pdfDiffuse is negative: %f %f %f %f %f\n", pdfDiffuse, NdotV, NdotL, lambdaL, lambdaV);
-    } else if (pTransmission > 0.0f) {
-        // Transmission
-        const auto transmission = albedo * (1.0f - F) * safediv(transmissiveness * D * abs(HdotL * HdotV), max(invG * NdotV * NdotL * pow2(HdotL + HdotV / eta), 1e-3f)); // Prevent numerical artifacts
-        throughput += transmission;
-        const auto pdfTransmission = safediv(D, invG1 * pow2(HdotL + HdotV / eta)); // Missing * abs(HdotL) ?
-        pdf += pTransmission * pdfTransmission;
-
-        // if (luminance(transmission) > 100.0f) printf("Transmission is larger than 100: T %f %f %f pdf %f D %f invG %f NV %f NL %f pow2(HdotL + HdotV / eta) %f HV %f HL %f\n", transmission.x, transmission.y, transmission.z, pdfTransmission, D, invG, NdotV, NdotL, pow2(HdotL + HdotV / eta), HdotV, HdotL);
-        // if (isnegative(transmission)) printf("Transmission is negative: F %f %f %f D %f G %f HdotL %f HdotV %f NdotL %f NdotV %f NdotH %f\n", F.x, F.y, F.z, D, G, HdotL, HdotV, NdotL, NdotV, NdotH);
-        // if (isnegative(pdfTransmission)) printf("pdfTransmission is negative: %f %f %f %f %f %f %f\n", pdfTransmission, NdotV, NdotL, HdotL, HdotV, lambdaL, lambdaV);
-    }
-    
-    // if (HdotV - 1.0f > 1e-6f) printf("HdotV is greater than 1: %f wm %f %f %f V %f %f %f\n", HdotV, wm.x, wm.y, wm.z, wo.x, wo.y, wo.z);
-
-    return {throughput, pdf, isDirac};
-}
-
 struct MaterialProperties {
     float3 F0;
     float3 albedo;
@@ -359,8 +264,123 @@ __device__ constexpr float3 calcMicrofacetNormal(const float3& wo, const float3&
     }
 }
 
-__device__ constexpr BRDFResult evalDisneyWeighted(const float3& wo, const float3& wi, const float3& wm, const float3& n, const MaterialProperties& mat, const DisneyWeights& weights, bool inside) {
-    const auto eta = inside ? 1.5f : 1.0f / 1.5f;
+struct BRDFResult {
+    float3 throughput;
+    float pdf;
+    bool isDirac;
+};
+
+__device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, const float3& wm, const float3& n, const MaterialProperties& mat, const DisneyWeights& weights, float eta) {
+    auto NdotV = dot(n, wo);
+    auto NdotL = dot(n, wi);
+    const auto sameHemisphere = NdotV * NdotL >= 0.0f;
+
+    const auto NdotH = abs(dot(n, wm));
+    const auto HdotV = dot(wm, wo);
+    const auto HdotL = dot(wm, wi);
+
+    const auto isDirac = mat.alpha2 == 0.0f && weights.diffuse == 0.0f;
+
+    if (NdotL == 0.0f || NdotV == 0.0f || dot(wm, wm) == 0.0f) return {{make_float3(0.0f)}, 0.0f, isDirac};
+    // Discard backfacing samples
+    if (HdotL * NdotL < 0.0f || HdotV * NdotV < 0.0f) return {{make_float3(0.0f)}, 0.0f, isDirac};
+
+    NdotV = abs(NdotV);
+    NdotL = abs(NdotL); // Always abs?
+
+    const auto F = F_SchlickApprox(abs(HdotV), mat.F0);
+    const auto D = D_TrowbridgeReitz(NdotH, mat.alpha2);
+    const auto lambdaL = Lambda_TrowbridgeReitz(HdotL, mat.alpha2); // abs?
+    const auto lambdaV = Lambda_TrowbridgeReitz(HdotV, mat.alpha2); // abs?
+    // const auto G1 = 1.0f / (1.0f + lambdaV);
+    // const auto G = 1.0f / (1.0f + lambdaL + lambdaV);
+    const auto invG1 = 1.0f + lambdaV;
+    const auto invG = 1.0f + lambdaL + lambdaV;
+
+    auto pdf = 0.0f;
+    auto throughput = make_float3(0.0f);
+
+    if (sameHemisphere) {
+        // Outgoing and incoming on same hemisphere => Diffuse + Specular
+        const auto specular = F * safediv(D, invG * 4.0f * NdotV); // TODO: Handle dirac
+        throughput += specular;
+        // NOTE: D_VNDF = D * G1 * HdotV / NdotV
+        const auto pdfSpecular = safediv(D, invG1 * 4.0f * NdotV); // = D_VNDF / (4 * HdotV)
+        pdf += weights.specular * pdfSpecular;
+
+        const auto diffuse = mat.albedo * ((1.0f - mat.transmission) * NdotL * INV_PI);
+        throughput += diffuse;
+        const auto pdfDiffuse = NdotL * INV_PI;
+        pdf += weights.diffuse * pdfDiffuse;
+    } else if (weights.transmission > 0.0f) {
+        // Transmission
+        const auto transmission = mat.albedo * (1.0f - F) * safediv(mat.transmission * D * abs(HdotL * HdotV), max(invG * NdotV * NdotL * pow2(HdotL + HdotV / eta), 1e-3f)); // Prevent numerical artifacts
+        throughput += transmission;
+        const auto pdfTransmission = safediv(D, invG1 * pow2(HdotL + HdotV / eta));
+        pdf += weights.transmission * pdfTransmission;
+    }
+
+    return {throughput, pdf, isDirac};
+}
+
+__device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, const float3& geometryN, const float3& baseColor, float metallic, float alpha, float transmissiveness) {
+    const auto inside = dot(geometryN, wo) < 0.0f;
+    const auto n = inside ? -geometryN : geometryN; // Flip normal if inside
+    const auto eta = inside ? 1.5f : 1.0f / 1.5f; // Index of refraction
+    const auto mat = calcMaterialProperties(baseColor, metallic, alpha, transmissiveness);
+    const auto weights = calcDisneyWeights(mat, abs(dot(n, wo)));
+    return evalDisney(wo, wi, calcMicrofacetNormal(wo, wi, n, eta), n, mat, weights, eta);
+}
+
+__device__ constexpr float3 evalDisneyBRDFOnly(const float3& wo, const float3& wi, const float3& wm, const float3& n, const MaterialProperties& mat, float eta) {
+    auto NdotV = dot(n, wo);
+    auto NdotL = dot(n, wi);
+    const auto sameHemisphere = NdotV * NdotL >= 0.0f;
+
+    const auto NdotH = abs(dot(n, wm));
+    const auto HdotV = dot(wm, wo);
+    const auto HdotL = dot(wm, wi);
+
+    if (NdotL == 0.0f || NdotV == 0.0f || dot(wm, wm) == 0.0f) return {0.0f};
+    // Discard backfacing samples
+    if (HdotL * NdotL < 0.0f || HdotV * NdotV < 0.0f) return {0.0f};
+
+    NdotV = abs(NdotV);
+    NdotL = abs(NdotL); // Always abs?
+
+    const auto F = F_SchlickApprox(abs(HdotV), mat.F0);
+    const auto D = D_TrowbridgeReitz(NdotH, mat.alpha2);
+    const auto lambdaL = Lambda_TrowbridgeReitz(HdotL, mat.alpha2); // abs?
+    const auto lambdaV = Lambda_TrowbridgeReitz(HdotV, mat.alpha2); // abs?
+    const auto invG = 1.0f + lambdaL + lambdaV;
+
+    auto throughput = make_float3(0.0f);
+
+    if (sameHemisphere) {
+        // Outgoing and incoming on same hemisphere => Diffuse + Specular
+        const auto specular = F * safediv(D, invG * 4.0f * NdotV); // TODO: Handle dirac
+        throughput += specular;
+
+        const auto diffuse = mat.albedo * ((1.0f - mat.transmission) * NdotL * INV_PI);
+        throughput += diffuse;
+    } else if (mat.transmission > 0.0f) {
+        // Transmission
+        const auto transmission = mat.albedo * (1.0f - F) * safediv(mat.transmission * D * abs(HdotL * HdotV), max(invG * NdotV * NdotL * pow2(HdotL + HdotV / eta), 1e-3f)); // Prevent numerical artifacts
+        throughput += transmission;
+    }
+
+    return throughput;
+}
+
+__device__ constexpr float3 evalDisneyBRDFOnly(const float3& wo, const float3& wi, const float3& geometryN, const MaterialProperties& mat) {
+    const auto inside = dot(geometryN, wo) < 0.0f;
+    const auto n = inside ? -geometryN : geometryN; // Flip normal if inside
+    const auto eta = inside ? 1.5f : 1.0f / 1.5f; // Index of refraction
+    return evalDisneyBRDFOnly(wo, wi, calcMicrofacetNormal(wo, wi, n, eta), n, mat, eta);
+}
+
+
+__device__ constexpr BRDFResult evalDisneyWeighted(const float3& wo, const float3& wi, const float3& wm, const float3& n, const MaterialProperties& mat, const DisneyWeights& weights, float eta) {
     const auto sameHemisphere = dot(n, wo) * dot(n, wi) >= 0.0f;
     const auto NdotH = abs(dot(n, wm));
     const auto HdotV = abs(dot(wm, wo));
@@ -449,7 +469,10 @@ struct SampleResult {
     bool isSpecular;
 };
 
-__device__ constexpr SampleResult sampleDisney(const float rType, const float2& rMicrofacet, const float2& rDiffuse, const float3& wo, const float3& n, const bool inside, const float3& baseColor, const float metallic, const float alpha, const float transmission) {
+__device__ constexpr SampleResult sampleDisney(const float rType, const float2& rMicrofacet, const float2& rDiffuse, const float3& wo, const float3& geometryN, const float3& baseColor, const float metallic, const float alpha, const float transmission) {
+    const auto inside = dot(geometryN, wo) < 0.0f;
+    const auto n = inside ? -geometryN : geometryN; // Flip normal if inside
+    
     const auto mat = calcMaterialProperties(baseColor, metallic, alpha, transmission);
     const auto eta = inside ? 1.5f : 1.0f / 1.5f; // Index of refraction
     const auto weights = calcDisneyWeights(mat, dot(n, wo)); // abs?
@@ -476,7 +499,7 @@ __device__ constexpr SampleResult sampleDisney(const float rType, const float2& 
         }
     }
 
-    const auto eval = evalDisneyWeighted(wo, wi, wm, n, mat, weights, inside);
+    const auto eval = evalDisneyWeighted(wo, wi, wm, n, mat, weights, eta);
 
     return {wi, eval.throughput, eval.pdf, eval.isDirac, isSpecular};
 }

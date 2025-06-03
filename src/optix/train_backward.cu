@@ -44,25 +44,22 @@ extern "C" __global__ void __raygen__() {
 
         if (isinf(payload.t)) break; // Skybox
 
-        auto n = payload.normal;
         const auto wi = -ray.direction;
-        const auto inside = dot(n, wi) < 0.0f;
-        n = inside ? -n : n;
         const auto hitPoint = ray.origin + payload.t * ray.direction;
         const auto alpha = payload.roughness * payload.roughness;
 
         const auto r = curand_uniform4(&state);
         // FIXME: Wrong IOR
-        const auto sample = sampleDisney(curand_uniform(&state), {r.x, r.y}, {r.z, r.w}, wi, n, inside, payload.baseColor, payload.metallic, alpha, payload.transmission);
+        const auto sample = sampleDisney(curand_uniform(&state), {r.x, r.y}, {r.z, r.w}, wi, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);
 
         radiance *= sample.throughput;
 
         // printf("Sample throughput: %f\n", pow2(sample.throughput));
 
-        ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
+        ray = Ray{hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.direction, payload.normal)), sample.direction};
 
         //if (depth > 1) {
-            const auto trainInput = encodeInput(hitPoint, !sample.isSpecular && (params.flags & DIFFUSE_ENCODING_FLAG) ? make_float3(NAN) : sample.direction, n, payload);
+            const auto trainInput = encodeInput(hitPoint, !sample.isSpecular && (params.flags & DIFFUSE_ENCODING_FLAG), sample.direction, payload);
             const auto trainIdx = pushNRCTrainInput(trainInput);
             const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
             writeNRCOutput(params.trainingTarget, trainIdx, reflectanceFactorizationTerm * radiance);

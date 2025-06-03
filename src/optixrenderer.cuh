@@ -23,7 +23,6 @@ using namespace glm;
 #include "brdflut.cuh"
 
 enum ProgramGroup {
-    COMBINED,
     REFERENCE,
     TRAIN_FORWARD,
     TRAIN_BACKWARD,
@@ -32,7 +31,7 @@ enum ProgramGroup {
     CLOSEST_HIT,
 };
 
-constexpr size_t RAYGEN_COUNT = 5;
+constexpr size_t RAYGEN_COUNT = 4;
 constexpr size_t PROGRAM_GROUP_COUNT = RAYGEN_COUNT + 2;
 
 class OptixRenderer {

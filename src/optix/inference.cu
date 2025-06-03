@@ -26,7 +26,6 @@ extern "C" __global__ void __raygen__() {
     auto prevBrdfPdf = 1.0f;
     auto lightPdfIsZero = true;
     auto hitPoint = ray.origin;
-    auto n = make_float3(0.0f);
     auto wo = ray.direction;
     auto diffuse = false;
 
@@ -51,17 +50,14 @@ extern "C" __global__ void __raygen__() {
 
         payload = next;
         isPayloadValid = true;
-        n = payload.normal;
         wo = -ray.direction;
-        const auto inside = dot(n, wo) < 0.0f;
-        n = inside ? -n : n;
 
         // Emission
         if (luminance(payload.emission) > 0.0f) {
             auto weight = 1.0f;
             if (nee && !lightPdfIsZero) {
                 // NOTE: Maybe calculating the prevBrdfPdf here only when necessary is faster
-                const auto lightPdf = lightPdfUniform(wo, payload.t, n, payload.area);
+                const auto lightPdf = lightPdfUniform(wo, payload.t, payload.normal, payload.area);
                 weight = balanceHeuristic(prevBrdfPdf, lightPdf);
             }
             inferencePlus += throughput * payload.emission * weight;
@@ -73,10 +69,9 @@ extern "C" __global__ void __raygen__() {
         // Next event estimation
         if (nee) {
             const auto sample = sampleLight(RND_LSRC, RND_LSAMP, hitPoint);
-            const auto cosThetaS = dot(sample.wi, n);
             //if (payload.transmission > 0.0f || cosThetaS > 0.0f) {
-                const auto brdf = evalDisney(wo, sample.wi, n, payload.baseColor, payload.metallic, alpha, payload.transmission, inside);
-                const auto surfacePoint = hitPoint + n * copysignf(params.sceneEpsilon, cosThetaS);
+                const auto brdf = evalDisney(wo, sample.wi, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);
+                const auto surfacePoint = hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.wi, payload.normal));
                 const auto lightPoint = sample.position - sample.n * copysignf(params.sceneEpsilon, dot(sample.wi, sample.n));
                 if (!brdf.isDirac && brdf.pdf > 0.0f && !traceOcclusion(surfacePoint, lightPoint)) {
                     const auto weight = balanceHeuristic(sample.pdf, brdf.pdf);
@@ -86,10 +81,10 @@ extern "C" __global__ void __raygen__() {
         }
 
         // Sampling
-        const auto sample = sampleDisney(RND_BSDF, RND_MICROFACET, RND_DIFFUSE, wo, n, inside, payload.baseColor, payload.metallic, alpha, payload.transmission);
+        const auto sample = sampleDisney(RND_BSDF, RND_MICROFACET, RND_DIFFUSE, wo, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);
         diffuse = !sample.isSpecular;
 
-        ray = Ray{hitPoint + n * copysignf(params.sceneEpsilon, dot(sample.direction, n)), sample.direction};
+        ray = Ray{hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.direction, payload.normal)), sample.direction};
         prevThroughput = throughput;
         throughput *= sample.throughput;
         prevBrdfPdf = sample.pdf;
@@ -100,7 +95,7 @@ extern "C" __global__ void __raygen__() {
         params.inferenceThroughput[i] = make_float3(0.0f);
     } else {
         // FIXME: Diffuse encoding too bright
-        const auto nrcQuery = encodeInput(hitPoint, diffuse && (params.flags & DIFFUSE_ENCODING_FLAG) ? make_float3(NAN) : wo, n, payload);
+        const auto nrcQuery = encodeInput(hitPoint, diffuse && (params.flags & DIFFUSE_ENCODING_FLAG), wo, payload);
         writeNRCInput(params.inferenceInput, i, nrcQuery);
         params.inferenceThroughput[i] = prevThroughput;
     }
