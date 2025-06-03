@@ -28,6 +28,7 @@
 #include "optix/params.cuh"
 #include "cudamath.cuh"
 #include "optix/sampling.cuh"
+#include "optix/sppm_rtx.cuh"
 
 OptixRenderer::OptixRenderer() {
     check(cudaFree(nullptr)); // Initialize CUDA for this device on this thread
@@ -311,7 +312,7 @@ __global__ void generateDummySamples(const uint sampleCount, Params* params, con
     const auto wo = buildTBN(surf.normal) * sampleCosineHemisphere({rand.w, curand_uniform(&state)});
 
     const auto input = encodeInput(params, wo, surf, params->brdfLUT);
-    const auto idx = atomicAdd(params->trainingIndexPtr, 1u) % NRC_BATCH_SIZE;
+    const auto idx = atomicAdd(params->trainingIndexPtr, 1u) % NRC_BATCH_SIZE; // TODO: This is a bad and unnecessary use of atomic operations
     writeNRCInput(params->trainingInput, idx, input);
     writeNRCOutput(params->trainingTarget, idx, make_float3(0.0f));
 }

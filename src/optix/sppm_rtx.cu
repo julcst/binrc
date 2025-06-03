@@ -7,7 +7,7 @@
 struct Photon {
     float3 pos; // Position of the photon
     float3 wi; // Incoming direction of the photon
-    float3 irradiance; // Incoming irradiance
+    float3 flux; // Incoming flux (irradiance)
 };
 
 struct PhotonQuery {
@@ -16,22 +16,27 @@ struct PhotonQuery {
     float3 n; // Normal at the query position
     MaterialProperties mat; // Material properties at the query position
     float radius; // Radius of accumulation TODO: Radius reduction
-    float3 radiance = {0.0f}; // Accumulated outgoing radiance
+    float3 flux = {0.0f}; // Accumulated outgoing flux
     uint32_t count = 0; // Number of photons found
+
+    float3 calcRadiance() const {
+        if (count == 0) return {0.0f}; // No photons found
+        return flux / (static_cast<float>(count) * PI * pow2(radius));
+    }
 };
 
-__device__ void recordPhoton(OptixTraversableHandle queries, const Photon& photon) {
+__device__ __forceinline__ void recordPhoton(OptixTraversableHandle queries, const Photon& photon) {
     constexpr float EPS = 0.0f;
     std::array p = {
         __float_as_uint(photon.wi.x), __float_as_uint(photon.wi.y), __float_as_uint(photon.wi.z),
-        __float_as_uint(photon.irradiance.x), __float_as_uint(photon.irradiance.y), __float_as_uint(photon.irradiance.z)
+        __float_as_uint(photon.flux.x), __float_as_uint(photon.flux.y), __float_as_uint(photon.flux.z)
     };
-    optixTraverse(queries,
+    optixTrace(queries,
         photon.pos, {EPS}, // origin, direction
         0.0f, EPS, // tmin, tmax
         0.0f, // rayTime
         OptixVisibilityMask(1), 
-        OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT |  OPTIX_RAY_FLAG_DISABLE_ANYHIT, 
+        OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT, 
         0, 1, 0, // SBT offset, stride, miss index
         p[0], p[1], p[2], p[3], p[4], p[5] // payload
     );
@@ -52,27 +57,28 @@ extern "C" __global__ void __intersection__() {
         return; // No intersection
     }
 
-    // TODO: Move accumulation to AnyHit
-
     optixReportIntersection(optixGetRayTmin(), 0);
 }
 
+// TODO: Disable AnyHit for performance?
 extern "C" __global__ void __anyhit__() {
     auto* query = reinterpret_cast<PhotonQuery*>(optixGetSbtDataPointer());
     
     const float3 wi = {__uint_as_float(optixGetPayload_0()),
                        __uint_as_float(optixGetPayload_1()),
                        __uint_as_float(optixGetPayload_2())};
-    const float3 irradiance = {__uint_as_float(optixGetPayload_3()),
-                                __uint_as_float(optixGetPayload_4()),
-                                __uint_as_float(optixGetPayload_5())};
+    const float3 flux = {__uint_as_float(optixGetPayload_3()),
+                         __uint_as_float(optixGetPayload_4()),
+                         __uint_as_float(optixGetPayload_5())};
 
-    const auto radiance = evalDisneyBRDFOnly(query->wo, wi, query->n, query->mat);
+    const auto radiance = evalDisneyBRDFOnly(query->wo, wi, query->n, query->mat) * flux;
 
+    // NOTE: Does atomicAdd hurt performance beacuse of serialization?
+    // Maybe warp aggregated atomics could help?
     atomicAdd(&query->count, 1u);
-    atomicAdd(&query->radiance.x, radiance.x);
-    atomicAdd(&query->radiance.y, radiance.y);
-    atomicAdd(&query->radiance.z, radiance.z);
+    atomicAdd(&query->flux.x, radiance.x);
+    atomicAdd(&query->flux.y, radiance.y);
+    atomicAdd(&query->flux.z, radiance.z);
 }
 
 extern "C" __global__ void __miss__() {/*Empty*/}
