@@ -2,7 +2,6 @@
 
 #include <cuda.h>
 #include <cuda_runtime.h>
-#include <optix_types.h>
 
 #include <array>
 #include <vector>
@@ -21,18 +20,24 @@ using namespace glm;
 #include "scene.hpp"
 #include "optixir.hpp"
 #include "brdflut.cuh"
+#include "optix/sppm_as.cuh"
 
 enum ProgramGroup {
+// Raygeneration programs
     REFERENCE,
     TRAIN_FORWARD,
     TRAIN_BACKWARD,
     INFERENCE,
+    SPPM_EYE_PASS,
+// Other
     MISS,
     CLOSEST_HIT,
+    SPPM_RTX,
+    NO_MISS,
 };
 
-constexpr size_t RAYGEN_COUNT = 4;
-constexpr size_t PROGRAM_GROUP_COUNT = RAYGEN_COUNT + 2;
+constexpr size_t RAYGEN_COUNT = 5;
+constexpr size_t PROGRAM_GROUP_COUNT = RAYGEN_COUNT + 4;
 
 class OptixRenderer {
 public:
@@ -88,6 +93,7 @@ private:
     tcnn::GPUMatrix<float> selfLearningQueries {NRC_INPUT_SIZE, NRC_BATCH_SIZE};
 
     BRDFLUT brdfLUT;
+    SPPMRTX sppmBVH {128};
 
     void generateSobol(uint offset, uint n);
     void ensureSobol(uint sample);

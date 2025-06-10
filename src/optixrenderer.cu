@@ -5,11 +5,9 @@
 #include <curand.h>
 #include <curand_kernel.h>
 
-#include <optix.h>
-#include <optix_host.h>
 #include <optix_stubs.h>
 #include <optix_function_table_definition.h>
-#include <optix_types.h>
+#include <optix.h>
 
 #include <framework/common.hpp>
 
@@ -28,7 +26,7 @@
 #include "optix/params.cuh"
 #include "cudamath.cuh"
 #include "optix/sampling.cuh"
-#include "optix/sppm_rtx.cuh"
+#include "optix/sppm_as.cuh"
 
 OptixRenderer::OptixRenderer() {
     check(cudaFree(nullptr)); // Initialize CUDA for this device on this thread
@@ -62,12 +60,12 @@ OptixRenderer::OptixRenderer() {
 #endif
     const OptixPipelineCompileOptions pipelineCompileOptions = {
         .usesMotionBlur = false,
-        .traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING,
+        .traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING | OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_GAS,
         .numPayloadValues = PAYLOAD_SIZE,
         .numAttributeValues = 2,
         .exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE,
         .pipelineLaunchParamsVariableName = "params",
-        .usesPrimitiveTypeFlags = static_cast<unsigned int>(OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE),
+        .usesPrimitiveTypeFlags = static_cast<unsigned int>(OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE | OPTIX_PRIMITIVE_TYPE_FLAGS_CUSTOM),
     };
 
     for (size_t i = 0; i < optixir::paths.size(); i++) {
@@ -107,6 +105,13 @@ OptixRenderer::OptixRenderer() {
             },
         },
         OptixProgramGroupDesc {
+            .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
+            .raygen = {
+                .module = modules[optixir::SPPM_EYE_PASS],
+                .entryFunctionName = "__raygen__",
+            },
+        },
+        OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
             .miss = {
                 .module = modules[optixir::HIT],
@@ -118,6 +123,24 @@ OptixRenderer::OptixRenderer() {
             .hitgroup = {
                 .moduleCH = modules[optixir::HIT],
                 .entryFunctionNameCH = "__closesthit__ch",
+            },
+        },
+        OptixProgramGroupDesc {
+            .kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
+            .hitgroup = {
+                .moduleCH = nullptr, // No closest hit program for SPPM
+                .entryFunctionNameCH = nullptr,
+                .moduleAH = modules[optixir::SPPM_RTX],
+                .entryFunctionNameAH = "__anyhit__",
+                .moduleIS = modules[optixir::SPPM_RTX],
+                .entryFunctionNameIS = "__intersection__",
+            },
+        },
+        OptixProgramGroupDesc {
+            .kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
+            .miss = {
+                .module = nullptr, // No miss program for SPPM
+                .entryFunctionName = nullptr,
             },
         },
     };
@@ -132,23 +155,25 @@ OptixRenderer::OptixRenderer() {
     // TODO: optixUtilComputeStackSizesSimplePathtracer?
 
     // Set up shader binding table
-    std::vector<RaygenRecord> raygenRecord(sbts.size());
-    check(optixSbtRecordPackHeader(programGroups[REFERENCE], &raygenRecord[REFERENCE]));
-    check(optixSbtRecordPackHeader(programGroups[TRAIN_FORWARD], &raygenRecord[TRAIN_FORWARD]));
-    check(optixSbtRecordPackHeader(programGroups[TRAIN_BACKWARD], &raygenRecord[TRAIN_BACKWARD]));
-    check(optixSbtRecordPackHeader(programGroups[INFERENCE], &raygenRecord[INFERENCE]));
-    raygenRecords.resize_and_copy_from_host(raygenRecord);
+    std::vector<RaygenRecord> raygenRecordsHost(sbts.size());
+    check(optixSbtRecordPackHeader(programGroups[REFERENCE], &raygenRecordsHost[REFERENCE]));
+    check(optixSbtRecordPackHeader(programGroups[TRAIN_FORWARD], &raygenRecordsHost[TRAIN_FORWARD]));
+    check(optixSbtRecordPackHeader(programGroups[TRAIN_BACKWARD], &raygenRecordsHost[TRAIN_BACKWARD]));
+    check(optixSbtRecordPackHeader(programGroups[INFERENCE], &raygenRecordsHost[INFERENCE]));
+    check(optixSbtRecordPackHeader(programGroups[SPPM_EYE_PASS], &raygenRecordsHost[SPPM_EYE_PASS]));
+    raygenRecords.resize_and_copy_from_host(raygenRecordsHost);
 
-    MissRecord missRecord;
-    check(optixSbtRecordPackHeader(programGroups[MISS], &missRecord));
-    missRecords.resize_and_copy_from_host({missRecord});
+    std::vector<MissRecord> missRecordsHost(sbts.size());
+    check(optixSbtRecordPackHeader(programGroups[MISS], &missRecordsHost[0]));
+    check(optixSbtRecordPackHeader(programGroups[NO_MISS], &missRecordsHost[1]));
+    missRecords.resize_and_copy_from_host(missRecordsHost);
 
     for (size_t i = 0; i < sbts.size(); i++) {
         sbts[i] = {
             .raygenRecord = reinterpret_cast<CUdeviceptr>(&raygenRecords[i]),
             .missRecordBase = reinterpret_cast<CUdeviceptr>(missRecords.data()),
             .missRecordStrideInBytes = sizeof(MissRecord),
-            .missRecordCount = 1,
+            .missRecordCount = static_cast<uint32_t>(missRecords.size()),
             .hitgroupRecordBase = 0,
             .hitgroupRecordStrideInBytes = sizeof(HitRecord),
             .hitgroupRecordCount = 0,
@@ -195,6 +220,12 @@ __global__ void testSceneSampling(const uint sampleCount, const Instance* instan
     printf("Sample %d: %f %f %f %f %f %f %f %f %f\n", i, surf.position.x, surf.position.y, surf.position.z, surf.normal.x, surf.normal.y, surf.normal.z, surf.baseColor.x, surf.baseColor.y, surf.baseColor.z);
 }
 
+void operator<<(std::ostream& os, const OptixAabb& aabb) {
+    os << "OptixAabb(" 
+       << aabb.minX << ", " << aabb.minY << ", " << aabb.minZ << ", "
+       << aabb.maxX << ", " << aabb.maxY << ", " << aabb.maxZ << ")";
+}
+
 void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
     auto sceneData = scene.loadGLTF(context, path);
     const auto aabb = scene.getAABB();
@@ -230,6 +261,14 @@ void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
 
     reset();
     lossHistory.clear();
+
+    params.photonMap = sppmBVH.getDeviceView();
+    paramsBuffer.copy_from_host(&params, 1);
+    check(cudaDeviceSynchronize()); // Wait for the copy to finish
+    check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_EYE_PASS], 128, 1, 1));
+    check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+    sppmBVH.updatePhotonAS(context);
+    thrust::copy(sppmBVH.aabbBuffer.begin(), sppmBVH.aabbBuffer.end(), std::ostream_iterator<OptixAabb>(std::cout, " "));
 }
 
 void OptixRenderer::setCamera(const mat4& clipToWorld) {

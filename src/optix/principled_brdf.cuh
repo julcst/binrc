@@ -2,6 +2,7 @@
 
 #include <cuda_runtime.h>
 
+#include "prinicpled_brdf_types.cuh"
 #include "cudamath.cuh"
 #include "sampling.cuh"
 
@@ -198,13 +199,6 @@ __device__ constexpr Sample sampleBrentBurley(const float2& rand, const float3& 
     const auto diffuse = albedo * response;
     return {wi, diffuse};
 }
-
-struct MaterialProperties {
-    float3 F0;
-    float3 albedo;
-    float alpha2;
-    float transmission;
-};
 
 __device__ constexpr MaterialProperties calcMaterialProperties(const float3& baseColor, float metallic, float alpha, float transmission) {
     const auto F0 = mix(make_float3(0.04f), baseColor, metallic); // TODO: Is F0 different inside and outside?

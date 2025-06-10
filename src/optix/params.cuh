@@ -9,6 +9,7 @@
 #include <json/json.hpp>
 
 #include "cudamath.cuh"
+#include "sppm_rtx.cuh"
 
 constexpr float MAX_T = 1e32f;
 constexpr uint MAX_BOUNCES = 12;
@@ -168,6 +169,8 @@ struct Params {
     float* selfLearningQueries;
 
     cudaTextureObject_t brdfLUT;
+
+    PhotonQueryView photonMap;
 };
 extern "C" __constant__ const Params params;
 

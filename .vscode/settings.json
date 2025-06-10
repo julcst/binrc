@@ -78,7 +78,17 @@
         "cfenv": "cpp",
         "complex": "cpp",
         "list": "cpp",
-        "typeindex": "cpp"
+        "typeindex": "cpp",
+        "queue": "cpp",
+        "annotated_ptr": "cpp",
+        "barrier": "cpp",
+        "ptx": "cpp",
+        "__string": "cpp",
+        "inplace_vector": "cpp",
+        "__config": "cpp",
+        "__threading_support": "cpp",
+        "stream_ref": "cpp",
+        "expected": "cpp"
     },
     "C_Cpp.codeAnalysis.clangTidy.checks.disabled": [
         "modernize-use-trailing-return-type",
