@@ -100,5 +100,5 @@ extern "C" __global__ void __raygen__() {
         params.inferenceThroughput[i] = prevThroughput;
     }
 
-    params.image[i] = mix(params.image[i], make_float4(max(inferencePlus, 0.0f), 1.0f), params.weight);
+    params.image[i] = mix(params.image[i], make_float4(inferencePlus, 1.0f), params.weight);
 }

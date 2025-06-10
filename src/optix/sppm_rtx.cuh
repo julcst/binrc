@@ -21,7 +21,7 @@ struct PhotonQuery {
     float3 flux = {0.0f}; // Accumulated outgoing flux
     uint32_t count = 0; // Number of photons found
 
-    // float3 calcRadiance() const {
+    // float3 calcRadiance(float totalCount) const {
     //     if (count == 0) return {0.0f}; // No photons found
     //     // TODO: Calculate totalCount by reduction
     //     return flux / (static_cast<float>(totalCount) * PI * pow2(radius));
@@ -51,7 +51,7 @@ struct PhotonQueryView {
     }
 
     __device__ __forceinline__ void recordPhoton(const Photon& photon) const {
-        constexpr float EPS = 0.0f;
+        constexpr float EPS = 0.1f;
         std::array p = {
             __float_as_uint(photon.wi.x), __float_as_uint(photon.wi.y), __float_as_uint(photon.wi.z),
             __float_as_uint(photon.flux.x), __float_as_uint(photon.flux.y), __float_as_uint(photon.flux.z)
@@ -63,7 +63,7 @@ struct PhotonQueryView {
             0.0f, // rayTime
             OptixVisibilityMask(1), 
             OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
-            1, 0, 1, // SBT offset, stride, miss index
+            0, 1, 1, // SBT offset, stride, miss index
             p[0], p[1], p[2], p[3], p[4], p[5] // payload
         );
         // TODO: SER for cache efficiency

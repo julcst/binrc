@@ -4,6 +4,7 @@
 
 #include "cudamath.cuh"
 #include "params.cuh"
+#include "payload.cuh"
 
 struct Ray {
     float3 origin;
@@ -27,7 +28,7 @@ __device__ inline Payload trace(const Ray& ray, uint hint) {
         0.0f, MAX_T, // tmin, tmax
         0.0f, // rayTime
         OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
-        0, 1, 0, // SBT offset, stride, miss index
+        1, 1, 0, // SBT offset, stride, miss index // NOTE: HitRecord 0 is used for photon mapping
         p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16]
     );
     optixReorder(hint, 1);
@@ -43,7 +44,7 @@ __device__ inline Payload trace(const Ray& ray) {
         0.0f, MAX_T, // tmin, tmax
         0.0f, // rayTime
         OptixVisibilityMask(255), OPTIX_RAY_FLAG_NONE,
-        0, 1, 0, // SBT offset, stride, miss index
+        1, 1, 0, // SBT offset, stride, miss index // NOTE: HitRecord 0 is used for photon mapping
         p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16]
     );
     optixReorder();
@@ -59,7 +60,7 @@ __device__ inline bool traceOcclusion(const float3& a, const float3& b) {
         0.0f, 1.0f, // tmin, tmax
         0.0f, // rayTime
         OptixVisibilityMask(255), OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT | OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-        0, 1, 0 // SBT offset, stride, miss index
+        1, 1, 1 // SBT offset, stride, miss index // NOTE: HitRecord 0 is used for photon mapping, MissRecord 1 is null
     );
     return optixHitObjectIsHit();
 }

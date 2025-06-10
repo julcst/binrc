@@ -29,15 +29,18 @@ enum ProgramGroup {
     TRAIN_BACKWARD,
     INFERENCE,
     SPPM_EYE_PASS,
+    SPPM_LIGHT_PASS,
+    SPPM_VIS_RAYGEN,
 // Other
     MISS,
     CLOSEST_HIT,
     SPPM_RTX,
     NO_MISS,
+    SPPM_VIS_HIT,
 };
 
-constexpr size_t RAYGEN_COUNT = 5;
-constexpr size_t PROGRAM_GROUP_COUNT = RAYGEN_COUNT + 4;
+constexpr size_t RAYGEN_COUNT = 7;
+constexpr size_t PROGRAM_GROUP_COUNT = RAYGEN_COUNT + 5;
 
 class OptixRenderer {
 public:
@@ -93,7 +96,10 @@ private:
     tcnn::GPUMatrix<float> selfLearningQueries {NRC_INPUT_SIZE, NRC_BATCH_SIZE};
 
     BRDFLUT brdfLUT;
+
     SPPMRTX sppmBVH {128};
+    thrust::device_vector<HeaderOnlyRecord> sppmVisRecords;
+    OptixShaderBindingTable sppmVisSBT;
 
     void generateSobol(uint offset, uint n);
     void ensureSobol(uint sample);

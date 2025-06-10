@@ -5,6 +5,7 @@
 #include "cudamath.cuh"
 #include "sppm_rtx.cuh"
 #include "params.cuh"
+#include "common.cuh"
 
 // Point-Sphere interection test
 extern "C" __global__ void __intersection__() {
@@ -18,6 +19,10 @@ extern "C" __global__ void __intersection__() {
     if (dist2 > pow2(query->radius)) {
         //optixIgnoreIntersection();
     } else {
+        printf("Photon query %u found intersection: rayOrigin = (%f, %f, %f), pos = (%f, %f, %f), radius = %f, dist2 = %f\n",
+               idx, rayOrigin.x, rayOrigin.y, rayOrigin.z,
+               query->pos.x, query->pos.y, query->pos.z,
+               query->radius, dist2);
         optixReportIntersection(optixGetRayTmin(), 0);
     }
 }
@@ -47,3 +52,66 @@ extern "C" __global__ void __anyhit__() {
 // NOTE: Never use empty miss and closest hit programs in OptiX, use nullptr instead to minimize overhead.
 // extern "C" __global__ void __miss__() {/*Empty*/}
 // extern "C" __global__ void __closesthit__() {/*Empty*/}
+
+extern "C" __global__ void __raygen__visualize() {
+    const auto idx = optixGetLaunchIndex();
+    const auto dim = optixGetLaunchDimensions();
+    const auto i = idx.x + idx.y * dim.x;
+
+    const auto uv = (make_float2(idx.x, idx.y)) / make_float2(dim.x, dim.y);
+    auto ray = makeCameraRay(uv);
+
+    float3 color = {0.0f, 0.0f, 0.0f};
+    uint32_t count = 0;
+
+    // TODO: Use PayloadTypeID
+    std::array p = {
+        __float_as_uint(color.x), __float_as_uint(color.y), __float_as_uint(color.z),
+    };
+    optixTrace(params.photonMap.handle,
+        ray.origin, ray.direction, // origin, direction
+        0.0f, 1e6f, // tmin, tmax
+        0.0f, // rayTime
+        OptixVisibilityMask(1), 
+        OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+        0, 1, 1, // SBT offset, stride, miss index
+        p[0], p[1], p[2]
+    );
+    color = {
+        __uint_as_float(p[0]),
+        __uint_as_float(p[1]),
+        __uint_as_float(p[2])
+    };
+
+    params.image[i] = make_float4(color, 1.0f);
+}
+
+extern "C" __global__ void __intersection__visualize() {
+    const auto idx = optixGetPrimitiveIndex();
+    PhotonQuery* query = params.photonMap.queries + idx;
+
+    const auto rayOrigin = optixGetWorldRayOrigin();
+    const auto rayDirection = optixGetWorldRayDirection();
+    const auto center = query->pos;
+    const auto radius = query->radius;
+
+    const auto a = pow2(rayDirection);
+    const auto b = 2.0f * dot(rayDirection, rayOrigin - center);
+    const auto c = pow2(rayOrigin - center) - pow2(radius);
+    const auto discriminant = pow2(b) - 4.0f * a * c;
+    if (discriminant < 0.0f) {
+        // No intersection
+        return;
+    }
+    const auto sqrtDiscriminant = sqrtf(discriminant);
+    const auto t1 = (-b - sqrtDiscriminant) / (2.0f * a);
+    optixReportIntersection(t1, 0);
+}
+
+extern "C" __global__ void __closesthit__visualize() {
+    PhotonQuery* query = params.photonMap.queries + optixGetPrimitiveIndex();
+    
+    optixSetPayload_0(__float_as_uint(1));
+    optixSetPayload_1(__float_as_uint(1));
+    optixSetPayload_2(__float_as_uint(1));
+}

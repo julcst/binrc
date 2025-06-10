@@ -83,13 +83,14 @@ struct EmissiveTriangle {
     float3 n2;
 };
 
-constexpr std::array<std::string_view, 6> INFERENCE_MODES = {
+constexpr std::array<std::string_view, 7> INFERENCE_MODES = {
     "No Inference",
     "Raw Cache",
     "1st Vertex",
     "1st Vertex + NEE",
     "1st Diffuse",
     "Variance Heuristic",
+    "Raw Photon Map",
 };
 
 enum class InferenceMode : u_int8_t {
@@ -99,6 +100,7 @@ enum class InferenceMode : u_int8_t {
     FIRST_VERTEX_WITH_NEE,
     FIRST_DIFFUSE,
     VARIANCE_HEURISTIC,
+    RAW_PHOTON_MAP,
 };
 
 struct RaygenData {};
@@ -178,6 +180,10 @@ template <typename T>
 struct Record {
     __align__(OPTIX_SBT_RECORD_ALIGNMENT) std::array<char, OPTIX_SBT_RECORD_HEADER_SIZE> header;
     T data;
+};
+
+struct HeaderOnlyRecord {
+    __align__(OPTIX_SBT_RECORD_ALIGNMENT) std::array<char, OPTIX_SBT_RECORD_HEADER_SIZE> header;
 };
 
 using RaygenRecord = Record<RaygenData>;

@@ -78,5 +78,5 @@ extern "C" __global__ void __raygen__reference() {
         lightPdfIsZero = sample.isDirac;
     }
 
-    params.image[i] = mix(params.image[i], make_float4(max(color, 0.0f), 1.0f), params.weight);
+    params.image[i] = mix(params.image[i], make_float4(color, 1.0f), params.weight);
 }

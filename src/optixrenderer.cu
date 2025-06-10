@@ -112,6 +112,20 @@ OptixRenderer::OptixRenderer() {
             },
         },
         OptixProgramGroupDesc {
+            .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
+            .raygen = {
+                .module = modules[optixir::SPPM_LIGHT_PASS],
+                .entryFunctionName = "__raygen__",
+            },
+        },
+        OptixProgramGroupDesc {
+            .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
+            .raygen = {
+                .module = modules[optixir::SPPM_RTX],
+                .entryFunctionName = "__raygen__visualize",
+            },
+        },
+        OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
             .miss = {
                 .module = modules[optixir::HIT],
@@ -143,6 +157,17 @@ OptixRenderer::OptixRenderer() {
                 .entryFunctionName = nullptr,
             },
         },
+        OptixProgramGroupDesc {
+            .kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
+            .hitgroup = {
+                .moduleCH = modules[optixir::SPPM_RTX],
+                .entryFunctionNameCH = "__closesthit__visualize",
+                .moduleAH = nullptr, // No any hit program for SPPM
+                .entryFunctionNameAH = nullptr,
+                .moduleIS = modules[optixir::SPPM_RTX],
+                .entryFunctionNameIS = "__intersection__visualize",
+            },
+        },
     };
     check(optixProgramGroupCreate(context, programDecriptions.data(), programDecriptions.size(), &pgOptions, nullptr, nullptr, programGroups.data()));
 
@@ -161,6 +186,8 @@ OptixRenderer::OptixRenderer() {
     check(optixSbtRecordPackHeader(programGroups[TRAIN_BACKWARD], &raygenRecordsHost[TRAIN_BACKWARD]));
     check(optixSbtRecordPackHeader(programGroups[INFERENCE], &raygenRecordsHost[INFERENCE]));
     check(optixSbtRecordPackHeader(programGroups[SPPM_EYE_PASS], &raygenRecordsHost[SPPM_EYE_PASS]));
+    check(optixSbtRecordPackHeader(programGroups[SPPM_LIGHT_PASS], &raygenRecordsHost[SPPM_LIGHT_PASS]));
+    check(optixSbtRecordPackHeader(programGroups[SPPM_VIS_RAYGEN], &raygenRecordsHost[SPPM_VIS_RAYGEN]));
     raygenRecords.resize_and_copy_from_host(raygenRecordsHost);
 
     std::vector<MissRecord> missRecordsHost(sbts.size());
@@ -200,6 +227,19 @@ OptixRenderer::OptixRenderer() {
     params.lightSamples = nrcLightSamples.data();
 
     params.brdfLUT = brdfLUT.texObj;
+
+    HeaderOnlyRecord sppmVisRecord;
+    optixSbtRecordPackHeader(programGroups[SPPM_VIS_HIT], &sppmVisRecord);
+    sppmVisRecords = {sppmVisRecord};
+    sppmVisSBT = {
+        .raygenRecord = reinterpret_cast<CUdeviceptr>(&raygenRecords[(size_t) SPPM_VIS_RAYGEN]),
+        .missRecordBase = reinterpret_cast<CUdeviceptr>(missRecords.data()),
+        .missRecordStrideInBytes = sizeof(MissRecord),
+        .missRecordCount = static_cast<uint32_t>(missRecords.size()),
+        .hitgroupRecordBase = reinterpret_cast<CUdeviceptr>(sppmVisRecords.data().get()),
+        .hitgroupRecordStrideInBytes = sizeof(HeaderOnlyRecord),
+        .hitgroupRecordCount = 1,
+    };
 }
 
 OptixRenderer::~OptixRenderer() {
@@ -232,6 +272,10 @@ void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
     const auto size = aabb.max - aabb.min;
 
     for (auto& hitRecord : sceneData.hitRecords) optixSbtRecordPackHeader(programGroups[CLOSEST_HIT], &hitRecord);
+
+    HitRecord sppmRecord;
+    optixSbtRecordPackHeader(programGroups[SPPM_RTX], &sppmRecord);
+    sceneData.hitRecords.insert(sceneData.hitRecords.begin(), sppmRecord);
 
     hitRecords.resize_and_copy_from_host(sceneData.hitRecords);
     materials.resize_and_copy_from_host(sceneData.materials);
@@ -269,6 +313,11 @@ void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
     sppmBVH.updatePhotonAS(context);
     thrust::copy(sppmBVH.aabbBuffer.begin(), sppmBVH.aabbBuffer.end(), std::ostream_iterator<OptixAabb>(std::cout, " "));
+    params.photonMap = sppmBVH.getDeviceView();
+    paramsBuffer.copy_from_host(&params, 1);
+    check(cudaDeviceSynchronize()); // Wait for the copy to finish
+    check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_LIGHT_PASS], 128, 1, 1));
+    check(cudaDeviceSynchronize()); // Wait for the renderer to finish
 }
 
 void OptixRenderer::setCamera(const mat4& clipToWorld) {
@@ -434,19 +483,26 @@ void OptixRenderer::render(vec4* image, uvec2 dim) {
 
     if (!scene.isEmpty() && enableTraining) train();
 
-    if (params.inferenceMode == InferenceMode::NO_INFERENCE) { // Reference
-        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[REFERENCE], dim.x, dim.y, 1));
-        check(cudaDeviceSynchronize()); // Wait for the renderer to finish
-    } else {
-        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[INFERENCE], dim.x, dim.y, 1));
-        check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+    switch (params.inferenceMode) {
+        case InferenceMode::NO_INFERENCE:
+            check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[REFERENCE], dim.x, dim.y, 1));
+            check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+            break;
+        case InferenceMode::RAW_PHOTON_MAP:
+            check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sppmVisSBT, dim.x, dim.y, 1));
+            check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+            break;
+        default:
+            check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[INFERENCE], dim.x, dim.y, 1));
+            check(cudaDeviceSynchronize()); // Wait for the renderer to finish
 
-        nrcModel.network->inference(nrcInferenceInput, nrcInferenceOutput);
+            nrcModel.network->inference(nrcInferenceInput, nrcInferenceOutput);
 
-        dim3 block(16, 16);
-        dim3 grid((dim.x + block.x - 1) / block.x, (dim.y + block.y - 1) / block.y);
-        visualizeInference<<<grid, block>>>(paramsBuffer.data());
-        check(cudaDeviceSynchronize()); // Wait for the visualization to finish
+            dim3 block(16, 16);
+            dim3 grid((dim.x + block.x - 1) / block.x, (dim.y + block.y - 1) / block.y);
+            visualizeInference<<<grid, block>>>(paramsBuffer.data());
+            check(cudaDeviceSynchronize()); // Wait for the visualization to finish
+            break;
     }
     
     params.sample++;

@@ -62,6 +62,7 @@ set(OPTIXIR
     src/optix/train_backward.cu
     src/optix/train_forward.cu
     src/optix/sppm_eye_pass.cu
+    src/optix/sppm_light_pass.cu
     src/optix/sppm_rtx.cu
 )
 add_library(optixir OBJECT ${OPTIXIR})

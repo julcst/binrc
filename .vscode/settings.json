@@ -88,7 +88,10 @@
         "__config": "cpp",
         "__threading_support": "cpp",
         "stream_ref": "cpp",
-        "expected": "cpp"
+        "expected": "cpp",
+        "csignal": "cpp",
+        "future": "cpp",
+        "stack": "cpp"
     },
     "C_Cpp.codeAnalysis.clangTidy.checks.disabled": [
         "modernize-use-trailing-return-type",
