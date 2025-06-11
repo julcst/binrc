@@ -240,6 +240,7 @@ OptixRenderer::OptixRenderer() {
         .hitgroupRecordStrideInBytes = sizeof(HeaderOnlyRecord),
         .hitgroupRecordCount = 1,
     };
+    params.photonMap = sppmBVH.getDeviceView();
 }
 
 OptixRenderer::~OptixRenderer() {
@@ -258,12 +259,6 @@ __global__ void testSceneSampling(const uint sampleCount, const Instance* instan
 
     const auto surf = sampleScene(instances, instanceCount, materials, rand.x, make_float2(rand.z, rand.w));
     printf("Sample %d: %f %f %f %f %f %f %f %f %f\n", i, surf.position.x, surf.position.y, surf.position.z, surf.normal.x, surf.normal.y, surf.normal.z, surf.baseColor.x, surf.baseColor.y, surf.baseColor.z);
-}
-
-void operator<<(std::ostream& os, const OptixAabb& aabb) {
-    os << "OptixAabb(" 
-       << aabb.minX << ", " << aabb.minY << ", " << aabb.minZ << ", "
-       << aabb.maxX << ", " << aabb.maxY << ", " << aabb.maxZ << ")";
 }
 
 void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
@@ -305,19 +300,6 @@ void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
 
     reset();
     lossHistory.clear();
-
-    params.photonMap = sppmBVH.getDeviceView();
-    paramsBuffer.copy_from_host(&params, 1);
-    check(cudaDeviceSynchronize()); // Wait for the copy to finish
-    check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_EYE_PASS], 128, 1, 1));
-    check(cudaDeviceSynchronize()); // Wait for the renderer to finish
-    sppmBVH.updatePhotonAS(context);
-    thrust::copy(sppmBVH.aabbBuffer.begin(), sppmBVH.aabbBuffer.end(), std::ostream_iterator<OptixAabb>(std::cout, " "));
-    params.photonMap = sppmBVH.getDeviceView();
-    paramsBuffer.copy_from_host(&params, 1);
-    check(cudaDeviceSynchronize()); // Wait for the copy to finish
-    check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_LIGHT_PASS], 128, 1, 1));
-    check(cudaDeviceSynchronize()); // Wait for the renderer to finish
 }
 
 void OptixRenderer::setCamera(const mat4& clipToWorld) {
@@ -429,6 +411,15 @@ __global__ void applySelfLearning(unsigned int numQueries, std::array<TrainBounc
 // TODO: Could do multiple smaller training steps per frame
 void OptixRenderer::train() {
     nrcLightSamples.memset(0);
+    check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+
+    check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_EYE_PASS], 128, 1, 1));
+    check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+    sppmBVH.updatePhotonAS(context);
+    params.photonMap = sppmBVH.getDeviceView(); // Update handle in params
+    paramsBuffer.copy_from_host(&params, 1);
+    check(cudaDeviceSynchronize()); // Wait for the copy to finish
+    check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_LIGHT_PASS], 128, 1, 1));
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
 
     // Generate training samples

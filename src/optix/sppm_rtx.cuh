@@ -1,8 +1,8 @@
 #pragma once
 
-#ifdef __CUDA_ARCH__
-#include <optix_device.h>
-#endif
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <optix.h>
 
 #include "prinicpled_brdf_types.cuh"
 
@@ -35,9 +35,10 @@ struct PhotonQuery {
 struct PhotonQueryView {
     PhotonQuery* queries = nullptr;
     OptixAabb* aabbs = nullptr;
+    uint32_t* atomicIndex = nullptr;
+    uint32_t size = 0;
     OptixTraversableHandle handle = 0;
 
-#ifdef __CUDA_ARCH__
     __device__ __forceinline__ void store(const uint32_t idx, const PhotonQuery& query) const {
         queries[idx] = query;
         aabbs[idx] = {
@@ -48,6 +49,12 @@ struct PhotonQueryView {
             .maxY = query.pos.y + query.radius,
             .maxZ = query.pos.z + query.radius
         };
+    }
+
+#ifdef __CUDA_ARCH__
+    __device__ __forceinline__ void store(const PhotonQuery& query) const {
+        const auto idx = atomicAdd(atomicIndex, 1) % size;
+        store(idx, query);
     }
 
     __device__ __forceinline__ void recordPhoton(const Photon& photon) const {

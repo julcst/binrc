@@ -111,7 +111,7 @@ extern "C" __global__ void __intersection__visualize() {
 extern "C" __global__ void __closesthit__visualize() {
     PhotonQuery* query = params.photonMap.queries + optixGetPrimitiveIndex();
     
-    optixSetPayload_0(__float_as_uint(1));
-    optixSetPayload_1(__float_as_uint(1));
-    optixSetPayload_2(__float_as_uint(1));
+    optixSetPayload_0(__float_as_uint(query->mat.albedo.x));
+    optixSetPayload_1(__float_as_uint(query->mat.albedo.y));
+    optixSetPayload_2(__float_as_uint(query->mat.albedo.z));
 }
