@@ -240,7 +240,7 @@ OptixRenderer::OptixRenderer() {
         .hitgroupRecordStrideInBytes = sizeof(HeaderOnlyRecord),
         .hitgroupRecordCount = 1,
     };
-    params.photonMap = sppmBVH.getDeviceView();
+    params.photonMap = sppmBVH.getDeviceView(0);
 }
 
 OptixRenderer::~OptixRenderer() {
@@ -416,10 +416,11 @@ void OptixRenderer::train() {
     check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_EYE_PASS], 128, 1, 1));
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
     sppmBVH.updatePhotonAS(context);
-    params.photonMap = sppmBVH.getDeviceView(); // Update handle in params
+    constexpr uint32_t PHOTON_COUNT = 1 << 17; // Number of photons to generate
+    params.photonMap = sppmBVH.getDeviceView(params.photonMap.totalPhotonCount + PHOTON_COUNT); // Update handle in params
     paramsBuffer.copy_from_host(&params, 1);
     check(cudaDeviceSynchronize()); // Wait for the copy to finish
-    check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_LIGHT_PASS], 1<<16, 1, 1));
+    check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_LIGHT_PASS], PHOTON_COUNT, 1, 1));
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
 
     // Generate training samples
@@ -467,7 +468,7 @@ void OptixRenderer::render(vec4* image, uvec2 dim) {
     params.image = reinterpret_cast<float4*>(image);
     params.dim = make_uint2(dim.x, dim.y);
     ensureSobol(params.sample);
-    
+
     // Copy host parameters to device
     paramsBuffer.copy_from_host(&params, 1);
     check(cudaDeviceSynchronize()); // Wait for the copy to finish
@@ -495,7 +496,7 @@ void OptixRenderer::render(vec4* image, uvec2 dim) {
             check(cudaDeviceSynchronize()); // Wait for the visualization to finish
             break;
     }
-    
+
     params.sample++;
     params.weight = 1.0f / static_cast<float>(params.sample);
 }

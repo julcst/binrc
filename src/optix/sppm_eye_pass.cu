@@ -45,7 +45,7 @@ extern "C" __global__ void __raygen__() {
             .n = payload.normal,
             .mat = calcMaterialProperties(payload.baseColor, payload.metallic, alpha, payload.transmission),
             .radius = 0.01f, // TODO: Radius reduction
-            .totalPhotonCountAtBirth = params.photonMap.atomics->totalPhotons,
+            .totalPhotonCountAtBirth = params.photonMap.totalPhotonCount,
         });
 
         const auto sample = sampleDisney(r.y, {r.z, r.w}, {r.z, r.w}, wo, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);

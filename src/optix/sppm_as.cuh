@@ -21,13 +21,14 @@ struct SPPMRTX {
 
     SPPMRTX(uint32_t n) : aabbBuffer(n), queryBuffer(n) {}
 
-    inline PhotonQueryView getDeviceView() {
+    inline PhotonQueryView getDeviceView(uint32_t totalPhotonCount) {
         return PhotonQueryView { 
             .queries = queryBuffer.data().get(),
             .aabbs = aabbBuffer.data().get(),
             .atomics = atomicBuffer.data().get(), // TODO: Pull request for better syntax
             .size = static_cast<uint32_t>(queryBuffer.size()),
-            .handle = handle
+            .handle = handle,
+            .totalPhotonCount = totalPhotonCount
         };
     }
 

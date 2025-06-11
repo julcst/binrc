@@ -37,13 +37,13 @@ struct PhotonQuery {
 struct PhotonQueryView {
     struct Atomics {
         uint32_t index = 0;
-        uint32_t totalPhotons = 0;
     };
     PhotonQuery* queries = nullptr;
     OptixAabb* aabbs = nullptr;
     Atomics* atomics = nullptr;
     uint32_t size = 0;
     OptixTraversableHandle handle = 0;
+    uint32_t totalPhotonCount = 0;
 
     __device__ __forceinline__ void store(const uint32_t idx, const PhotonQuery& query) const {
         queries[idx] = query;
@@ -64,7 +64,6 @@ struct PhotonQueryView {
     }
 
     __device__ __forceinline__ void recordPhoton(const Photon& photon) const {
-        atomicAdd(&(atomics->totalPhotons), 1);
         constexpr float EPS = 1e-6f; // Small epsilon, because zero is not allowed
         std::array p = {
             __float_as_uint(photon.wi.x), __float_as_uint(photon.wi.y), __float_as_uint(photon.wi.z),

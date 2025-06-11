@@ -79,7 +79,7 @@ extern "C" __global__ void __raygen__visualize() {
         __uint_as_float(p[2])
     };
 
-    params.image[i] = make_float4(color, 1.0f);
+    params.image[i] = make_float4(color * 2.0f * PI * PI, 1.0f); // TODO: Why 2pi²
 }
 
 extern "C" __global__ void __intersection__visualize() {
@@ -106,7 +106,7 @@ extern "C" __global__ void __intersection__visualize() {
 
 extern "C" __global__ void __closesthit__visualize() {
     PhotonQuery* query = params.photonMap.queries + optixGetPrimitiveIndex();
-    const auto radiance = query->calcRadiance(params.photonMap.atomics->totalPhotons);
+    const auto radiance = query->calcRadiance(params.photonMap.totalPhotonCount);
     
     optixSetPayload_0(__float_as_uint(radiance.x));
     optixSetPayload_1(__float_as_uint(radiance.y));

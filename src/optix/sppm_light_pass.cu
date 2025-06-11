@@ -20,7 +20,7 @@ extern "C" __global__ void __raygen__() {
     const auto r = curand_uniform4(&state); // Note curand generates in (0, 1] not [0, 1)
     const auto lightSample = sampleLight(curand_uniform(&state), make_float2(r.x, r.y), make_float2(r.z, r.w));
     auto ray = Ray{lightSample.position + lightSample.n * copysignf(params.sceneEpsilon, dot(lightSample.wo, lightSample.n)), lightSample.wo};
-    auto radiance = lightSample.emission * INV_PI;
+    auto flux = lightSample.emission * INV_PI;
 
     Payload payload;
 
@@ -29,9 +29,9 @@ extern "C" __global__ void __raygen__() {
 
         // Russian roulette
         if (params.flags & BACKWARD_RR_FLAG) {
-            const float pContinue = min(luminance(radiance) * params.russianRouletteWeight, 1.0f);
+            const float pContinue = min(luminance(flux) * params.russianRouletteWeight, 1.0f);
             if (r.x >= pContinue) break; // FIXME: use random numbers independent from sampling
-            radiance /= pContinue;
+            flux /= pContinue;
         }
 
         payload = trace(ray);
@@ -42,18 +42,16 @@ extern "C" __global__ void __raygen__() {
         const auto hitPoint = ray.origin + payload.t * ray.direction;
         const auto alpha = payload.roughness * payload.roughness;
 
-        const auto sample = sampleDisney(r.y, {r.z, r.w}, {r.z, r.w}, wi, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);
-
         params.photonMap.recordPhoton({
             .pos = hitPoint,
             .wi = wi,
-            .flux = radiance,
+            .flux = flux,
         });
 
-        radiance *= sample.throughput;
+        const auto sample = sampleDisney(r.y, {r.z, r.w}, {r.z, r.w}, wi, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);
+        flux *= sample.throughput;
+        flux += payload.emission; // TODO: Is this correct?
 
         ray = Ray{hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.direction, payload.normal)), sample.direction};
-
-        radiance += payload.emission;
     }
 }

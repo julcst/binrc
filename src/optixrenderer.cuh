@@ -97,7 +97,7 @@ private:
 
     BRDFLUT brdfLUT;
 
-    SPPMRTX sppmBVH {2<<15};
+    SPPMRTX sppmBVH {1<<16};
     thrust::device_vector<HeaderOnlyRecord> sppmVisRecords;
     OptixShaderBindingTable sppmVisSBT;
 
