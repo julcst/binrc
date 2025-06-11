@@ -20,12 +20,14 @@ struct PhotonQuery {
     float radius = 0.0f; // Radius of accumulation TODO: Radius reduction
     float3 flux = {0.0f}; // Accumulated outgoing flux
     uint32_t count = 0; // Number of photons found
+    uint32_t totalPhotonCountAtBirth = 0; // Total number of photons at initialization
 
-    // float3 calcRadiance(float totalCount) const {
-    //     if (count == 0) return {0.0f}; // No photons found
-    //     // TODO: Calculate totalCount by reduction
-    //     return flux / (static_cast<float>(totalCount) * PI * pow2(radius));
-    // }
+    __device__ float3 calcRadiance(uint32_t totalPhotonCount) const {
+        if (count == 0) return {0.0f}; // No photons found
+        // TODO: Calculate totalCount by reduction
+        // TODO: Handle totalPhotonCountAtBirth >= totalPhotonCount
+        return flux / (static_cast<float>(totalPhotonCount - totalPhotonCountAtBirth) * PI * pow2(radius));
+    }
 
     // float calcRadius() const {
     //     return initialRadius * exp(-count);
@@ -33,9 +35,13 @@ struct PhotonQuery {
 };
 
 struct PhotonQueryView {
+    struct Atomics {
+        uint32_t index = 0;
+        uint32_t totalPhotons = 0;
+    };
     PhotonQuery* queries = nullptr;
     OptixAabb* aabbs = nullptr;
-    uint32_t* atomicIndex = nullptr;
+    Atomics* atomics = nullptr;
     uint32_t size = 0;
     OptixTraversableHandle handle = 0;
 
@@ -53,12 +59,13 @@ struct PhotonQueryView {
 
 #ifdef __CUDA_ARCH__
     __device__ __forceinline__ void store(const PhotonQuery& query) const {
-        const auto idx = atomicAdd(atomicIndex, 1) % size;
+        const auto idx = atomicAdd(&(atomics->index), 1) % size;
         store(idx, query);
     }
 
     __device__ __forceinline__ void recordPhoton(const Photon& photon) const {
-        constexpr float EPS = 0.1f;
+        atomicAdd(&(atomics->totalPhotons), 1);
+        constexpr float EPS = 1e-6f; // Small epsilon, because zero is not allowed
         std::array p = {
             __float_as_uint(photon.wi.x), __float_as_uint(photon.wi.y), __float_as_uint(photon.wi.z),
             __float_as_uint(photon.flux.x), __float_as_uint(photon.flux.y), __float_as_uint(photon.flux.z)

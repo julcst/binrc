@@ -19,10 +19,6 @@ extern "C" __global__ void __intersection__() {
     if (dist2 > pow2(query->radius)) {
         //optixIgnoreIntersection();
     } else {
-        printf("Photon query %u found intersection: rayOrigin = (%f, %f, %f), pos = (%f, %f, %f), radius = %f, dist2 = %f\n",
-               idx, rayOrigin.x, rayOrigin.y, rayOrigin.z,
-               query->pos.x, query->pos.y, query->pos.z,
-               query->radius, dist2);
         optixReportIntersection(optixGetRayTmin(), 0);
     }
 }
@@ -110,8 +106,9 @@ extern "C" __global__ void __intersection__visualize() {
 
 extern "C" __global__ void __closesthit__visualize() {
     PhotonQuery* query = params.photonMap.queries + optixGetPrimitiveIndex();
+    const auto radiance = query->calcRadiance(params.photonMap.atomics->totalPhotons);
     
-    optixSetPayload_0(__float_as_uint(query->mat.albedo.x));
-    optixSetPayload_1(__float_as_uint(query->mat.albedo.y));
-    optixSetPayload_2(__float_as_uint(query->mat.albedo.z));
+    optixSetPayload_0(__float_as_uint(radiance.x));
+    optixSetPayload_1(__float_as_uint(radiance.y));
+    optixSetPayload_2(__float_as_uint(radiance.z));
 }

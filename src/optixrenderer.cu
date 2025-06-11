@@ -419,7 +419,7 @@ void OptixRenderer::train() {
     params.photonMap = sppmBVH.getDeviceView(); // Update handle in params
     paramsBuffer.copy_from_host(&params, 1);
     check(cudaDeviceSynchronize()); // Wait for the copy to finish
-    check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_LIGHT_PASS], 128, 1, 1));
+    check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_LIGHT_PASS], 1<<16, 1, 1));
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
 
     // Generate training samples

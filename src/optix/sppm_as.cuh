@@ -10,7 +10,7 @@ struct SPPMRTX {
     thrust::device_vector<uint8_t> gasBuffer;
     thrust::device_vector<OptixAabb> aabbBuffer;
     thrust::device_vector<PhotonQuery> queryBuffer;
-    thrust::device_vector<uint32_t> atomicIndexBuffer = {0};
+    thrust::device_vector<PhotonQueryView::Atomics> atomicBuffer {1};
 
     // inline void initHitRecords(OptixProgramGroup pg, size_t numRecords) {
     //     std::vector<PhotonQueryRecord> hitRecordsHost(numRecords);
@@ -25,7 +25,7 @@ struct SPPMRTX {
         return PhotonQueryView { 
             .queries = queryBuffer.data().get(),
             .aabbs = aabbBuffer.data().get(),
-            .atomicIndex = atomicIndexBuffer.data().get(), // TODO: Pull request for better syntax
+            .atomics = atomicBuffer.data().get(), // TODO: Pull request for better syntax
             .size = static_cast<uint32_t>(queryBuffer.size()),
             .handle = handle
         };
