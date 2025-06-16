@@ -36,15 +36,18 @@ extern "C" __global__ void __raygen__() {
         const auto wo = -ray.direction;
         const auto hitPoint = ray.origin + payload.t * ray.direction;
         const auto alpha = payload.roughness * payload.roughness;
+        const auto mat = calcMaterialProperties(payload.baseColor, payload.metallic, alpha, payload.transmission);
 
-        params.photonMap.store({
-            .pos = hitPoint,
-            .wo = wo,
-            .n = payload.normal,
-            .mat = calcMaterialProperties(payload.baseColor, payload.metallic, alpha, payload.transmission),
-            .radius = 0.01f, // TODO: Radius reduction
-            .totalPhotonCountAtBirth = params.photonMap.totalPhotonCount,
-        });
+        if (luminance(mat.albedo * (1 - mat.transmission)) > 1e-6f) {
+            params.photonMap.store({
+                .pos = hitPoint,
+                .wo = wo,
+                .n = payload.normal,
+                .mat = mat,
+                .radius = 0.01f, // TODO: Radius reduction
+                .totalPhotonCountAtBirth = params.photonMap.totalPhotonCount,
+            });
+        }
 
         const auto sample = sampleDisney(r.y, {r.z, r.w}, {r.z, r.w}, wo, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);
         

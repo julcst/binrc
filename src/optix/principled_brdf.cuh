@@ -258,6 +258,12 @@ __device__ constexpr float3 calcMicrofacetNormal(const float3& wo, const float3&
     }
 }
 
+using BRDFFlags = uint8_t;
+constexpr BRDFFlags BRDF_FLAG_DIRAC = 1 << 0; // Dirac delta function
+constexpr BRDFFlags BRDF_FLAG_DIFFUSE = 1 << 1; // Diffuse component
+constexpr BRDFFlags BRDF_FLAG_SPECULAR = 1 << 2; // Specular component
+constexpr BRDFFlags BRDF_FLAG_TRANSMISSION = 1 << 3; // Transmission component
+
 struct BRDFResult {
     float3 throughput;
     float pdf;

@@ -39,12 +39,15 @@ extern "C" __global__ void __raygen__() {
         const auto wi = -ray.direction;
         const auto hitPoint = ray.origin + payload.t * ray.direction;
         const auto alpha = payload.roughness * payload.roughness;
+        const auto mat = calcMaterialProperties(payload.baseColor, payload.metallic, alpha, payload.transmission);
 
-        params.photonMap.recordPhoton({
-            .pos = hitPoint,
-            .wi = wi,
-            .flux = flux,
-        });
+        if (luminance(mat.albedo * (1 - mat.transmission)) > 1e-6f) {
+            params.photonMap.recordPhoton({
+                .pos = hitPoint,
+                .wi = wi,
+                .flux = flux,
+            });
+        }
 
         const auto sample = sampleDisney(r.y, {r.z, r.w}, {r.z, r.w}, wi, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);
         flux *= sample.throughput;
