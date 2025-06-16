@@ -24,9 +24,9 @@ struct PhotonQuery {
 
     __device__ float3 calcRadiance(uint32_t totalPhotonCount) const {
         if (count == 0) return {0.0f}; // No photons found
-        // TODO: Calculate totalCount by reduction
         // TODO: Handle totalPhotonCountAtBirth >= totalPhotonCount
-        return flux / (static_cast<float>(totalPhotonCount - totalPhotonCountAtBirth) * PI * pow2(radius));
+        uint32_t emittedPhotons = totalPhotonCount - totalPhotonCountAtBirth;
+        return flux / (static_cast<float>(emittedPhotons) * PI * pow2(radius)) * 4 * PI; // TODO: Why 4 PI?
     }
 
     // float calcRadius() const {

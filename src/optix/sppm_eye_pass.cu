@@ -25,11 +25,9 @@ extern "C" __global__ void __raygen__() {
         const auto r = curand_uniform4(&state);
 
         // Russian roulette
-        if (params.flags & FORWARD_RR_FLAG) {
-            const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
-            if (r.x >= pContinue) break;
-            throughput /= pContinue;
-        }
+        const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
+        if (r.x >= pContinue) break;
+        throughput /= pContinue;
 
         const auto payload = trace(ray);
 

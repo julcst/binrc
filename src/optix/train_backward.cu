@@ -24,9 +24,9 @@ extern "C" __global__ void __raygen__() {
     curand_init(0, i, params.trainingRound * N_RANDS, &state);
 
     const auto r = curand_uniform4(&state); // Note curand generates in (0, 1] not [0, 1)
-    const auto lightSample = sampleLight(curand_uniform(&state), make_float2(r.x, r.y), make_float2(r.z, r.w));
+    const auto lightSample = samplePhoton(curand_uniform(&state), make_float2(r.x, r.y), make_float2(r.z, r.w));
     auto ray = Ray{lightSample.position + lightSample.n * copysignf(params.sceneEpsilon, dot(lightSample.wo, lightSample.n)), lightSample.wo};
-    auto radiance = lightSample.emission * INV_PI;
+    auto radiance = lightSample.emission;
     // printf("Light sample: %f %f %f\n", lightSample.emission.x, lightSample.emission.y, lightSample.emission.z);
     radiance *= params.balanceWeight; // Balancing
 

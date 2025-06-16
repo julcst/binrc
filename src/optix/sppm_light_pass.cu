@@ -14,25 +14,23 @@ extern "C" __global__ void __raygen__() {
     const auto i = idx.y * params.dim.x + idx.x;
 
     curandStatePhilox4_32_10_t state;
-    constexpr uint32_t N_RANDS = 64; // Number of random numbers to generate at once
+    constexpr uint32_t N_RANDS = 4 * MAX_BOUNCES + 4; // Number of random numbers to generate at once
     curand_init(0, i, params.trainingRound * N_RANDS, &state);
 
     const auto r = curand_uniform4(&state); // Note curand generates in (0, 1] not [0, 1)
-    const auto lightSample = sampleLight(curand_uniform(&state), make_float2(r.x, r.y), make_float2(r.z, r.w));
+    const auto lightSample = samplePhoton(curand_uniform(&state), make_float2(r.x, r.y), make_float2(r.z, r.w));
     auto ray = Ray{lightSample.position + lightSample.n * copysignf(params.sceneEpsilon, dot(lightSample.wo, lightSample.n)), lightSample.wo};
-    auto flux = lightSample.emission * INV_PI;
+    auto flux = lightSample.emission;
 
     Payload payload;
 
-    for (uint depth = 1; depth <= TRAIN_DEPTH; depth++) {
+    for (uint depth = 0; depth < MAX_BOUNCES; depth++) {
         const auto r = curand_uniform4(&state);
 
         // Russian roulette
-        if (params.flags & BACKWARD_RR_FLAG) {
-            const float pContinue = min(luminance(flux) * params.russianRouletteWeight, 1.0f);
-            if (r.x >= pContinue) break; // FIXME: use random numbers independent from sampling
-            flux /= pContinue;
-        }
+        const float pContinue = min(luminance(flux) * params.russianRouletteWeight, 1.0f);
+        if (r.x >= pContinue) break;
+        flux /= pContinue;
 
         payload = trace(ray);
 
@@ -50,7 +48,7 @@ extern "C" __global__ void __raygen__() {
 
         const auto sample = sampleDisney(r.y, {r.z, r.w}, {r.z, r.w}, wi, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);
         flux *= sample.throughput;
-        flux += payload.emission; // TODO: Is this correct?
+        //flux += payload.emission; // TODO: Is this correct?
 
         ray = Ray{hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.direction, payload.normal)), sample.direction};
     }

@@ -62,7 +62,7 @@ extern "C" __global__ void __closesthit__ch() {
 
 extern "C" __global__ void __miss__ms() {
     const auto dir = optixGetWorldRayDirection();
-    auto sky = make_float3(0.03f);
+    auto sky = make_float3(0.0f);
 
     setEmission(sky);
     setT(INFINITY);

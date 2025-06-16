@@ -95,7 +95,7 @@ struct LightDirSample {
     float3 emission;
 };
 
-__device__ inline LightDirSample sampleLight(const float randSrc, const float2& randSurf, const float2& randDir) {
+__device__ inline LightDirSample samplePhoton(const float randSrc, const float2& randSurf, const float2& randDir) {
     const auto light = sampleLightTableUniform(randSrc);
 
     // Sample a barycentric coordinate on the triangle uniformly
@@ -110,7 +110,8 @@ __device__ inline LightDirSample sampleLight(const float randSrc, const float2& 
     const auto wo = tangentToWorld * sampleCosineHemisphere(randDir);
 
     // pdf = light.weight / light.area;
-    const auto weight = light.area / light.weight;
+    // pdf = light.weight * cosThetaL / (light.area * PI); // In solid angle measure
+    const auto weight = light.area / light.weight * INV_PI;
 
     return {wo, n, position, emission * weight};
 }

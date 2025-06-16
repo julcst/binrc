@@ -58,7 +58,6 @@ extern "C" __global__ void __raygen__visualize() {
     auto ray = makeCameraRay(uv);
 
     float3 color = {0.0f, 0.0f, 0.0f};
-    uint32_t count = 0;
 
     // TODO: Use PayloadTypeID
     std::array p = {
@@ -79,7 +78,7 @@ extern "C" __global__ void __raygen__visualize() {
         __uint_as_float(p[2])
     };
 
-    params.image[i] = make_float4(color * 2.0f * PI * PI, 1.0f); // TODO: Why 2pi²
+    params.image[i] = make_float4(color, 1.0f);
 }
 
 extern "C" __global__ void __intersection__visualize() {
