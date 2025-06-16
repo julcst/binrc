@@ -12,12 +12,16 @@ struct Photon {
     float3 flux; // Incoming flux (irradiance)
 };
 
+constexpr float INITIAL_RADIUS = 0.01f; // Initial radius for photon accumulation
+constexpr float ALPHA = 3.0f / 4.0f;
+
 struct PhotonQuery {
     float3 pos; // Position of query
     float3 wo; // Outgoing direction for which to accumulate photons
     float3 n; // Normal at the query position
     MaterialProperties mat; // Material properties at the query position
-    float radius = 0.0f; // Radius of accumulation TODO: Radius reduction
+    float radius = INITIAL_RADIUS; // Radius of accumulation
+    float radius2 = pow2(INITIAL_RADIUS); // Radius of accumulation TODO: Radius reduction
     float3 flux = {0.0f}; // Accumulated outgoing flux
     uint32_t count = 0; // Number of photons found
     uint32_t totalPhotonCountAtBirth = 0; // Total number of photons at initialization
@@ -26,12 +30,16 @@ struct PhotonQuery {
         if (count == 0) return {0.0f}; // No photons found
         // TODO: Handle totalPhotonCountAtBirth >= totalPhotonCount
         uint32_t emittedPhotons = totalPhotonCount - totalPhotonCountAtBirth;
-        return flux / (static_cast<float>(emittedPhotons) * PI * pow2(radius)) * 4 * PI; // TODO: Why 4 PI?
+        return flux / (static_cast<float>(emittedPhotons) * PI * radius2) * 4 * PI; // TODO: Why 4 PI?
     }
 
     // float calcRadius() const {
     //     return initialRadius * exp(-count);
     // }
+
+    __device__ float calcRadius2() const { // TODO: Make parts constexpr
+        return pow2(INITIAL_RADIUS) * tgammaf(1.0f / ALPHA) * tgammaf(count + 1.0f) / tgammaf(count + 1.0f / ALPHA);
+    }
 };
 
 struct PhotonQueryView {
