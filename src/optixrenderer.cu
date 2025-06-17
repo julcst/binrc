@@ -451,7 +451,7 @@ void OptixRenderer::train() {
     const uint forwardSamples = totalTrainingSamples * (1.0f - trainingDirection);
     const uint backwardSamples = (totalTrainingSamples - forwardSamples) * balanceRatio * (1.0f - photonMappingAmount);
     const uint32_t photonQueries = (totalTrainingSamples - forwardSamples) * TRAIN_DEPTH * photonMappingAmount;
-    constexpr uint32_t PHOTON_COUNT = 1 << 17; // Number of photons to generate
+    const uint32_t photonQuerySamples = photonQueries / 6 * photonQueryReplacement;
     //std::cout << "Training samples: " << totalTrainingSamples << " (forward: " << forwardSamples << ", backward: " << backwardSamples << ", photon queries: " << photonQueries << ")" << std::endl;
 
     sppmBVH.size = photonQueries;
@@ -460,13 +460,13 @@ void OptixRenderer::train() {
     check(cudaDeviceSynchronize()); // Wait for the copy to finish
 
     if (photonQueries) {
-        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_EYE_PASS], 128, 1, 1));
+        if (photonQuerySamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_EYE_PASS], photonQuerySamples, 1, 1));
         check(cudaDeviceSynchronize()); // Wait for the renderer to finish
         sppmBVH.updatePhotonAS(context);
         check(cudaDeviceSynchronize());
-        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_LIGHT_PASS], PHOTON_COUNT, 1, 1));
+        if (photonCount) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_LIGHT_PASS], photonCount, 1, 1));
         check(cudaDeviceSynchronize()); // Wait for the renderer to finish
-        sppmBVH.totalPhotonCount += PHOTON_COUNT;
+        sppmBVH.totalPhotonCount += photonCount;
         params.photonMap = sppmBVH.getDeviceView(); // Update handle in params
         paramsBuffer.copy_from_host(&params, 1);
         check(cudaDeviceSynchronize()); // Wait for the copy to finish

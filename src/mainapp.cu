@@ -165,6 +165,8 @@ void MainApp::buildImGui() {
         }
         ImGui::Text("(Balancing Weight: %.2f)", renderer.params.balanceWeight);
         ImGui::SliderFloat("Photon Query Samples", &renderer.photonMappingAmount, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Photon Query Replacement Factor", &renderer.photonQueryReplacement, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderInt("Photon Count", reinterpret_cast<int*>(&renderer.photonCount), 1 << 10, 1 << 20, "%d");
     }
 
     ImGui::End();

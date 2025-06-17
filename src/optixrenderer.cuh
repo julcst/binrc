@@ -63,6 +63,8 @@ public:
     bool enableTraining = false;
     float trainingDirection = 0.5f;
     float photonMappingAmount = 1.0f; // Propoertion of backward samples that are generated using photon mapping
+    float photonQueryReplacement = 0.5f; // Proportion of photon queries that are kept between frames
+    uint32_t photonCount = 1 << 17; // Number of photons to generate
     Params params = {}; // NOTE: Initialization is important to prevent invalid pointers
 
 private:
