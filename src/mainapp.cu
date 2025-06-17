@@ -164,6 +164,7 @@ void MainApp::buildImGui() {
             renderer.params.balanceWeight = 100.0f / (100.0f - balancing);
         }
         ImGui::Text("(Balancing Weight: %.2f)", renderer.params.balanceWeight);
+        ImGui::SliderFloat("Photon Query Samples", &renderer.photonMappingAmount, 0.0f, 1.0f, "%.2f");
     }
 
     ImGui::End();

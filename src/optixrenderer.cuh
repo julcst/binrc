@@ -62,6 +62,7 @@ public:
     std::vector<float> lossHistory;
     bool enableTraining = false;
     float trainingDirection = 0.5f;
+    float photonMappingAmount = 1.0f; // Propoertion of backward samples that are generated using photon mapping
     Params params = {}; // NOTE: Initialization is important to prevent invalid pointers
 
 private:
@@ -97,7 +98,7 @@ private:
 
     BRDFLUT brdfLUT;
 
-    SPPMRTX sppmBVH {1<<16};
+    SPPMRTX sppmBVH {NRC_BATCH_SIZE};
     thrust::device_vector<HeaderOnlyRecord> sppmVisRecords;
     OptixShaderBindingTable sppmVisSBT;
 

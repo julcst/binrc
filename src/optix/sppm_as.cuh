@@ -6,6 +6,8 @@
 
 struct SPPMRTX {
     OptixTraversableHandle handle = 0;
+    uint32_t size = 0;
+    uint32_t totalPhotonCount = 0;
     thrust::device_vector<uint8_t> tempBuffer;
     thrust::device_vector<uint8_t> gasBuffer;
     thrust::device_vector<OptixAabb> aabbBuffer;
@@ -19,14 +21,14 @@ struct SPPMRTX {
     //     aabbBuffer.resize(numRecords);
     // }
 
-    SPPMRTX(uint32_t n) : aabbBuffer(n), queryBuffer(n) {}
+    SPPMRTX(uint32_t n) : aabbBuffer(n), queryBuffer(n), size(n) {}
 
-    inline PhotonQueryView getDeviceView(uint32_t totalPhotonCount) {
+    inline PhotonQueryView getDeviceView() {
         return PhotonQueryView { 
             .queries = queryBuffer.data().get(),
             .aabbs = aabbBuffer.data().get(),
             .atomics = atomicBuffer.data().get(), // TODO: Pull request for better syntax
-            .size = static_cast<uint32_t>(queryBuffer.size()),
+            .queryCount = size,
             .handle = handle,
             .totalPhotonCount = totalPhotonCount
         };
@@ -60,7 +62,7 @@ struct SPPMRTX {
             .type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES,
             .customPrimitiveArray = {
                 .aabbBuffers = &aabbBufferPtr,
-                .numPrimitives = static_cast<uint32_t>(aabbBuffer.size()),
+                .numPrimitives = size,
                 .strideInBytes = 0,
                 .flags = flags.data(),
                 .numSbtRecords = 1,

@@ -240,7 +240,7 @@ OptixRenderer::OptixRenderer() {
         .hitgroupRecordStrideInBytes = sizeof(HeaderOnlyRecord),
         .hitgroupRecordCount = 1,
     };
-    params.photonMap = sppmBVH.getDeviceView(0);
+    params.photonMap = sppmBVH.getDeviceView();
 }
 
 OptixRenderer::~OptixRenderer() {
@@ -355,6 +355,7 @@ __device__ inline void writeNRCOutput(float* dest, uint idx, const float3& radia
     to[2] = radiance.z;
 }
 
+// TODO: Diffuse encoding
 __device__ inline NRCInput encodeInput(const Params* params, const float3& wo, const Surface& surf, const cudaTextureObject_t brdfLUT) {
     const auto F0 = mix(make_float3(0.04f), surf.baseColor, surf.metallic);
     const auto lut = tex2D<float4>(brdfLUT, surf.roughness, dot(surf.normal, wo));
@@ -364,9 +365,23 @@ __device__ inline NRCInput encodeInput(const Params* params, const float3& wo, c
         .position = params->sceneScale * (surf.position - params->sceneMin),
         .wo = toNormSpherical(wo),
         .wn = toNormSpherical(surf.normal),
-        .roughness = surf.roughness * surf.roughness,
+        .roughness = pow2(surf.roughness),
         .diffuse = albedo,
         .specular = specular,
+    };
+}
+
+__device__ inline NRCInput encodeInput(const Params* params, const float3& x, const float3& wo, const float3& n, const MaterialProperties& mat, const cudaTextureObject_t brdfLUT) {
+    const auto roughness = powf(mat.alpha2, 1.0f / 4.0f);
+    const auto lut = tex2D<float4>(brdfLUT, roughness, dot(n, wo));
+    const auto specular = mat.F0 * lut.x + lut.y;
+    return {
+        .position = params->sceneScale * (x - params->sceneMin),
+        .wo = toNormSpherical(wo),
+        .wn = toNormSpherical(n),
+        .roughness = pow2(roughness),
+        .diffuse = mat.albedo,
+        .specular = mat.F0,
     };
 }
 
@@ -408,26 +423,58 @@ __global__ void applySelfLearning(unsigned int numQueries, std::array<TrainBounc
     }
 }
 
+__global__ void writePhotonQueriesToTrainingSet(Params* params, float* nrcQueries, float* trainTarget) {
+    const auto i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= params->photonMap.queryCount) return;
+
+    const auto& photonQuery = params->photonMap.queries[i];
+
+    const auto trainIdx = atomicAdd(params->trainingIndexPtr, 1u) % NRC_BATCH_SIZE;
+
+    const auto input = encodeInput(params, photonQuery.pos, photonQuery.wo, photonQuery.n, photonQuery.mat, params->brdfLUT);
+    const auto reflectanceFactorizationTerm = max(input.diffuse + input.specular, 1e-3f);
+    const auto radiance = photonQuery.calcRadiance(params->photonMap.totalPhotonCount) / reflectanceFactorizationTerm;
+
+    writeNRCInput(nrcQueries, trainIdx, input);
+    writeNRCOutput(trainTarget, trainIdx, radiance);
+}
+
 // TODO: Could do multiple smaller training steps per frame
 void OptixRenderer::train() {
     nrcLightSamples.memset(0);
-    check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+    check(cudaDeviceSynchronize());
 
-    check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_EYE_PASS], 128, 1, 1));
-    check(cudaDeviceSynchronize()); // Wait for the renderer to finish
-    sppmBVH.updatePhotonAS(context);
-    constexpr uint32_t PHOTON_COUNT = 1 << 17; // Number of photons to generate
-    params.photonMap = sppmBVH.getDeviceView(params.photonMap.totalPhotonCount + PHOTON_COUNT); // Update handle in params
-    paramsBuffer.copy_from_host(&params, 1);
-    check(cudaDeviceSynchronize()); // Wait for the copy to finish
-    check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_LIGHT_PASS], PHOTON_COUNT, 1, 1));
-    check(cudaDeviceSynchronize()); // Wait for the renderer to finish
-
-    // Generate training samples
+    // Calculate sample amounts per training methods
+    // FIXME: Fix crash when changing trainigDirection
     const float balanceRatio = 1.0f / params.balanceWeight;
     const auto totalTrainingSamples = NRC_BATCH_SIZE / TRAIN_DEPTH;
     const uint forwardSamples = totalTrainingSamples * (1.0f - trainingDirection);
-    const uint backwardSamples = (totalTrainingSamples - forwardSamples) * balanceRatio;
+    const uint backwardSamples = (totalTrainingSamples - forwardSamples) * balanceRatio * (1.0f - photonMappingAmount);
+    const uint32_t photonQueries = (totalTrainingSamples - forwardSamples) * TRAIN_DEPTH * photonMappingAmount;
+    constexpr uint32_t PHOTON_COUNT = 1 << 17; // Number of photons to generate
+    //std::cout << "Training samples: " << totalTrainingSamples << " (forward: " << forwardSamples << ", backward: " << backwardSamples << ", photon queries: " << photonQueries << ")" << std::endl;
+
+    sppmBVH.size = photonQueries;
+    params.photonMap = sppmBVH.getDeviceView(); // Update handle in params
+    paramsBuffer.copy_from_host(&params, 1);
+    check(cudaDeviceSynchronize()); // Wait for the copy to finish
+
+    if (photonQueries) {
+        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_EYE_PASS], 128, 1, 1));
+        check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+        sppmBVH.updatePhotonAS(context);
+        check(cudaDeviceSynchronize());
+        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_LIGHT_PASS], PHOTON_COUNT, 1, 1));
+        check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+        sppmBVH.totalPhotonCount += PHOTON_COUNT;
+        params.photonMap = sppmBVH.getDeviceView(); // Update handle in params
+        paramsBuffer.copy_from_host(&params, 1);
+        check(cudaDeviceSynchronize()); // Wait for the copy to finish
+        writePhotonQueriesToTrainingSet<<<(photonQueries + 255) / 256, 256>>>(paramsBuffer.data(), nrcTrainInput.data(), nrcTrainOutput.data());
+        check(cudaDeviceSynchronize());
+    }
+
+    // Generate training samples
     if (forwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_FORWARD], forwardSamples, 1, 1));
     if (backwardSamples) {
         check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_BACKWARD], backwardSamples, 1, 1));
@@ -456,6 +503,7 @@ void OptixRenderer::train() {
     for (uint32_t offset = 0; offset < NRC_BATCH_SIZE; offset += NRC_SUBBATCH_SIZE) {
         // TODO: Use pdf
         // TODO: Limit training to the samples generated in this step to improve performance
+        // TODO: Shuffling
         auto ctx = nrcModel.trainer->training_step(nrcTrainInput.slice_cols(offset, NRC_SUBBATCH_SIZE), nrcTrainOutput.slice_cols(offset, NRC_SUBBATCH_SIZE));
         float loss = nrcModel.trainer->loss(*ctx);
         lossHistory.push_back(loss);

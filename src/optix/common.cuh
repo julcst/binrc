@@ -38,6 +38,7 @@ __device__ inline Payload trace(const Ray& ray, uint hint) {
 
 __device__ inline Payload trace(const Ray& ray) {
     std::array<uint, 17> p;
+    // FIXME: ray.direction is nan
     optixTraverse(
         params.handle,
         ray.origin, ray.direction,

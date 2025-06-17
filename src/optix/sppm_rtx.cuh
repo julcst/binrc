@@ -41,7 +41,7 @@ struct PhotonQueryView {
     PhotonQuery* queries = nullptr;
     OptixAabb* aabbs = nullptr;
     Atomics* atomics = nullptr;
-    uint32_t size = 0;
+    uint32_t queryCount = 0;
     OptixTraversableHandle handle = 0;
     uint32_t totalPhotonCount = 0;
 
@@ -59,7 +59,7 @@ struct PhotonQueryView {
 
 #ifdef __CUDA_ARCH__
     __device__ __forceinline__ void store(const PhotonQuery& query) const {
-        const auto idx = atomicAdd(&(atomics->index), 1) % size;
+        const auto idx = atomicAdd(&(atomics->index), 1) % queryCount;
         store(idx, query);
     }
 
