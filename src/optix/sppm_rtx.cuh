@@ -26,7 +26,7 @@ struct PhotonQuery {
         if (count == 0) return {0.0f}; // No photons found
         // TODO: Handle totalPhotonCountAtBirth >= totalPhotonCount
         uint32_t emittedPhotons = totalPhotonCount - totalPhotonCountAtBirth;
-        return flux / (static_cast<float>(emittedPhotons) * PI * pow2(radius)) * 4 * PI; // TODO: Why 4 PI?
+        return flux / (static_cast<float>(emittedPhotons) * PI * pow2(radius));
     }
 
     // float calcRadius() const {

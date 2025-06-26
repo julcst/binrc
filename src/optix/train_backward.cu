@@ -26,7 +26,7 @@ extern "C" __global__ void __raygen__() {
     const auto r = curand_uniform4(&state); // Note curand generates in (0, 1] not [0, 1)
     const auto lightSample = samplePhoton(curand_uniform(&state), make_float2(r.x, r.y), make_float2(r.z, r.w));
     auto ray = Ray{lightSample.position + lightSample.n * copysignf(params.sceneEpsilon, dot(lightSample.wo, lightSample.n)), lightSample.wo};
-    auto radiance = lightSample.emission;
+    auto radiance = lightSample.emission * INV_PI * INV_PI; // FIXME: Why / PI² ?
     // printf("Light sample: %f %f %f\n", lightSample.emission.x, lightSample.emission.y, lightSample.emission.z);
     radiance *= params.balanceWeight; // Balancing
 
@@ -66,6 +66,6 @@ extern "C" __global__ void __raygen__() {
             atomicAdd(params.lightSamples, 1u);
         //}
 
-        radiance += payload.emission; // TODO: Do not train bounce emission
+        //radiance += payload.emission; // TODO: Do not train bounce emission
     }
 }

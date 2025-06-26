@@ -24,13 +24,13 @@ extern "C" __global__ void __raygen__() {
 
     Payload payload;
 
-    for (uint depth = 0; depth < MAX_BOUNCES; depth++) {
+    for (uint depth = 0; depth < 32; depth++) {
         const auto r = curand_uniform4(&state);
 
         // Russian roulette
-        const float pContinue = min(luminance(flux) * params.russianRouletteWeight, 1.0f);
-        if (r.x >= pContinue) break;
-        flux /= pContinue;
+        // const float pContinue = min(luminance(flux) * params.russianRouletteWeight, 1.0f);
+        // if (r.x >= pContinue) break;
+        // flux /= pContinue;
 
         payload = trace(ray);
 
@@ -50,7 +50,7 @@ extern "C" __global__ void __raygen__() {
         }
 
         const auto sample = sampleDisney(r.y, {r.z, r.w}, {r.z, r.w}, wi, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);
-        flux *= sample.throughput;
+        flux *= sample.throughput; // FIXME, this is BRDF * cosThetaO / pdf, not BRDF * cosThetaI / pdf
         //flux += payload.emission; // TODO: Is this correct?
 
         ray = Ray{hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.direction, payload.normal)), sample.direction};

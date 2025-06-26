@@ -34,6 +34,7 @@ extern "C" __global__ void __anyhit__() {
                          __uint_as_float(optixGetPayload_4()),
                          __uint_as_float(optixGetPayload_5())};
 
+    // FIXME: Multiply with PI / cosThetaI
     const auto radiance = evalDisneyBRDFOnly(query->wo, wi, query->n, query->mat) * flux;
 
     // NOTE: Does atomicAdd hurt performance because of serialization?

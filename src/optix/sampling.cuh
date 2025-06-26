@@ -111,9 +111,9 @@ __device__ inline LightDirSample samplePhoton(const float randSrc, const float2&
 
     // pdf = light.weight / light.area;
     // pdf = light.weight * cosThetaL / (light.area * PI); // In solid angle measure
-    const auto weight = light.area / light.weight * INV_PI;
-
-    return {wo, n, position, emission * weight};
+    // TODO: rename light.weight to light.pdf
+    const auto Le = emission * (light.area * PI / light.weight); // = emission * cosThetaL / pdf
+    return {wo, n, position, Le};
 }
 
 __device__ constexpr float balanceHeuristic(float pdf1, float pdf2) {

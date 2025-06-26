@@ -270,6 +270,8 @@ struct BRDFResult {
     bool isDirac;
 };
 
+
+// Returns BRDF * cosThetaI
 __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, const float3& wm, const float3& n, const MaterialProperties& mat, const DisneyWeights& weights, float eta) {
     auto NdotV = dot(n, wo);
     auto NdotL = dot(n, wi);
@@ -332,6 +334,8 @@ __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, c
     return evalDisney(wo, wi, calcMicrofacetNormal(wo, wi, n, eta), n, mat, weights, eta);
 }
 
+
+// Returns BRDF * cosThetaI
 __device__ constexpr float3 evalDisneyBRDFOnly(const float3& wo, const float3& wi, const float3& wm, const float3& n, const MaterialProperties& mat, float eta) {
     auto NdotV = dot(n, wo);
     auto NdotL = dot(n, wi);
@@ -361,7 +365,7 @@ __device__ constexpr float3 evalDisneyBRDFOnly(const float3& wo, const float3& w
         const auto specular = F * safediv(D, invG * 4.0f * NdotV); // TODO: Handle dirac
         throughput += specular;
 
-        const auto diffuse = mat.albedo * ((1.0f - mat.transmission) * NdotL * INV_PI);
+        const auto diffuse = mat.albedo * ((1.0f - mat.transmission) * NdotL * INV_PI); // FIXME: No 1 / PI
         throughput += diffuse;
     } else if (mat.transmission > 0.0f) {
         // Transmission
@@ -372,6 +376,7 @@ __device__ constexpr float3 evalDisneyBRDFOnly(const float3& wo, const float3& w
     return throughput;
 }
 
+// Returns BRDF * cosThetaI
 __device__ constexpr float3 evalDisneyBRDFOnly(const float3& wo, const float3& wi, const float3& geometryN, const MaterialProperties& mat) {
     const auto inside = dot(geometryN, wo) < 0.0f;
     const auto n = inside ? -geometryN : geometryN; // Flip normal if inside
@@ -379,7 +384,7 @@ __device__ constexpr float3 evalDisneyBRDFOnly(const float3& wo, const float3& w
     return evalDisneyBRDFOnly(wo, wi, calcMicrofacetNormal(wo, wi, n, eta), n, mat, eta);
 }
 
-
+// Returns BRDF * cosThetaI / pdf
 __device__ constexpr BRDFResult evalDisneyWeighted(const float3& wo, const float3& wi, const float3& wm, const float3& n, const MaterialProperties& mat, const DisneyWeights& weights, float eta) {
     const auto sameHemisphere = dot(n, wo) * dot(n, wi) >= 0.0f;
     const auto NdotH = abs(dot(n, wm));
