@@ -26,9 +26,10 @@ extern "C" __global__ void __raygen__() {
     const auto r = curand_uniform4(&state); // Note curand generates in (0, 1] not [0, 1)
     const auto lightSample = samplePhoton(curand_uniform(&state), make_float2(r.x, r.y), make_float2(r.z, r.w));
     auto ray = Ray{lightSample.position + lightSample.n * copysignf(params.sceneEpsilon, dot(lightSample.wo, lightSample.n)), lightSample.wo};
-    auto radiance = lightSample.emission * INV_PI * INV_PI; // FIXME: Why / PI² ?
+    auto radiance = lightSample.emission * INV_PI; // FIXME: Why / PI² ?
     // printf("Light sample: %f %f %f\n", lightSample.emission.x, lightSample.emission.y, lightSample.emission.z);
     radiance *= params.balanceWeight; // Balancing
+    uint lightSamples = 0;
 
     Payload payload;
 
@@ -59,13 +60,16 @@ extern "C" __global__ void __raygen__() {
         ray = Ray{hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.direction, payload.normal)), sample.direction};
 
         //if (depth > 1) {
-            const auto trainInput = encodeInput(hitPoint, !sample.isSpecular && (params.flags & DIFFUSE_ENCODING_FLAG), sample.direction, payload);
-            const auto trainIdx = pushNRCTrainInput(trainInput);
-            const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
-            writeNRCOutput(params.trainingTarget, trainIdx, reflectanceFactorizationTerm * radiance);
-            atomicAdd(params.lightSamples, 1u);
+        const auto trainInput = encodeInput(hitPoint, !sample.isSpecular && (params.flags & DIFFUSE_ENCODING_FLAG), sample.direction, payload);
+        const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
+        const auto trainIdx = pushNRCTrainInput(trainInput);
+        
+        writeNRCOutput(params.trainingTarget, trainIdx, reflectanceFactorizationTerm * radiance * sample.pdf);
+        lightSamples++;
         //}
 
         //radiance += payload.emission; // TODO: Do not train bounce emission
     }
+
+    atomicAdd(params.lightSamples, lightSamples); // TODO: Aggregate
 }
