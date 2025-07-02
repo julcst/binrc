@@ -53,7 +53,7 @@ extern "C" __global__ void __raygen__() {
         // FIXME: Wrong IOR
         const auto sample = sampleDisney(curand_uniform(&state), {r.x, r.y}, {r.z, r.w}, wi, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);
 
-        radiance *= sample.throughput;
+        
 
         // printf("Sample throughput: %f\n", pow2(sample.throughput));
 
@@ -62,9 +62,13 @@ extern "C" __global__ void __raygen__() {
         //if (depth > 1) {
         const auto trainInput = encodeInput(hitPoint, !sample.isSpecular && (params.flags & DIFFUSE_ENCODING_FLAG), sample.direction, payload);
         const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
+        const auto mat = calcMaterialProperties(payload.baseColor, payload.metallic, payload.roughness, payload.transmission);
+        const auto brdf = min(evalDisneyBRDFOnly(wi, sample.direction, payload.normal, mat), 1e0f); // TODO: cosineThetaI correct?
+        const auto output = reflectanceFactorizationTerm * radiance * brdf;
+        radiance *= sample.throughput;
+
         const auto trainIdx = pushNRCTrainInput(trainInput);
-        
-        writeNRCOutput(params.trainingTarget, trainIdx, reflectanceFactorizationTerm * radiance * sample.pdf);
+        writeNRCOutput(params.trainingTarget, trainIdx, output);
         lightSamples++;
         //}
 

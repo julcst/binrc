@@ -316,7 +316,7 @@ __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, c
         pdf += weights.diffuse * pdfDiffuse;
     } else if (weights.transmission > 0.0f) {
         // Transmission
-        const auto transmission = mat.albedo * (1.0f - F) * safediv(mat.transmission * D * abs(HdotL * HdotV), max(invG * NdotV * pow2(HdotL + HdotV / eta), 1e-3f)); // NOTE: NdotL cancels with the denominator
+        const auto transmission = mat.albedo * (1.0f - F) * safediv(mat.transmission * D * abs(HdotL * HdotV), invG * NdotV * pow2(HdotL + HdotV / eta)); // NOTE: NdotL cancels with the denominator
         throughput += transmission;
         const auto pdfTransmission = safediv(D * HdotV * HdotL, NdotV * invG1 * pow2(HdotL + HdotV / eta));
         pdf += weights.transmission * pdfTransmission;
@@ -369,7 +369,7 @@ __device__ constexpr float3 evalDisneyBRDFOnly(const float3& wo, const float3& w
         throughput += diffuse;
     } else if (mat.transmission > 0.0f) {
         // Transmission
-        const auto transmission = mat.albedo * (1.0f - F) * safediv(mat.transmission * D * abs(HdotL * HdotV), max(invG * NdotV * pow2(HdotL + HdotV / eta), 1e-3f)); // NOTE: NdotL cancels with the denominator
+        const auto transmission = mat.albedo * (1.0f - F) * safediv(mat.transmission * D * abs(HdotL * HdotV), invG * NdotV * pow2(HdotL + HdotV / eta)); // NOTE: NdotL cancels with the denominator
         throughput += transmission;
     }
 

@@ -35,9 +35,9 @@ extern "C" __global__ void __raygen__() {
     
     for (uint depth = 1; depth < 2; depth++) {
         // Russian roulette
-        const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
-        if (RND_ROULETTE >= pContinue) break;
-        throughput /= pContinue;
+        // const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
+        // if (RND_ROULETTE >= pContinue) break;
+        // throughput /= pContinue;
 
         // Trace
         const auto next = trace(ray);
