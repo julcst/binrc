@@ -86,14 +86,14 @@ OptixRenderer::OptixRenderer() {
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
             .raygen = {
-                .module = modules[optixir::TRAIN_FORWARD],
+                .module = modules[optixir::TRAIN_EYE],
                 .entryFunctionName = "__raygen__",
             },
         },
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
             .raygen = {
-                .module = modules[optixir::TRAIN_BACKWARD],
+                .module = modules[optixir::TRAIN_LIGHT],
                 .entryFunctionName = "__raygen__",
             },
         },
@@ -182,8 +182,8 @@ OptixRenderer::OptixRenderer() {
     // Set up shader binding table
     std::vector<RaygenRecord> raygenRecordsHost(sbts.size());
     check(optixSbtRecordPackHeader(programGroups[REFERENCE], &raygenRecordsHost[REFERENCE]));
-    check(optixSbtRecordPackHeader(programGroups[TRAIN_FORWARD], &raygenRecordsHost[TRAIN_FORWARD]));
-    check(optixSbtRecordPackHeader(programGroups[TRAIN_BACKWARD], &raygenRecordsHost[TRAIN_BACKWARD]));
+    check(optixSbtRecordPackHeader(programGroups[TRAIN_EYE], &raygenRecordsHost[TRAIN_EYE]));
+    check(optixSbtRecordPackHeader(programGroups[TRAIN_LIGHT], &raygenRecordsHost[TRAIN_LIGHT]));
     check(optixSbtRecordPackHeader(programGroups[INFERENCE], &raygenRecordsHost[INFERENCE]));
     check(optixSbtRecordPackHeader(programGroups[SPPM_EYE_PASS], &raygenRecordsHost[SPPM_EYE_PASS]));
     check(optixSbtRecordPackHeader(programGroups[SPPM_LIGHT_PASS], &raygenRecordsHost[SPPM_LIGHT_PASS]));
@@ -415,11 +415,13 @@ __global__ void applySelfLearning(unsigned int numQueries, std::array<TrainBounc
     const auto specular = make_float3(nrcQueries[idxIn + 11], nrcQueries[idxIn + 12], nrcQueries[idxIn + 13]);
     inference *= (diffuse + specular);
 
-    for (const auto bounce : bounces) {
+    for (uint32_t j = TRAIN_DEPTH - 1; j < TRAIN_DEPTH; j--) {
+        const auto& bounce = bounces[j];
         if (!bounce.isValid) continue;
+        inference *= bounce.throughput;
         /*printf("Bounce %d: (%f %f %f) * Inference (%f %f %f) + Radiance (%f %f %f)\n", bounce.index, bounce.throughput.x, bounce.throughput.y, bounce.throughput.z, 
                inference.x, inference.y, inference.z, bounce.radiance.x, bounce.radiance.y, bounce.radiance.z);*/
-        writeNRCOutput(trainTarget, bounce.index, bounce.reflectanceFactorizationTerm * (inference * bounce.throughput + bounce.radiance));
+        writeNRCOutput(trainTarget, bounce.index, bounce.reflectanceFactorizationTerm * (inference + bounce.radiance));
     }
 }
 
@@ -475,9 +477,9 @@ void OptixRenderer::train() {
     }
 
     // Generate training samples
-    if (forwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_FORWARD], forwardSamples, 1, 1));
+    if (forwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_EYE], forwardSamples, 1, 1));
     if (backwardSamples) {
-        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_BACKWARD], backwardSamples, 1, 1));
+        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_LIGHT], backwardSamples, 1, 1));
     }
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
     

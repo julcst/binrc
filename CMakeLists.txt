@@ -59,8 +59,8 @@ set(OPTIXIR
     src/optix/hit.cu
     src/optix/inference.cu
     src/optix/reference.cu
-    src/optix/train_backward.cu
-    src/optix/train_forward.cu
+    src/optix/train_light.cu
+    src/optix/train_eye.cu
     src/optix/sppm_eye_pass.cu
     src/optix/sppm_light_pass.cu
     src/optix/sppm_rtx.cu

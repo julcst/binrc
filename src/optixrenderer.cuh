@@ -25,8 +25,8 @@ using namespace glm;
 enum ProgramGroup {
 // Raygeneration programs
     REFERENCE,
-    TRAIN_FORWARD,
-    TRAIN_BACKWARD,
+    TRAIN_EYE,
+    TRAIN_LIGHT,
     INFERENCE,
     SPPM_EYE_PASS,
     SPPM_LIGHT_PASS,

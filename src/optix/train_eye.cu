@@ -16,10 +16,10 @@ constexpr uint N_RANDS = 2 + (TRAIN_DEPTH) * 9;
 extern "C" __global__ void __raygen__() {
     const auto idx = optixGetLaunchIndex();
     const auto dim = optixGetLaunchDimensions();
-    const auto i = idx.y * params.dim.x + idx.x;
+    const auto pixelIdx = idx.y * params.dim.x + idx.x;
     
     curandStatePhilox4_32_10_t state;
-    curand_init(0, i, params.trainingRound * N_RANDS, &state);
+    curand_init(0, pixelIdx, params.trainingRound * N_RANDS, &state);
 
     auto ray = makeCameraRay({curand_uniform(&state), curand_uniform(&state)});
 
@@ -28,39 +28,40 @@ extern "C" __global__ void __raygen__() {
     Payload payload;
     auto throughput = make_float3(1.0f);
     auto lightPdfIsZero = true;
-    auto trainBounceIdx = 0;
     SampleResult sample {ray.direction, make_float3(1.0f), 1.0f, true, true};
 
     std::array<TrainBounce, TRAIN_DEPTH> trainBounces;
     for (uint i = 0; i < TRAIN_DEPTH; i++) {
         trainBounces[i].isValid = false;
     }
-    
-    for (uint depth = 1; depth <= TRAIN_DEPTH; depth++) {
-        trainBounceIdx = depth - 1;
+
+    uint32_t nTrainingSamples = 0;
+    for (uint32_t depth = 0; depth < TRAIN_DEPTH; depth++) {
 
         // Russian roulette
         if (params.flags & FORWARD_RR_FLAG) {
             const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
             if (curand_uniform(&state) >= pContinue) break;
-            for (uint i = 0; i < trainBounceIdx; i++) {
-                trainBounces[i].throughput /= pContinue;
+            if (!(params.flags & SELF_LEARNING_FLAG)) {
+                if (depth > 0) trainBounces[depth - 1].throughput /= pContinue;
+                throughput /= pContinue;
             }
-            throughput /= pContinue;
         }
 
         payload = trace(ray);
 
         if (isinf(payload.t)) {
-            for (uint i = 0; i < trainBounceIdx; i++) {
-                trainBounces[i].radiance += trainBounces[i].throughput * sample.throughput * payload.emission;
+            auto radiance = payload.emission;
+            // NOTE: This is logically equivalent to for(i = n; i >= 0; i--) but avoids unsigned underflow
+            for (uint i = depth - 1; i < TRAIN_DEPTH; i--) {
+                radiance *= trainBounces[i].throughput;
+                trainBounces[i].radiance += radiance;
             }
             break; // Skybox
         }
 
-        for (uint i = 0; i <= trainBounceIdx; i++) {
-            trainBounces[i].throughput *= sample.throughput;
-        }
+        nTrainingSamples++;
+        trainBounces[depth].throughput = sample.throughput;
         const auto wo = -ray.direction;
         const auto hitPoint = ray.origin + payload.t * ray.direction;
         const auto alpha = payload.roughness * payload.roughness;
@@ -74,8 +75,10 @@ extern "C" __global__ void __raygen__() {
                 const auto lightPdf = lightPdfUniform(wo, payload.t, payload.normal, payload.area);
                 weight = balanceHeuristic(sample.pdf, lightPdf);
             }
-            for (uint i = 0; i < trainBounceIdx; i++) {
-                trainBounces[i].radiance += trainBounces[i].throughput * payload.emission * weight;
+            auto radiance = payload.emission * weight;
+            for (uint i = depth - 1; i < TRAIN_DEPTH; i--) {
+                radiance *= trainBounces[i].throughput;
+                trainBounces[i].radiance += radiance;
             }
         }
 
@@ -88,9 +91,10 @@ extern "C" __global__ void __raygen__() {
                 const auto lightPoint = sample.position - sample.n * copysignf(params.sceneEpsilon, dot(sample.wi, sample.n));
                 if (!brdf.isDirac && brdf.pdf > 0.0f && !traceOcclusion(surfacePoint, lightPoint)) {
                     const auto weight = balanceHeuristic(sample.pdf, brdf.pdf);
-                    const auto weightedEmission = brdf.throughput * sample.emission * weight / sample.pdf;
-                    for (uint i = 0; i <= trainBounceIdx; i++) {
-                        trainBounces[i].radiance += trainBounces[i].throughput * weightedEmission;
+                    auto radiance = brdf.throughput * sample.emission * weight / sample.pdf;
+                    for (uint i = depth; i < TRAIN_DEPTH; i--) {
+                        radiance *= trainBounces[i].throughput;
+                        trainBounces[i].radiance += radiance;
                     }
                 }
             //}
@@ -101,27 +105,28 @@ extern "C" __global__ void __raygen__() {
         
         ray = Ray{hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.direction, payload.normal)), sample.direction};
         lightPdfIsZero = sample.isDirac;
-        for (uint i = 0; i <= trainBounceIdx; i++) {
-            trainBounces[i].throughput *= sample.throughput;
-        }
+        trainBounces[depth].throughput = sample.throughput;
         throughput *= sample.throughput;
 
         const auto trainInput = encodeInput(hitPoint, !sample.isSpecular && (params.flags & DIFFUSE_ENCODING_FLAG), wo, payload);
         const auto trainIdx = pushNRCTrainInput(trainInput);
         const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
-        trainBounces[trainBounceIdx].index = trainIdx;
-        trainBounces[trainBounceIdx].reflectanceFactorizationTerm = reflectanceFactorizationTerm;
-        trainBounces[trainBounceIdx].isValid = true;
+        trainBounces[depth].index = trainIdx;
+        trainBounces[depth].reflectanceFactorizationTerm = reflectanceFactorizationTerm;
+        trainBounces[depth].isValid = true;
     }
 
     // TODO: Keep 1/16 of learning paths unbiased from self-learning
     if (params.flags & SELF_LEARNING_FLAG) {
-        params.selfLearningBounces[i] = trainBounces;
-        for (uint j = 0; j < NRC_INPUT_SIZE; j++) {
-            params.selfLearningQueries[i * NRC_INPUT_SIZE + j] = params.trainingInput[trainBounces[trainBounceIdx].index * NRC_INPUT_SIZE + j];
+        params.selfLearningBounces[pixelIdx] = trainBounces;
+        // Component-wise copy of the training input to self-learning queries
+        auto terminalBounceInputIdx = nTrainingSamples > 0 ? trainBounces[nTrainingSamples - 1].index : trainBounces[0].index;
+        for (uint i = 0; i < NRC_INPUT_SIZE; i++) {
+            params.selfLearningQueries[pixelIdx * NRC_INPUT_SIZE + i] = params.trainingInput[terminalBounceInputIdx * NRC_INPUT_SIZE + i];
         }
     } else {
-        for (uint i = 0; i < trainBounceIdx; i++) {
+        // TODO: Aggregated atomics
+        for (uint32_t i = 0; i < nTrainingSamples; i++) {
             writeNRCOutput(params.trainingTarget + trainBounces[i].index * NRC_OUTPUT_SIZE, trainBounces[i].radiance * trainBounces[i].reflectanceFactorizationTerm);
         }
     }
