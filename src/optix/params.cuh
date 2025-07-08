@@ -83,7 +83,7 @@ struct EmissiveTriangle {
     float3 n2;
 };
 
-constexpr std::array<std::string_view, 7> INFERENCE_MODES = {
+constexpr std::array<std::string_view, 8> INFERENCE_MODES = {
     "No Inference",
     "Raw Cache",
     "1st Vertex",
@@ -91,6 +91,7 @@ constexpr std::array<std::string_view, 7> INFERENCE_MODES = {
     "1st Diffuse",
     "Variance Heuristic",
     "Raw Photon Map",
+    "Photon Mapping",
 };
 
 enum class InferenceMode : u_int8_t {
@@ -101,6 +102,7 @@ enum class InferenceMode : u_int8_t {
     FIRST_DIFFUSE,
     VARIANCE_HEURISTIC,
     RAW_PHOTON_MAP,
+    PHOTON_MAPPING,
 };
 
 struct RaygenData {};

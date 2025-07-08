@@ -31,6 +31,7 @@ enum ProgramGroup {
     SPPM_EYE_PASS,
     SPPM_LIGHT_PASS,
     SPPM_VIS_RAYGEN,
+    SPPM_FULL,
 // Other
     MISS,
     CLOSEST_HIT,
@@ -39,7 +40,7 @@ enum ProgramGroup {
     SPPM_VIS_HIT,
 };
 
-constexpr size_t RAYGEN_COUNT = 7;
+constexpr size_t RAYGEN_COUNT = 8;
 constexpr size_t PROGRAM_GROUP_COUNT = RAYGEN_COUNT + 5;
 
 class OptixRenderer {

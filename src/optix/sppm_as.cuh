@@ -23,6 +23,12 @@ struct SPPMRTX {
 
     SPPMRTX(uint32_t n) : aabbBuffer(n), queryBuffer(n), size(n) {}
 
+    inline void resize(uint32_t n) {
+        size = n;
+        aabbBuffer.reserve(n);
+        queryBuffer.reserve(n);
+    }
+
     inline PhotonQueryView getDeviceView() {
         return PhotonQueryView { 
             .queries = queryBuffer.data().get(),

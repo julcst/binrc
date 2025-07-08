@@ -126,6 +126,13 @@ OptixRenderer::OptixRenderer() {
             },
         },
         OptixProgramGroupDesc {
+            .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
+            .raygen = {
+                .module = modules[optixir::SPPM_EYE_PASS],
+                .entryFunctionName = "__raygen__full",
+            },
+        },
+        OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
             .miss = {
                 .module = modules[optixir::HIT],
@@ -188,6 +195,7 @@ OptixRenderer::OptixRenderer() {
     check(optixSbtRecordPackHeader(programGroups[SPPM_EYE_PASS], &raygenRecordsHost[SPPM_EYE_PASS]));
     check(optixSbtRecordPackHeader(programGroups[SPPM_LIGHT_PASS], &raygenRecordsHost[SPPM_LIGHT_PASS]));
     check(optixSbtRecordPackHeader(programGroups[SPPM_VIS_RAYGEN], &raygenRecordsHost[SPPM_VIS_RAYGEN]));
+    check(optixSbtRecordPackHeader(programGroups[SPPM_FULL], &raygenRecordsHost[SPPM_FULL]));
     raygenRecords.resize_and_copy_from_host(raygenRecordsHost);
 
     std::vector<MissRecord> missRecordsHost(sbts.size());
@@ -441,6 +449,20 @@ __global__ void writePhotonQueriesToTrainingSet(Params* params, float* nrcQuerie
     writeNRCOutput(trainTarget, trainIdx, radiance);
 }
 
+__global__ void accumulatePhotonsToFramebuffer(Params* params) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= params->dim.x || y >= params->dim.y) return;
+
+    const int i = y * params->dim.x + x;
+    if (i >= params->photonMap.queryCount) return; // Safety check
+
+    const auto photonQuery = params->photonMap.queries[i];
+    const auto radiance = photonQuery.calcRadiance(params->photonMap.totalPhotonCount);
+
+    params->image[i] *= make_float4(radiance, 1.0f);
+}
+
 // TODO: Could do multiple smaller training steps per frame
 void OptixRenderer::train() {
     nrcLightSamples.memset(0);
@@ -533,6 +555,24 @@ void OptixRenderer::render(vec4* image, uvec2 dim) {
         case InferenceMode::RAW_PHOTON_MAP:
             check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sppmVisSBT, dim.x, dim.y, 1));
             check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+            break;
+        case InferenceMode::PHOTON_MAPPING:
+            sppmBVH.resize(dim.x * dim.y);
+            params.photonMap = sppmBVH.getDeviceView(); // Update handle in params
+            paramsBuffer.copy_from_host(&params, 1);
+            check(cudaDeviceSynchronize()); // Wait for the copy to finish
+            check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_FULL], dim.x, dim.y, 1));
+            check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+            sppmBVH.updatePhotonAS(context);
+            check(cudaDeviceSynchronize());
+            if (photonCount) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_LIGHT_PASS], photonCount, 1, 1));
+            check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+            sppmBVH.totalPhotonCount += photonCount;
+            params.photonMap = sppmBVH.getDeviceView(); // Update handle in params
+            paramsBuffer.copy_from_host(&params, 1);
+            check(cudaDeviceSynchronize()); // Wait for the copy to finish
+            accumulatePhotonsToFramebuffer<<<dim3((dim.x + 15) / 16, (dim.y + 15) / 16), dim3(16, 16)>>>(paramsBuffer.data());
+            params.trainingRound++;
             break;
         default:
             check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[INFERENCE], dim.x, dim.y, 1));
