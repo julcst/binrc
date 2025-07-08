@@ -54,4 +54,5 @@ class MainApp : public App {
     std::vector<std::filesystem::path> scenes;
     int sceneID = 0;
     glm::uvec2 bufferDim;
+    glm::vec3 movement = {0.0f, 0.0f, 0.0f};
 };

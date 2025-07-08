@@ -59,6 +59,9 @@ MainApp::MainApp() : App(800, 800) {
     blitProgram.use();
     blitProgram.set(1, exposure);
 
+    camera.worldPosition = vec3(0.0f, 0.0f, -2.0f);
+    camera.invalidate();
+
     folder = std::filesystem::current_path().parent_path().string();
     scenes = scanFolder(folder);
 
@@ -88,6 +91,12 @@ void MainApp::resizeCallback(const vec2& res) {
 
 void MainApp::keyCallback(Key key, Action action, Modifier modifier) {
     if (action == Action::PRESS && key == Key::ESC) close();
+    if (action == Action::PRESS && key == Key::T) imguiEnabled = !imguiEnabled;
+    if (action == Action::PRESS && key == Key::C) takeScreenshot("screenshot.png");
+    if (action == Action::PRESS && key == Key::F) {
+        camera.target = vec3(0.0f, 0.0f, 0.0f);
+        camera.invalidate();
+    }
 }
 
 void MainApp::scrollCallback(float xamount, float yamount) {
@@ -180,6 +189,14 @@ void MainApp::render() {
     size_t size;
     check(cudaGraphicsMapResources(1, &cudaPboResource));
     check(cudaGraphicsResourceGetMappedPointer(reinterpret_cast<void**>(&image), &size, cudaPboResource));
+
+    const float camDelta = 2.5f * delta;
+    if (isKeyDown(Key::W)) camera.moveInEyeSpace(vec3(0.0f, 0.0f, -camDelta));
+    if (isKeyDown(Key::S)) camera.moveInEyeSpace(vec3(0.0f, 0.0f, camDelta));
+    if (isKeyDown(Key::A)) camera.moveInEyeSpace(vec3(-camDelta, 0.0f, 0.0f));
+    if (isKeyDown(Key::D)) camera.moveInEyeSpace(vec3(camDelta, 0.0f, 0.0f));
+    if (isKeyDown(Key::Q)) camera.moveInEyeSpace(vec3(0.0f, -camDelta, 0.0f));
+    if (isKeyDown(Key::E)) camera.moveInEyeSpace(vec3(0.0f, camDelta, 0.0f));
 
     if(camera.updateIfChanged()) {
         renderer.setCamera(inverse(camera.projectionMatrix * camera.viewMatrix));

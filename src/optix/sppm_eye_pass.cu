@@ -37,7 +37,9 @@ extern "C" __global__ void __raygen__() {
         const auto hitPoint = ray.origin + payload.t * ray.direction;
         const auto alpha = payload.roughness * payload.roughness;
         const auto mat = calcMaterialProperties(payload.baseColor, payload.metallic, alpha, payload.transmission);
+        const auto sample = sampleDisney(r.y, {r.z, r.w}, {r.z, r.w}, wo, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);
 
+        // TODO: Check pdf <= 1 / PI
         if (luminance(mat.albedo * (1 - mat.transmission)) > 1e-6f) {
             params.photonMap.store({
                 .pos = hitPoint,
@@ -48,8 +50,6 @@ extern "C" __global__ void __raygen__() {
                 .totalPhotonCountAtBirth = params.photonMap.totalPhotonCount,
             });
         }
-
-        const auto sample = sampleDisney(r.y, {r.z, r.w}, {r.z, r.w}, wo, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);
         
         ray = Ray{hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.direction, payload.normal)), sample.direction};
         throughput *= sample.throughput;
