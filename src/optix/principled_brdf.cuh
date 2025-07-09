@@ -336,7 +336,7 @@ __device__ constexpr BRDFResult evalDisney(const float3& wo, const float3& wi, c
 
 
 // Returns BRDF * cosThetaI
-__device__ constexpr float3 evalDisneyBRDFOnly(const float3& wo, const float3& wi, const float3& wm, const float3& n, const MaterialProperties& mat, float eta) {
+__device__ constexpr float3 evalDisneyBRDFCosine(const float3& wo, const float3& wi, const float3& wm, const float3& n, const MaterialProperties& mat, float eta) {
     auto NdotV = dot(n, wo);
     auto NdotL = dot(n, wi);
     const auto sameHemisphere = NdotV * NdotL >= 0.0f;
@@ -377,11 +377,60 @@ __device__ constexpr float3 evalDisneyBRDFOnly(const float3& wo, const float3& w
 }
 
 // Returns BRDF * cosThetaI
-__device__ constexpr float3 evalDisneyBRDFOnly(const float3& wo, const float3& wi, const float3& geometryN, const MaterialProperties& mat) {
+__device__ constexpr float3 evalDisneyBRDFCosine(const float3& wo, const float3& wi, const float3& geometryN, const MaterialProperties& mat) {
     const auto inside = dot(geometryN, wo) < 0.0f;
     const auto n = inside ? -geometryN : geometryN; // Flip normal if inside
     const auto eta = inside ? 1.5f : 1.0f / 1.5f; // Index of refraction
-    return evalDisneyBRDFOnly(wo, wi, calcMicrofacetNormal(wo, wi, n, eta), n, mat, eta);
+    return evalDisneyBRDFCosine(wo, wi, calcMicrofacetNormal(wo, wi, n, eta), n, mat, eta);
+}
+
+// Returns BRDF without cosThetaI
+__device__ constexpr float3 evalDisneyBRDF(const float3& wo, const float3& wi, const float3& wm, const float3& n, const MaterialProperties& mat, float eta) {
+    auto NdotV = dot(n, wo);
+    auto NdotL = dot(n, wi);
+    const auto sameHemisphere = NdotV * NdotL >= 0.0f;
+
+    const auto NdotH = abs(dot(n, wm));
+    const auto HdotV = dot(wm, wo);
+    const auto HdotL = dot(wm, wi);
+
+    if (NdotL == 0.0f || NdotV == 0.0f || dot(wm, wm) == 0.0f) return {0.0f};
+    // Discard backfacing samples
+    if (HdotL * NdotL < 0.0f || HdotV * NdotV < 0.0f) return {0.0f};
+
+    NdotV = abs(NdotV);
+    NdotL = abs(NdotL); // Always abs?
+
+    const auto F = F_SchlickApprox(abs(HdotV), mat.F0);
+    const auto D = D_TrowbridgeReitz(NdotH, mat.alpha2);
+    const auto lambdaL = Lambda_TrowbridgeReitz(HdotL, mat.alpha2); // abs?
+    const auto lambdaV = Lambda_TrowbridgeReitz(HdotV, mat.alpha2); // abs?
+    const auto invG = 1.0f + lambdaL + lambdaV;
+
+    auto throughput = make_float3(0.0f);
+
+    if (sameHemisphere) {
+        // Outgoing and incoming on same hemisphere => Diffuse + Specular
+        const auto specular = F * safediv(D, invG * 4.0f * NdotV * NdotL); // TODO: Handle dirac
+        throughput += specular;
+
+        const auto diffuse = mat.albedo * ((1.0f - mat.transmission) * INV_PI); // FIXME: No 1 / PI
+        throughput += diffuse;
+    } else if (mat.transmission > 0.0f) {
+        // Transmission
+        const auto transmission = mat.albedo * (1.0f - F) * safediv(mat.transmission * D * abs(HdotL * HdotV), invG * NdotV * NdotL * pow2(HdotL + HdotV / eta));
+        throughput += transmission;
+    }
+
+    return throughput;
+}
+
+// Returns BRDF without cosThetaI
+__device__ constexpr float3 evalDisneyBRDF(const float3& wo, const float3& wi, const float3& geometryN, const MaterialProperties& mat) {
+    const auto inside = dot(geometryN, wo) < 0.0f;
+    const auto n = inside ? -geometryN : geometryN; // Flip normal if inside
+    const auto eta = inside ? 1.5f : 1.0f / 1.5f; // Index of refraction
+    return evalDisneyBRDF(wo, wi, calcMicrofacetNormal(wo, wi, n, eta), n, mat, eta);
 }
 
 // Returns BRDF * cosThetaI / pdf

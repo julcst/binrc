@@ -63,7 +63,7 @@ extern "C" __global__ void __raygen__() {
         const auto trainInput = encodeInput(hitPoint, !sample.isSpecular && (params.flags & DIFFUSE_ENCODING_FLAG), sample.direction, payload);
         const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
         const auto mat = calcMaterialProperties(payload.baseColor, payload.metallic, payload.roughness, payload.transmission);
-        const auto brdf = min(evalDisneyBRDFOnly(wi, sample.direction, payload.normal, mat), 1e0f); // TODO: cosineThetaI correct?
+        const auto brdf = min(evalDisneyBRDFCosine(wi, sample.direction, payload.normal, mat), 1e0f); // TODO: cosineThetaI correct?
         const auto output = reflectanceFactorizationTerm * radiance * brdf;
         radiance *= sample.throughput;
 
