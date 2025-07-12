@@ -314,6 +314,7 @@ void OptixRenderer::setCamera(const mat4& clipToWorld) {
     params.clipToWorld = glmToCuda(clipToWorld);
 }
 
+// TODO: JIT
 __global__ void visualizeInference(Params* params) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -433,6 +434,7 @@ __global__ void applySelfLearning(unsigned int numQueries, std::array<TrainBounc
     }
 }
 
+// TODO: JIT
 __global__ void writePhotonQueriesToTrainingSet(Params* params, float* nrcQueries, float* trainTarget) {
     const auto i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= params->photonMap.queryCount) return;
