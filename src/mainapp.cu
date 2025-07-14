@@ -140,6 +140,7 @@ void MainApp::buildImGui() {
         ImGui::Text("Sample: %d", renderer.params.sample);
         if (ImGui::SliderFloat("Exposure", &exposure, 0.1f, 10.0f, "%.1f", ImGuiSliderFlags_Logarithmic)) blitProgram.set(1, exposure);
         reset |= ImGui::EnumCombo("Inference Mode", &renderer.params.inferenceMode, INFERENCE_MODES);
+        reset |= ImGui::SliderFloat("Variance Tradeoff", &renderer.params.varianceTradeoff, 0.0f, 1.0f, "%.3f");
 
         switch (renderer.params.inferenceMode) {
             case InferenceMode::NO_INFERENCE:

@@ -65,3 +65,19 @@ __device__ inline bool traceOcclusion(const float3& a, const float3& b) {
     );
     return optixHitObjectIsHit();
 }
+
+struct VarianceHeuristic {
+    float variance = 0.0f;
+
+    __device__ __forceinline__ void add(const float dist2, const float pdf, const float cosThetaI) {
+        variance += sqrtf(dist2 / (pdf * cosThetaI + 1e-3f));
+    }
+
+    __device__ __forceinline__ float get() const {
+        return pow2(variance);
+    }
+};
+
+__device__ __forceinline__ float calcPrimaryVariance(const float dist2, const float cosTheta) {
+    return dist2 / (4 * PI * cosTheta + 1e-3f);
+}

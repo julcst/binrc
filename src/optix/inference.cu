@@ -28,16 +28,23 @@ extern "C" __global__ void __raygen__() {
     auto hitPoint = ray.origin;
     auto wo = ray.direction;
     auto diffuse = false;
+    float primaryVariance = 0.0f;
+    VarianceHeuristic varianceHeuristic;
 
     float3 throughput = make_float3(1.0f);
     float3 prevThroughput = make_float3(0.0f);
     float3 inferencePlus = make_float3(0.0f);
     
-    for (uint depth = 1; depth < 2; depth++) {
+    for (uint depth = 0; depth < MAX_BOUNCES; depth++) {
         // Russian roulette
         // const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
         // if (RND_ROULETTE >= pContinue) break;
         // throughput /= pContinue;
+
+        if (params.inferenceMode == InferenceMode::FIRST_VERTEX ||
+            params.inferenceMode == InferenceMode::RAW_CACHE) {
+            if (depth > 0) break; // Only trace the first vertex
+        }
 
         // Trace
         const auto next = trace(ray);
@@ -46,6 +53,15 @@ extern "C" __global__ void __raygen__() {
         if (isinf(next.t)) { // TODO: Use previous bounce for inference
             inferencePlus += throughput * next.emission;
             break; // Skybox
+        }
+
+        if (params.inferenceMode == InferenceMode::VARIANCE_HEURISTIC) {
+            if (depth == 0) {
+                primaryVariance = calcPrimaryVariance(pow2(next.t), abs(dot(ray.direction, next.normal))) * params.varianceTradeoff;
+            } else {
+                varianceHeuristic.add(pow2(next.t), prevBrdfPdf, abs(dot(ray.direction, next.normal)));
+                if (varianceHeuristic.get() > primaryVariance) break; // Stop if variance is too high
+            }
         }
 
         payload = next;

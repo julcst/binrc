@@ -8,7 +8,7 @@
 struct Payload {
     float3 baseColor; // Linear RGB base color
     float3 normal; // World space normal, guaranteed to be normalized
-    float3 tangent; // World space tenagent, not normalized
+    float3 tangent; // World space tangent, not normalized
     float3 emission; // Linear RGB emission color
     float roughness;
     float metallic;

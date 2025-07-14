@@ -146,8 +146,7 @@ struct Params {
     float sceneEpsilon = 1e-4f; // Scene epsilon
     uint flags = NEE_FLAG | TRANSMISSION_FLAG; // Flags
     InferenceMode inferenceMode;
-    float3 sceneMin;
-    float sceneScale;
+    float varianceTradeoff = 0.01f;
 
 ////////////////// OWNED MEMORY //////////////////
 // NOTE: This is owned memory and must be freed //
@@ -159,6 +158,8 @@ struct Params {
     uint lightTableSize; // lightTableSize
 //////////////////////////////////////////////////
 
+    float3 sceneMin;
+    float sceneScale;
     uint trainingRound = 0; // Current training round
     uint* lightSamples; // Number of light samples
     float balanceWeight = 2.0f; // Weight for light sampling balancing
@@ -168,10 +169,8 @@ struct Params {
     float* inferenceInput;
     float* inferenceOutput;
     float3* inferenceThroughput;
-
     std::array<TrainBounce, TRAIN_DEPTH>* selfLearningBounces;
     float* selfLearningQueries;
-
     cudaTextureObject_t brdfLUT;
 
     PhotonQueryView photonMap;
