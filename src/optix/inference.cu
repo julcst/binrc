@@ -101,7 +101,7 @@ extern "C" __global__ void __raygen__() {
         diffuse = !sample.isSpecular;
 
         ray = Ray{hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.direction, payload.normal)), sample.direction};
-        prevThroughput = throughput;
+        prevThroughput = params.flags & LIGHT_TRACE_FIX_FLAG ? throughput * prevBrdfPdf / pow2(payload.t) : throughput;
         throughput *= sample.throughput;
         prevBrdfPdf = sample.pdf;
         lightPdfIsZero = sample.isDirac;

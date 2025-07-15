@@ -28,6 +28,7 @@ constexpr uint FORWARD_RR_FLAG = 1 << 4;
 constexpr uint BACKWARD_RR_FLAG = 1 << 5;
 constexpr uint SELF_LEARNING_FLAG = 1 << 6;
 constexpr uint DIFFUSE_ENCODING_FLAG = 1 << 7;
+constexpr uint LIGHT_TRACE_FIX_FLAG = 1 << 8;
 
 // TODO: Use half instead of float
 struct NRCInput {
