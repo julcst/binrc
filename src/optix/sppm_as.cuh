@@ -8,6 +8,8 @@ struct SPPMRTX {
     OptixTraversableHandle handle = 0;
     uint32_t size = 0;
     uint32_t totalPhotonCount = 0;
+    float alpha = 0.7f;
+    float initialRadius = 0.05f;
     thrust::device_vector<uint8_t> tempBuffer;
     thrust::device_vector<uint8_t> gasBuffer;
     thrust::device_vector<OptixAabb> aabbBuffer;
@@ -36,7 +38,9 @@ struct SPPMRTX {
             .atomics = atomicBuffer.data().get(), // TODO: Pull request for better syntax
             .queryCount = size,
             .handle = handle,
-            .totalPhotonCount = totalPhotonCount
+            .totalPhotonCount = totalPhotonCount,
+            .alpha = alpha,
+            .initialRadius = initialRadius,
         };
     }
 

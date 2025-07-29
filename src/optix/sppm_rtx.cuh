@@ -19,14 +19,25 @@ struct PhotonQuery {
     MaterialProperties mat; // Material properties at the query position
     float radius = 0.0f; // Radius of accumulation TODO: Radius reduction
     float3 flux = {0.0f}; // Accumulated outgoing flux
-    uint32_t count = 0; // Number of photons found
+    float totalCollectedPhotons = 0; // Total number of photons collected
+    uint32_t collectedPhotons = 0; // Number of photons collected in this pass
     uint32_t totalPhotonCountAtBirth = 0; // Total number of photons at initialization
 
     __device__ float3 calcRadiance(uint32_t totalPhotonCount) const {
-        if (count == 0) return {0.0f}; // No photons found
         // TODO: Handle totalPhotonCountAtBirth >= totalPhotonCount
         uint32_t emittedPhotons = totalPhotonCount - totalPhotonCountAtBirth;
+        if (emittedPhotons == 0) return {0.0f, 0.0f, 0.0f}; // Avoid division by zero
         return flux / (static_cast<float>(emittedPhotons) * PI * pow2(radius));
+    }
+
+    __device__ void applyRadiusReduction(float alpha) {
+        if (collectedPhotons == 0) return; // No photons collected, no radius reduction needed
+        const float newCollectedPhotons = totalCollectedPhotons + collectedPhotons * alpha;
+        const float factor = newCollectedPhotons / (totalCollectedPhotons + collectedPhotons);
+        totalCollectedPhotons = newCollectedPhotons;
+        radius *= sqrt(factor);
+        // TODO: radius2 *= factor; // If using squared radius
+        flux *= factor;
     }
 
     // float calcRadius() const {
@@ -44,9 +55,10 @@ struct PhotonQueryView {
     uint32_t queryCount = 0;
     OptixTraversableHandle handle = 0;
     uint32_t totalPhotonCount = 0;
+    float alpha = 0.7f; // Radius reduction factor
+    float initialRadius = 0.1f; // Initial radius for photon queries
 
-    __device__ __forceinline__ void store(const uint32_t idx, const PhotonQuery& query) const {
-        queries[idx] = query;
+    __device__ __forceinline__ void updateAABB(const uint32_t idx, const PhotonQuery& query) const {
         aabbs[idx] = {
             .minX = query.pos.x - query.radius,
             .minY = query.pos.y - query.radius,
@@ -55,6 +67,11 @@ struct PhotonQueryView {
             .maxY = query.pos.y + query.radius,
             .maxZ = query.pos.z + query.radius
         };
+    }
+
+    __device__ __forceinline__ void store(const uint32_t idx, const PhotonQuery& query) const {
+        queries[idx] = query;
+        updateAABB(idx, query);
     }
 
 #ifdef __CUDA_ARCH__

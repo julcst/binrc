@@ -46,7 +46,7 @@ extern "C" __global__ void __raygen__() {
                 .wo = wo,
                 .n = payload.normal,
                 .mat = mat,
-                .radius = 0.01f, // TODO: Radius reduction
+                .radius = params.photonMap.initialRadius, // TODO: Radius reduction
                 .totalPhotonCountAtBirth = params.photonMap.totalPhotonCount,
             });
         }
@@ -98,7 +98,7 @@ extern "C" __global__ void __raygen__full() {
                 .wo = wo,
                 .n = payload.normal,
                 .mat = mat,
-                .radius = 0.005f, // TODO: Radius reduction
+                .radius = params.photonMap.initialRadius, // TODO: Radius reduction
                 .totalPhotonCountAtBirth = params.photonMap.totalPhotonCount,
             });
             params.image[i] = make_float4(throughput, 1.0f);

@@ -67,6 +67,7 @@ public:
     float photonQueryReplacement = 0.5f; // Proportion of photon queries that are kept between frames
     uint32_t photonCount = 1 << 17; // Number of photons to generate
     Params params = {}; // NOTE: Initialization is important to prevent invalid pointers
+    SPPMRTX sppmBVH {NRC_BATCH_SIZE};
 
 private:
     OptixDeviceContext context;
@@ -101,7 +102,6 @@ private:
 
     BRDFLUT brdfLUT;
 
-    SPPMRTX sppmBVH {NRC_BATCH_SIZE};
     thrust::device_vector<HeaderOnlyRecord> sppmVisRecords;
     OptixShaderBindingTable sppmVisSBT;
 

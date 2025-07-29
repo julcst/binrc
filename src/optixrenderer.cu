@@ -167,8 +167,8 @@ OptixRenderer::OptixRenderer() {
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
             .hitgroup = {
-                .moduleCH = modules[optixir::SPPM_RTX],
-                .entryFunctionNameCH = "__closesthit__visualize",
+                .moduleCH = nullptr,
+                .entryFunctionNameCH = nullptr,
                 .moduleAH = nullptr, // No any hit program for SPPM
                 .entryFunctionNameAH = nullptr,
                 .moduleIS = modules[optixir::SPPM_RTX],
@@ -439,13 +439,18 @@ __global__ void writePhotonQueriesToTrainingSet(Params* params, float* nrcQuerie
     const auto i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= params->photonMap.queryCount) return;
 
-    const auto& photonQuery = params->photonMap.queries[i];
+    auto& photonQuery = params->photonMap.queries[i];
+
+    // Radius reduction
+    photonQuery.applyRadiusReduction(params->photonMap.alpha);
+    params->photonMap.updateAABB(i, photonQuery);
 
     const auto trainIdx = atomicAdd(params->trainingIndexPtr, 1u) % NRC_BATCH_SIZE;
 
     const auto input = encodeInput(params, photonQuery.pos, photonQuery.wo, photonQuery.n, photonQuery.mat, params->brdfLUT);
     const auto reflectanceFactorizationTerm = max(input.diffuse + input.specular, 1e-3f);
     const auto radiance = photonQuery.calcRadiance(params->photonMap.totalPhotonCount) / reflectanceFactorizationTerm;
+    if (!isfinite(radiance)) return; // Skip invalid radiance // TODO: Avoid this in the first place
 
     writeNRCInput(nrcQueries, trainIdx, input);
     writeNRCOutput(trainTarget, trainIdx, radiance);
