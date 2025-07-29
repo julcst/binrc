@@ -22,24 +22,30 @@ extern "C" __global__ void __raygen__() {
 
     curandStatePhilox4_32_10_t state;
     curand_init(0, i, params.trainingRound * N_RANDS, &state);
-
     const auto r = curand_uniform4(&state); // Note curand generates in (0, 1] not [0, 1)
+
     const auto lightSample = samplePhoton(curand_uniform(&state), make_float2(r.x, r.y), make_float2(r.z, r.w));
-    auto ray = Ray{lightSample.position + lightSample.n * copysignf(params.sceneEpsilon, dot(lightSample.wo, lightSample.n)), lightSample.wo};
+
+    // radiance along path from x_0 to x_i-1 divided by the pdf of path x_0 to x_i-1
     auto radiance = params.flags & LIGHT_TRACE_FIX_FLAG ? lightSample.emission : lightSample.emission * INV_PI; // FIXME: Why / PI² ?
-    // printf("Light sample: %f %f %f\n", lightSample.emission.x, lightSample.emission.y, lightSample.emission.z);
     radiance *= params.balanceWeight; // Balancing
+
+    // Probability of sampling the incoming light direction
+    float p_wi = abs(dot(lightSample.wo, lightSample.n)) * INV_PI;
+    radiance *= p_wi; // FIXME: Integrate in sampling
+
     uint lightSamples = 0;
-
+    auto ray = Ray{lightSample.position + lightSample.n * copysignf(params.sceneEpsilon, dot(lightSample.wo, lightSample.n)), lightSample.wo};
     Payload payload;
+    float3 prevPoint = lightSample.position;
 
-    for (uint depth = 1; depth <= TRAIN_DEPTH; depth++) {
+    for (uint depth = 0; depth < TRAIN_DEPTH; depth++) {
         // Russian roulette
-        if (params.flags & BACKWARD_RR_FLAG) {
-            const float pContinue = min(luminance(radiance) * params.russianRouletteWeight, 1.0f);
-            if (curand_uniform(&state) >= pContinue) break; // FIXME: use random numbers independent from sampling
-            radiance /= pContinue;
-        }
+        // if (params.flags & BACKWARD_RR_FLAG) {
+        //     const float pContinue = min(luminance(radiance) * params.russianRouletteWeight, 1.0f);
+        //     if (curand_uniform(&state) >= pContinue) break; // FIXME: use random numbers independent from sampling
+        //     radiance /= pContinue;
+        // }
 
         payload = trace(ray);
 
@@ -47,30 +53,35 @@ extern "C" __global__ void __raygen__() {
 
         const auto wi = -ray.direction;
         const auto hitPoint = ray.origin + payload.t * ray.direction;
+        const auto dist2 = pow2(hitPoint - prevPoint);
+        prevPoint = hitPoint;
         const auto alpha = payload.roughness * payload.roughness;
 
         const auto r = curand_uniform4(&state);
-        // FIXME: Wrong IOR
         const auto sample = sampleDisney(curand_uniform(&state), {r.x, r.y}, {r.z, r.w}, wi, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);
+        const auto mat = calcMaterialProperties(payload.baseColor, payload.metallic, payload.roughness, payload.transmission);
+        const auto brdf = evalDisneyBRDF(wi, sample.direction, payload.normal, mat); // TODO: cosineThetaI correct?
+        const auto cosThetaI = abs(dot(wi, payload.normal));
+        const auto cosThetaO = abs(dot(sample.direction, payload.normal));
 
-        
+        //const auto Lo = radiance * brdf * cosThetaI / max(dist2, 1e-6f);
+        const auto Lo = radiance * brdf;
+        // TODO: Handle dirac
+        radiance *= brdf * cosThetaO / p_wi;
+        //radiance *= sample.throughput;
+        p_wi = sample.pdf;
+
+
+        const auto trainInput = encodeInput(hitPoint, !sample.isSpecular && (params.flags & DIFFUSE_ENCODING_FLAG), sample.direction, payload);
+        const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
+        const auto output = min(reflectanceFactorizationTerm * Lo , 10.0f);
+        const auto trainIdx = pushNRCTrainInput(trainInput);
+        writeNRCOutput(params.trainingTarget, trainIdx, output);
+        lightSamples++;
 
         // printf("Sample throughput: %f\n", pow2(sample.throughput));
 
         ray = Ray{hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.direction, payload.normal)), sample.direction};
-
-        //if (depth > 1) {
-        const auto trainInput = encodeInput(hitPoint, !sample.isSpecular && (params.flags & DIFFUSE_ENCODING_FLAG), sample.direction, payload);
-        const auto reflectanceFactorizationTerm = 1.0f / max(trainInput.diffuse + trainInput.specular, 1e-3f);
-        const auto mat = calcMaterialProperties(payload.baseColor, payload.metallic, payload.roughness, payload.transmission);
-        const auto brdf = min(evalDisneyBRDFCosine(wi, sample.direction, payload.normal, mat), 1e0f); // TODO: cosineThetaI correct?
-        const auto output = reflectanceFactorizationTerm * radiance * brdf;
-        radiance *= sample.throughput;
-
-        const auto trainIdx = pushNRCTrainInput(trainInput);
-        writeNRCOutput(params.trainingTarget, trainIdx, output);
-        lightSamples++;
-        //}
 
         //radiance += payload.emission; // TODO: Do not train bounce emission
     }
