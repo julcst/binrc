@@ -27,6 +27,7 @@ enum ProgramGroup {
     REFERENCE,
     TRAIN_EYE,
     TRAIN_LIGHT,
+    TRAIN_BIDIR,
     INFERENCE,
     SPPM_EYE_PASS,
     SPPM_LIGHT_PASS,
@@ -40,7 +41,7 @@ enum ProgramGroup {
     SPPM_VIS_HIT,
 };
 
-constexpr size_t RAYGEN_COUNT = 8;
+constexpr size_t RAYGEN_COUNT = 9;
 constexpr size_t PROGRAM_GROUP_COUNT = RAYGEN_COUNT + 5;
 
 class OptixRenderer {
@@ -62,8 +63,8 @@ public:
     Scene scene;
     std::vector<float> lossHistory;
     bool enableTraining = false;
-    float trainingDirection = 0.5f;
-    float photonMappingAmount = 1.0f; // Propoertion of backward samples that are generated using photon mapping
+    float trainingDirection = 1.0f;
+    float photonMappingAmount = 0.0f; // Propoertion of backward samples that are generated using photon mapping
     float photonQueryReplacement = 0.5f; // Proportion of photon queries that are kept between frames
     uint32_t photonCount = 1 << 17; // Number of photons to generate
     Params params = {}; // NOTE: Initialization is important to prevent invalid pointers

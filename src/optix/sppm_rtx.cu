@@ -14,7 +14,7 @@ extern "C" __global__ void __intersection__() {
 
     const auto rayOrigin = optixGetWorldRayOrigin();
 
-    float dist2 = pow2(rayOrigin - query->pos);
+    float dist2 = length2(rayOrigin - query->pos);
 
     if (dist2 > pow2(query->radius)) {
         //optixIgnoreIntersection();
@@ -125,9 +125,9 @@ extern "C" __global__ void __intersection__visualize() {
         optixSetPayload_3(__float_as_uint(weight));
     }
 
-    // const auto a = pow2(rayDirection);
+    // const auto a = length2(rayDirection);
     // const auto b = 2.0f * dot(rayDirection, rayOrigin - center);
-    // const auto c = pow2(rayOrigin - center) - pow2(radius);
+    // const auto c = length2(rayOrigin - center) - pow2(radius);
     // const auto discriminant = pow2(b) - 4.0f * a * c;
     // if (discriminant < 0.0f) {
     //     // No intersection

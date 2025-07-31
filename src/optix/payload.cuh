@@ -17,6 +17,7 @@ struct Payload {
     float t = INFINITY; // Distance of intersection on ray, set to INFINITY if no intersection
 };
 
+#ifdef __CUDA_ARCH__
 __device__ inline void setBaseColor(const float3& value) {
     optixSetPayload_0(__float_as_uint(value.x));
     optixSetPayload_1(__float_as_uint(value.y));
@@ -74,3 +75,4 @@ __device__ constexpr inline Payload getPayload(const std::array<uint, 17>& value
         __uint_as_float(values[16]),
     };
 }
+#endif

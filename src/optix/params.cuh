@@ -163,7 +163,7 @@ struct Params {
     float sceneScale;
     uint trainingRound = 0; // Current training round
     uint* lightSamples; // Number of light samples
-    float balanceWeight = 2.0f; // Weight for light sampling balancing
+    float balanceWeight = 1.0f; // Weight for light sampling balancing
     uint* trainingIndexPtr;
     float* trainingInput;
     float* trainingTarget;

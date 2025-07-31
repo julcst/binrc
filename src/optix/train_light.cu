@@ -53,7 +53,7 @@ extern "C" __global__ void __raygen__() {
 
         const auto wi = -ray.direction;
         const auto hitPoint = ray.origin + payload.t * ray.direction;
-        const auto dist2 = pow2(hitPoint - prevPoint);
+        const float dist2 = length2(hitPoint - prevPoint);
         prevPoint = hitPoint;
         const auto alpha = payload.roughness * payload.roughness;
 
@@ -64,8 +64,8 @@ extern "C" __global__ void __raygen__() {
         const auto cosThetaI = abs(dot(wi, payload.normal));
         const auto cosThetaO = abs(dot(sample.direction, payload.normal));
 
-        //const auto Lo = radiance * brdf * cosThetaI / max(dist2, 1e-6f);
-        const auto Lo = radiance * brdf;
+        const auto Lo = radiance * brdf * cosThetaI / max(dist2, 1e-6f);
+        //const auto Lo = radiance * brdf;
         // TODO: Handle dirac
         radiance *= brdf * cosThetaO / p_wi;
         //radiance *= sample.throughput;
@@ -79,7 +79,7 @@ extern "C" __global__ void __raygen__() {
         writeNRCOutput(params.trainingTarget, trainIdx, output);
         lightSamples++;
 
-        // printf("Sample throughput: %f\n", pow2(sample.throughput));
+        // printf("Sample throughput: %f\n", length2(sample.throughput));
 
         ray = Ray{hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.direction, payload.normal)), sample.direction};
 

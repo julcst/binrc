@@ -3,6 +3,7 @@
 #include <cuda_runtime.h>
 
 #include "prinicpled_brdf_types.cuh"
+#include "payload.cuh"
 #include "cudamath.cuh"
 #include "sampling.cuh"
 
@@ -206,6 +207,10 @@ __device__ constexpr MaterialProperties calcMaterialProperties(const float3& bas
     const auto alpha2 = alpha * alpha;
 
     return {F0, albedo, alpha2, transmission};
+}
+
+__device__ constexpr MaterialProperties calcMaterialProperties(const Payload& payload) {
+    return calcMaterialProperties(payload.baseColor, payload.metallic, pow2(payload.roughness), payload.transmission);
 }
 
 struct DisneyWeights {
@@ -514,6 +519,14 @@ __device__ constexpr BRDFResult evalDisneyWeighted(const float3& wo, const float
     // if (HdotV - 1.0f > 1e-6f) printf("HdotV is greater than 1: %f wm %f %f %f V %f %f %f\n", HdotV, wm.x, wm.y, wm.z, wo.x, wo.y, wo.z);
 
     return {throughput, pdf, isDirac};
+}
+
+// Returns BRDF * cosThetaI / pdf
+__device__ constexpr BRDFResult evalDisneyWeighted(const float3& wo, const float3& wi, const float3& geometryN, const MaterialProperties& mat) {
+    const auto inside = dot(geometryN, wo) < 0.0f;
+    const auto n = inside ? -geometryN : geometryN; // Flip normal if inside
+    const auto eta = inside ? 1.5f : 1.0f / 1.5f; // Index of refraction
+    return evalDisneyWeighted(wo, wi, calcMicrofacetNormal(wo, wi, n, eta), n, mat, calcDisneyWeights(mat, abs(dot(n, wo))), eta);
 }
 
 struct SampleResult {

@@ -92,7 +92,19 @@ void MainApp::resizeCallback(const vec2& res) {
 void MainApp::keyCallback(Key key, Action action, Modifier modifier) {
     if (action == Action::PRESS && key == Key::ESC) close();
     if (action == Action::PRESS && key == Key::T) imguiEnabled = !imguiEnabled;
-    if (action == Action::PRESS && key == Key::C) takeScreenshot("screenshot.png");
+    if (action == Action::PRESS && key == Key::C) {
+        int screenshot_number = 0;
+        std::filesystem::path screenshot_path;
+        // Find the next available screenshot number
+        do {
+            std::stringstream ss;
+            ss << "screenshot_" << std::setw(3) << std::setfill('0') << screenshot_number << ".png";
+            screenshot_path = ss.str();
+            screenshot_number++;
+        } while (std::filesystem::exists(screenshot_path));
+        
+        takeScreenshot(screenshot_path.string());
+    }
     if (action == Action::PRESS && key == Key::F) {
         camera.target = vec3(0.0f, 0.0f, 0.0f);
         camera.invalidate();

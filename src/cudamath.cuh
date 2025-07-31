@@ -259,12 +259,12 @@ __host__ __device__ constexpr float dot(const float2& a, const float2& b) {
     return a.x * b.x + a.y * b.y;
 }
 
-__host__ __device__ constexpr float pow2(const float2& a) {
+__host__ __device__ constexpr float length2(const float2& a) {
     return dot(a, a);
 }
 
 __host__ __device__ constexpr float length(const float2& v) {
-    return sqrtf(pow2(v));
+    return sqrtf(length2(v));
 }
 
 __host__ __device__ constexpr float2 normalize(const float2& v) {
@@ -414,7 +414,7 @@ __host__ __device__ constexpr float dot(const float3& a, const float3& b) {
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
-__host__ __device__ constexpr float pow2(const float3& a) {
+__host__ __device__ constexpr float length2(const float3& a) {
     return dot(a, a);
 }
 
@@ -424,7 +424,7 @@ __host__ __device__ constexpr float3 cross(const float3& a, const float3& b) {
 
 __host__ __device__ constexpr float length(const float3& v) {
     //return norm3df(v.x, v.y, v.z);
-    return sqrtf(dot(v, v));
+    return sqrtf(length2(v));
 }
 
 __host__ __device__ constexpr float3 normalize(const float3& v) {
@@ -655,13 +655,13 @@ __host__ __device__ constexpr float dot(const float4& a, const float4& b) {
     return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
 }
 
-__host__ __device__ constexpr float pow2(const float4& a) {
+__host__ __device__ constexpr float length2(const float4& a) {
     return dot(a, a);
 }
 
 __host__ __device__ constexpr float length(const float4& v) {
     //return norm4df(v.x, v.y, v.z, v.w);
-    return sqrtf(dot(v, v));
+    return sqrtf(length2(v));
 }
 
 __host__ __device__ constexpr float4 normalize(const float4& v) {

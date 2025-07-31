@@ -66,6 +66,21 @@ __device__ inline bool traceOcclusion(const float3& a, const float3& b) {
     return optixHitObjectIsHit();
 }
 
+__device__ inline bool traceOcclusion(const float3& a, const float3& an, const float3& b, const float3& bn) {
+    const auto dir = b - a;
+    const auto ax = a + an * copysignf(params.sceneEpsilon, dot(dir, an));
+    const auto bx = b + bn * copysignf(params.sceneEpsilon, -dot(dir, bn));
+    optixTraverse(
+        params.handle,
+        ax, bx - ax,
+        0.0f, 1.0f, // tmin, tmax
+        0.0f, // rayTime
+        OptixVisibilityMask(255), OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT | OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+        1, 1, 1 // SBT offset, stride, miss index // NOTE: HitRecord 0 is used for photon mapping, MissRecord 1 is null
+    );
+    return optixHitObjectIsHit();
+}
+
 struct VarianceHeuristic {
     float variance = 0.0f;
 

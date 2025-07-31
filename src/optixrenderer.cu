@@ -100,6 +100,13 @@ OptixRenderer::OptixRenderer() {
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
             .raygen = {
+                .module = modules[optixir::TRAIN_BIDIR],
+                .entryFunctionName = "__raygen__",
+            },
+        },
+        OptixProgramGroupDesc {
+            .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
+            .raygen = {
                 .module = modules[optixir::INFERENCE],
                 .entryFunctionName = "__raygen__",
             },
@@ -187,15 +194,15 @@ OptixRenderer::OptixRenderer() {
     // TODO: optixUtilComputeStackSizesSimplePathtracer?
 
     // Set up shader binding table
-    std::vector<RaygenRecord> raygenRecordsHost(sbts.size());
-    check(optixSbtRecordPackHeader(programGroups[REFERENCE], &raygenRecordsHost[REFERENCE]));
-    check(optixSbtRecordPackHeader(programGroups[TRAIN_EYE], &raygenRecordsHost[TRAIN_EYE]));
-    check(optixSbtRecordPackHeader(programGroups[TRAIN_LIGHT], &raygenRecordsHost[TRAIN_LIGHT]));
-    check(optixSbtRecordPackHeader(programGroups[INFERENCE], &raygenRecordsHost[INFERENCE]));
-    check(optixSbtRecordPackHeader(programGroups[SPPM_EYE_PASS], &raygenRecordsHost[SPPM_EYE_PASS]));
-    check(optixSbtRecordPackHeader(programGroups[SPPM_LIGHT_PASS], &raygenRecordsHost[SPPM_LIGHT_PASS]));
-    check(optixSbtRecordPackHeader(programGroups[SPPM_VIS_RAYGEN], &raygenRecordsHost[SPPM_VIS_RAYGEN]));
-    check(optixSbtRecordPackHeader(programGroups[SPPM_FULL], &raygenRecordsHost[SPPM_FULL]));
+    std::vector<RaygenRecord> raygenRecordsHost;
+    raygenRecordsHost.reserve(sbts.size());
+    for (size_t i = 0; i < programDecriptions.size(); i++) {
+        if (programDecriptions[i].kind == OPTIX_PROGRAM_GROUP_KIND_RAYGEN) {
+            RaygenRecord record;
+            check(optixSbtRecordPackHeader(programGroups[i], &record));
+            raygenRecordsHost.push_back(record);
+        }
+    }
     raygenRecords.resize_and_copy_from_host(raygenRecordsHost);
 
     std::vector<MissRecord> missRecordsHost(sbts.size());
@@ -508,7 +515,7 @@ void OptixRenderer::train() {
     // Generate training samples
     if (forwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_EYE], forwardSamples, 1, 1));
     if (backwardSamples) {
-        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_LIGHT], backwardSamples, 1, 1));
+        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_BIDIR], backwardSamples, 1, 1));
     }
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
     
