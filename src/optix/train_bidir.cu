@@ -28,7 +28,6 @@ extern "C" __global__ void __raygen__() {
     float3 queryX = queryRay.origin + queryPayload.t * queryRay.direction;
     float3 queryWo = -queryRay.direction;
     float3 queryLo = {0.0f, 0.0f, 0.0f};
-    //printf("Query payload albedo metallic roughness transmission: %.2f %.2f %.2f %.2f\n", length2(queryPayload.baseColor), queryPayload.metallic, queryPayload.roughness, queryPayload.transmission);
     auto queryMat = calcMaterialProperties(queryPayload);
     if(queryMat.alpha2 < 1e-2f) printf("Query material F0 %.2f albedo %.2f alpha2 %.2f\n", length2(queryMat.F0), length2(queryMat.albedo), queryMat.alpha2);
 
@@ -36,12 +35,8 @@ extern "C" __global__ void __raygen__() {
     const auto lightSample = samplePhoton(curand_uniform(&state), make_float2(r.x, r.y), make_float2(r.z, r.w));
 
     // radiance along path from x_0 to x_i-1 divided by the pdf of path x_0 to x_i-1
-    auto radiance = params.flags & LIGHT_TRACE_FIX_FLAG ? lightSample.emission : lightSample.emission * INV_PI; // FIXME: Why / PI² ?
+    auto radiance = lightSample.emission * INV_PI; // Divide by cos(wo) / pdf(wo) = cos(wo) / (cos(wo) / PI) = PI
     radiance *= params.balanceWeight; // Balancing
-
-    // Probability of sampling the incoming light direction
-    float p_wi = abs(dot(lightSample.wo, lightSample.n)) * INV_PI;
-    //radiance *= p_wi; // FIXME: Integrate in sampling
 
     uint lightSamples = 0;
     auto ray = Ray{lightSample.position + lightSample.n * copysignf(params.sceneEpsilon, dot(lightSample.wo, lightSample.n)), lightSample.wo};
@@ -57,27 +52,15 @@ extern "C" __global__ void __raygen__() {
         queryLo += Lo;
     }
 
-    radiance *= PI;
+    radiance *= PI; // Multiply by cos(wo) / pdf(wo) = cos(wo) / (cos(wo) / PI) = PI
 
-    for (uint depth = 0; depth < 8; depth++) {
+    for (uint depth = 0; depth < 6; depth++) {
         // Russian roulette
         // if (params.flags & BACKWARD_RR_FLAG) {
         //     const float pContinue = min(luminance(radiance) * params.russianRouletteWeight, 1.0f);
         //     if (curand_uniform(&state) >= pContinue) break; // FIXME: use random numbers independent from sampling
         //     radiance /= pContinue;
         // }
-
-        // auto connectionDir = hitPoint - queryX;
-        // const float dist2 = length2(connectionDir);
-        // connectionDir /= sqrtf(dist2); // Normalize direction
-
-        // const auto queryBRDF = evalDisneyBRDFCosine(queryWo, connectionDir, queryPayload.normal, queryMat);
-        // //const auto queryBRDF = abs(dot(queryWo, queryPayload.normal)) * INV_PI; // Lambertian BRDF
-        // const auto Lo = radiance * queryBRDF * abs(dot(connectionDir, prevNormal)) / max(dist2, 1e-6f);
-        // //if (length2(Lo) < 1e-2f) printf("Lo is zero radiance %.2f brdf %.2f cosO %.2f cosI %.2f dist2 %.2f F0 %.2f albedo %.2f alpha2 %.2f\n", length2(radiance), length2(queryBRDF), dot(queryWo, queryPayload.normal), dot(connectionDir, queryPayload.normal), dist2, length2(queryMat.F0), length2(queryMat.albedo), queryMat.alpha2);
-        // //else printf("Lo: %.2f\n", length2(Lo));
-        // //const auto Lo = radiance * brdf;
-        // queryLo += Lo;
 
         payload = trace(ray);
 
@@ -93,9 +76,7 @@ extern "C" __global__ void __raygen__() {
         if (dist2 > params.sceneEpsilon && !traceOcclusion(hitPoint, payload.normal, queryX, queryPayload.normal)) {
             connectionDir /= sqrtf(dist2); // Normalize direction
             const auto queryBRDF = evalDisneyBRDFCosine(queryWo, connectionDir, queryPayload.normal, queryMat);
-            //const auto hitBRDF = evalDisneyBRDFCosine(wi, -connectionDir, payload.normal, mat) * PI; // Almost correct
             const auto hitBRDF = evalDisneyBRDFCosine(wi, -connectionDir, payload.normal, mat);
-            //const auto hitBRDF = evalDisneyWeighted(wi, -connectionDir, payload.normal, mat).throughput;
             const auto Lo = radiance * queryBRDF * hitBRDF / dist2;
             queryLo += Lo;
         }
@@ -103,15 +84,11 @@ extern "C" __global__ void __raygen__() {
         const auto r = curand_uniform4(&state);
         const auto sample = sampleDisney(curand_uniform(&state), {r.x, r.y}, {r.z, r.w}, wi, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);
         const auto brdf = evalDisneyBRDFCosine(wi, sample.direction, payload.normal, mat);
-        //radiance *= brdf / p_wi;
         radiance *= sample.throughput;
-        p_wi = sample.pdf;
-
-        // printf("Sample throughput: %f\n", length2(sample.throughput));
 
         ray = Ray{hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.direction, payload.normal)), sample.direction};
 
-        //radiance += payload.emission; // TODO: Do not train bounce emission
+        //radiance += payload.emission; // NOTE: Do not train bounce emission
     }
 
     const auto trainInput = encodeInput(queryX, false, queryWo, queryPayload);
@@ -119,8 +96,6 @@ extern "C" __global__ void __raygen__() {
     const auto output = min(reflectanceFactorizationTerm * queryLo , 10.0f);
     const auto trainIdx = pushNRCTrainInput(trainInput);
     writeNRCOutput(params.trainingTarget, trainIdx, output);
-    //printf("Training sample %d: pos=(%.2f, %.2f, %.2f), wo=(%.2f, %.2f, %.2f), Lo=(%.2f, %.2f, %.2f)\n", trainIdx, queryX.x, queryX.y, queryX.z, queryWo.x, queryWo.y, queryWo.z, output.x, output.y, output.z);
     lightSamples++;
-
     atomicAdd(params.lightSamples, lightSamples); // TODO: Aggregate
 }
