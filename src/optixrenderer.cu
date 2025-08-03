@@ -515,7 +515,7 @@ void OptixRenderer::train() {
     // Generate training samples
     if (forwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_EYE], forwardSamples, 1, 1));
     if (backwardSamples) {
-        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_BIDIR], backwardSamples, 1, 1));
+        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_LIGHT], backwardSamples, 1, 1));
     }
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
     

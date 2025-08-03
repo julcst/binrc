@@ -11,7 +11,7 @@
 #include "sampling.cuh"
 #include "principled_brdf.cuh"
 
-constexpr uint N_RANDS = 5 + (TRAIN_DEPTH + 1) * 6;
+constexpr uint N_RANDS = 10 + MAX_BOUNCES * 4;
 
 extern "C" __global__ void __raygen__() {
     if (!params.lightTable) return; // Cannot sample light without lights
@@ -54,7 +54,7 @@ extern "C" __global__ void __raygen__() {
 
     radiance *= PI; // Multiply by cos(wo) / pdf(wo) = cos(wo) / (cos(wo) / PI) = PI
 
-    for (uint depth = 0; depth < 6; depth++) {
+    for (uint depth = 0; depth < MAX_BOUNCES - 1; depth++) {
         // Russian roulette
         // if (params.flags & BACKWARD_RR_FLAG) {
         //     const float pContinue = min(luminance(radiance) * params.russianRouletteWeight, 1.0f);

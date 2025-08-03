@@ -37,8 +37,9 @@
         "n_hidden_layers": 2
     },
     "loss": {
-        //"otype": "L1",
-        //"otype": "L2",
+        //"otype": "L1"
+        //"otype": "L2"
+        //"otype": "RelativeL2"
         //"otype": "RelativeL1Luminance" // L1 produces sharper Caustics
         "otype": "RelativeL2Luminance"
     },
