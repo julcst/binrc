@@ -11,15 +11,18 @@
 #include "cudamath.cuh"
 #include "sppm_rtx.cuh"
 
+
+constexpr uint MAX_BOUNCES = 16;
+constexpr uint TRAIN_DEPTH = 6;
+
 constexpr float MAX_T = 1e32f;
-constexpr uint MAX_BOUNCES = 12;
+constexpr uint ROTATIONS_PER_PIXEL = 2;
 constexpr uint RANDS_PER_PIXEL = 5;
 constexpr uint RANDS_PER_BOUNCE = 9;
-constexpr uint ROTATIONS_PER_PIXEL = 2;
 constexpr uint RAND_SEQUENCE_DIMS = RANDS_PER_PIXEL + RANDS_PER_BOUNCE * MAX_BOUNCES;
 constexpr uint RAND_SEQUENCE_CACHE_SIZE = 4096;
+constexpr int PAYLOAD_SIZE = 4 * 3 + 5;
 
-constexpr uint TRAIN_DEPTH = 6;
 constexpr uint TRANSMISSION_FLAG = 1 << 0;
 constexpr uint NEE_FLAG = 1 << 1;
 constexpr uint TRAINING_NEE_FLAG = 1 << 2;
@@ -44,9 +47,9 @@ struct NRCOutput {
     float3 radiance = {0.0f, 0.0f, 0.0f};
 };
 
-constexpr int PAYLOAD_SIZE = 4 * 3 + 5;
 constexpr uint NRC_INPUT_SIZE = 3 * 3 + 2 * 2 + 1;
 constexpr uint NRC_OUTPUT_SIZE = 3;
+
 constexpr uint NRC_BATCH_SIZE = tcnn::BATCH_SIZE_GRANULARITY * 64 * 8;
 constexpr uint STEPS_PER_BATCH = 1; // NOTE: Does not seem to improve performance
 constexpr uint NRC_SUBBATCH_SIZE = NRC_BATCH_SIZE / STEPS_PER_BATCH;
@@ -135,19 +138,31 @@ struct TrainBounce {
 
 // NOTE: Because this includes pointers this should be zero-initialized using cudaMemset
 struct Params {
+    // Output
     float4* image; // A copied pointer to the image buffer
     uint2 dim;
-    OptixTraversableHandle handle;
+
+    // Camera
     float4x4 clipToWorld;
+
+    // Sampling
     uint sequenceOffset; // Offset into the Sobol sequence
     uint sequenceStride; // Stride between different dimensions
     uint sample; // Current sample
     float weight = 1.0f; // Weight of the current sample (= 1 / (sample + 1))
-    float russianRouletteWeight = 10.0f; // Weight for Russian Roulette
-    float sceneEpsilon = 1e-4f; // Scene epsilon
+
+    // Scene parameters
+    OptixTraversableHandle handle;
+    float3 sceneMin;
+    float sceneScale;
+
+    // Rendering config
     uint flags = NEE_FLAG | TRANSMISSION_FLAG; // Flags
     InferenceMode inferenceMode;
     float varianceTradeoff = 0.01f;
+    float russianRouletteWeight = 10.0f; // Weight for Russian Roulette
+    float sceneEpsilon = 1e-4f; // Scene epsilon
+    uint maxPathLength = MAX_BOUNCES; // Maximum path length
 
 ////////////////// OWNED MEMORY //////////////////
 // NOTE: This is owned memory and must be freed //
@@ -157,10 +172,10 @@ struct Params {
     Material* materials; // materials
     EmissiveTriangle* lightTable; // lightTable
     uint lightTableSize; // lightTableSize
-//////////////////////////////////////////////////
+/////////////////////////////////////////////////
 
-    float3 sceneMin;
-    float sceneScale;
+    // NRC parameters
+    uint nrcSize = tcnn::BATCH_SIZE_GRANULARITY * 64 * 8; // Size of the NRC input/output buffer
     uint trainingRound = 0; // Current training round
     uint* lightSamples; // Number of light samples
     float balanceWeight = 1.0f; // Weight for light sampling balancing
@@ -174,6 +189,7 @@ struct Params {
     float* selfLearningQueries;
     cudaTextureObject_t brdfLUT;
 
+    // Photon mapping parameters
     PhotonQueryView photonMap;
 };
 extern "C" __constant__ const Params params;

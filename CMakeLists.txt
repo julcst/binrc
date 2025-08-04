@@ -35,7 +35,7 @@ enable_language(CUDA)
 include(FetchContent)
 FetchContent_Declare(
     framework
-    URL https://github.com/julcst/gltemplate/archive/v1.6b.tar.gz
+    URL https://github.com/julcst/gltemplate/archive/v1.8.tar.gz
 )
 FetchContent_Declare(
     fastgltf
@@ -61,6 +61,7 @@ set(OPTIXIR
     src/optix/reference.cu
     src/optix/train_bidir.cu
     src/optix/train_light.cu
+    src/optix/train_light_naive.cu
     src/optix/train_eye.cu
     src/optix/sppm_eye_pass.cu
     src/optix/sppm_light_pass.cu

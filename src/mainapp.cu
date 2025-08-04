@@ -175,6 +175,7 @@ void MainApp::buildImGui() {
                 reset |= ImGui::FlagCheckbox("Enable Transmission", &renderer.params.flags, TRANSMISSION_FLAG);
                 break;
         }
+        reset |= ImGui::SliderInt("Max Path Length", reinterpret_cast<int*>(&renderer.params.maxPathLength), 1, MAX_BOUNCES);
     }
 
     if (ImGui::CollapsingHeader("NRC", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -194,6 +195,11 @@ void MainApp::buildImGui() {
     }
 
     if (ImGui::CollapsingHeader("Light Training", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Combo("Training Mode", &renderer.backwardTrainer, {
+            {TRAIN_LIGHT, "Light"},
+            {TRAIN_LIGHT_NAIVE, "Light Naive"},
+            {TRAIN_BIDIR, "Bidirectional"},
+        });
         ImGui::FlagCheckbox("Russian Roulette##3", &renderer.params.flags, BACKWARD_RR_FLAG);
         float balancing = 100.0f - 100.0f / renderer.params.balanceWeight;
         if (ImGui::SliderFloat("Balancing Samples", &balancing, 0.0f, 100.0f, "%.0f%%")) {

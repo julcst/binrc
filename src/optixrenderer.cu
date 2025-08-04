@@ -100,6 +100,13 @@ OptixRenderer::OptixRenderer() {
         OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
             .raygen = {
+                .module = modules[optixir::TRAIN_LIGHT_NAIVE],
+                .entryFunctionName = "__raygen__",
+            },
+        },
+        OptixProgramGroupDesc {
+            .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
+            .raygen = {
                 .module = modules[optixir::TRAIN_BIDIR],
                 .entryFunctionName = "__raygen__",
             },
@@ -515,7 +522,7 @@ void OptixRenderer::train() {
     // Generate training samples
     if (forwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_EYE], forwardSamples, 1, 1));
     if (backwardSamples) {
-        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_LIGHT], backwardSamples, 1, 1));
+        check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[backwardTrainer], backwardSamples, 1, 1));
     }
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
     

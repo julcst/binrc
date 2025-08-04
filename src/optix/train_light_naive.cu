@@ -39,7 +39,7 @@ extern "C" __global__ void __raygen__() {
     Payload payload;
     float3 prevPoint = lightSample.position;
 
-    for (uint depth = 0; depth < MAX_BOUNCES - 1; depth++) {
+    for (uint depth = 0; depth < params.maxPathLength - 1; depth++) {
         // Russian roulette
         // if (params.flags & BACKWARD_RR_FLAG) {
         //     const float pContinue = min(luminance(radiance) * params.russianRouletteWeight, 1.0f);

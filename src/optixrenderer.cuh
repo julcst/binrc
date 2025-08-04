@@ -27,6 +27,7 @@ enum ProgramGroup {
     REFERENCE,
     TRAIN_EYE,
     TRAIN_LIGHT,
+    TRAIN_LIGHT_NAIVE,
     TRAIN_BIDIR,
     INFERENCE,
     SPPM_EYE_PASS,
@@ -41,7 +42,7 @@ enum ProgramGroup {
     SPPM_VIS_HIT,
 };
 
-constexpr size_t RAYGEN_COUNT = 9;
+constexpr size_t RAYGEN_COUNT = 10;
 constexpr size_t PROGRAM_GROUP_COUNT = RAYGEN_COUNT + 5;
 
 class OptixRenderer {
@@ -69,6 +70,7 @@ public:
     uint32_t photonCount = 1 << 17; // Number of photons to generate
     Params params = {}; // NOTE: Initialization is important to prevent invalid pointers
     SPPMRTX sppmBVH {NRC_BATCH_SIZE};
+    ProgramGroup backwardTrainer = TRAIN_LIGHT;
 
 private:
     OptixDeviceContext context;

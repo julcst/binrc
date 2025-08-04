@@ -25,7 +25,7 @@ extern "C" __global__ void __raygen__reference() {
     auto prevBrdfPdf = 1.0f;
     auto lightPdfIsZero = true;
     
-    for (uint depth = 1; depth < MAX_BOUNCES; depth++) {
+    for (uint depth = 1; depth < params.maxPathLength; depth++) {
         // Russian roulette
         const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
         if (RND_ROULETTE >= pContinue) break;

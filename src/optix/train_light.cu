@@ -44,9 +44,9 @@ extern "C" __global__ void __raygen__() {
 
     radiance *= PI; // Multiply by cos(wo) / pdf(wo) = cos(wo) / (cos(wo) / PI) = PI
 
-    PathVertex path[MAX_BOUNCES - 1];
+    PathVertex path[MAX_BOUNCES];
 
-    for (uint depth = 0; depth < MAX_BOUNCES - 1; depth++) {
+    for (uint depth = 0; depth < params.maxPathLength - 1; depth++) {
         // Russian roulette
         // if (params.flags & BACKWARD_RR_FLAG) {
         //     const float pContinue = min(luminance(radiance) * params.russianRouletteWeight, 1.0f);
