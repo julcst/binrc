@@ -60,6 +60,70 @@ NLOHMANN_JSON_SERIALIZE_ENUM(ProgramGroup, {
     {SPPM_VIS_HIT, "sppm_vis_hit"}
 });
 
+struct FrameBreakdown {
+    float photonQueryGeneration = 0.0f;
+    float photonQueryMapBuildTime = 0.0f;
+    float photonGeneration = 0.0f;
+    float photonPostprocessing = 0.0f;
+    float forwardSampleGeneration = 0.0f;
+    float backwardSampleGeneration = 0.0f;
+    float balanceSampleGeneration = 0.0f;
+    float selfLearningInference = 0.0f;
+    float selfLearningPostprocessing = 0.0f;
+    float training = 0.0f;
+    float pathtracing = 0.0f;
+    float inference = 0.0f;
+    float visualization = 0.0f;
+    float total = 0.0f;
+};
+
+struct AverageFrameBreakdown {
+    FrameBreakdown sum;
+    uint32_t count = 0;
+    void add(const FrameBreakdown& breakdown) {
+        sum.photonQueryGeneration += breakdown.photonQueryGeneration;
+        sum.photonQueryMapBuildTime += breakdown.photonQueryMapBuildTime;
+        sum.photonGeneration += breakdown.photonGeneration;
+        sum.photonPostprocessing += breakdown.photonPostprocessing;
+        sum.forwardSampleGeneration += breakdown.forwardSampleGeneration;
+        sum.backwardSampleGeneration += breakdown.backwardSampleGeneration;
+        sum.balanceSampleGeneration += breakdown.balanceSampleGeneration;
+        sum.selfLearningInference += breakdown.selfLearningInference;
+        sum.selfLearningPostprocessing += breakdown.selfLearningPostprocessing;
+        sum.training += breakdown.training;
+        sum.pathtracing += breakdown.pathtracing;
+        sum.inference += breakdown.inference;
+        sum.visualization += breakdown.visualization;
+        sum.total += breakdown.total;
+        count++;
+    }
+    FrameBreakdown average() const {
+        return {
+            sum.photonQueryGeneration / count,
+            sum.photonQueryMapBuildTime / count,
+            sum.photonGeneration / count,
+            sum.photonPostprocessing / count,
+            sum.forwardSampleGeneration / count,
+            sum.backwardSampleGeneration / count,
+            sum.balanceSampleGeneration / count,
+            sum.selfLearningInference / count,
+            sum.selfLearningPostprocessing / count,
+            sum.training / count,
+            sum.pathtracing / count,
+            sum.inference / count,
+            sum.visualization / count,
+            sum.total / count
+        };
+    }
+};
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FrameBreakdown,
+    photonQueryGeneration, photonQueryMapBuildTime, photonGeneration, photonPostprocessing,
+    forwardSampleGeneration, backwardSampleGeneration, balanceSampleGeneration,
+    selfLearningInference, selfLearningPostprocessing, training, pathtracing, inference,
+    visualization, total
+);
+
 constexpr size_t RAYGEN_COUNT = 10;
 constexpr size_t PROGRAM_GROUP_COUNT = RAYGEN_COUNT + 5;
 
@@ -74,7 +138,7 @@ public:
 
     void reset();
     void resetNRC();
-    void render(vec4* image, uvec2 dim);
+    FrameBreakdown render(vec4* image, uvec2 dim);
     void setCamera(const mat4& clipToWorld);
     void loadGLTF(const std::filesystem::path& path);
     void resize(uvec2 dim);
@@ -99,6 +163,7 @@ private:
     std::array<OptixModule, optixir::paths.size()> modules;
     std::array<OptixShaderBindingTable, RAYGEN_COUNT> sbts;
     std::array<OptixProgramGroup, PROGRAM_GROUP_COUNT> programGroups;
+    std::array<CudaEvent, 23> events;
 
     tcnn::GPUMemory<Params> paramsBuffer {1};
     tcnn::GPUMemory<HitRecord> hitRecords;

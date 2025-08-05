@@ -67,3 +67,36 @@ static void printCudaDevices() {
         // std::cout << "Device " << device << " - " << prop.name << ", compute capability " << prop.major << "." << prop.minor << ", cores " << prop.multiProcessorCount << ", warp size " << prop.warpSize << std::endl;
     }
 }
+
+struct CudaEvent {
+    cudaEvent_t event;
+    bool wasRecorded = false;
+
+    CudaEvent() {
+        check(cudaEventCreate(&event));
+    }
+    
+    ~CudaEvent() {
+        check(cudaEventDestroy(event));
+    }
+
+    void record(cudaStream_t stream = nullptr) {
+        check(cudaEventRecord(event, stream));
+        wasRecorded = true;
+    }
+
+    void synchronize() const {
+        check(cudaEventSynchronize(event));
+    }
+
+    float elapsed(const CudaEvent& other) const {
+        if (!wasRecorded || !other.wasRecorded) return 0.0f;
+        float ms;
+        check(cudaEventElapsedTime(&ms, event, other.event));
+        return ms;
+    }
+
+    void reset() {
+        wasRecorded = false;
+    }
+};

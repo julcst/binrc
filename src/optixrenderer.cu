@@ -505,25 +505,36 @@ void OptixRenderer::train() {
     check(cudaDeviceSynchronize()); // Wait for the copy to finish
 
     if (photonQueries) {
+        events[1].record();
         if (photonQuerySamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_EYE_PASS], photonQuerySamples, 1, 1));
+        events[2].record();
         check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+        events[3].record();
         sppmBVH.updatePhotonAS(context);
+        events[4].record();
         check(cudaDeviceSynchronize());
+        events[5].record();
         if (photonCount) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_LIGHT_PASS], photonCount, 1, 1));
+        events[6].record();
         check(cudaDeviceSynchronize()); // Wait for the renderer to finish
         sppmBVH.totalPhotonCount += photonCount;
         params.photonMap = sppmBVH.getDeviceView(); // Update handle in params
         paramsBuffer.copy_from_host(&params, 1);
         check(cudaDeviceSynchronize()); // Wait for the copy to finish
+        events[7].record();
         writePhotonQueriesToTrainingSet<<<(photonQueries + 255) / 256, 256>>>(paramsBuffer.data(), nrcTrainInput.data(), nrcTrainOutput.data());
+        events[8].record();
         check(cudaDeviceSynchronize());
     }
 
     // Generate training samples
+    events[9].record();
     if (forwardSamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[TRAIN_EYE], forwardSamples, 1, 1));
+    events[10].record();
     if (backwardSamples) {
         check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[backwardTrainer], backwardSamples, 1, 1));
     }
+    events[11].record();
     check(cudaDeviceSynchronize()); // Wait for the renderer to finish
     
     uint nL = 0; // Real number of light samples
@@ -532,19 +543,28 @@ void OptixRenderer::train() {
     uint nD = nL * params.balanceWeight - nL;
     //std::cout << "nL: " << nL << " nD: " << nD << std::endl;
     // FIXME: Upsides too dark
-    if (nD) generateDummySamples<<<(nD + 255) / 256, 256>>>(nD, paramsBuffer.data(), instances.data(), instances.size(), materials.data());
-    check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+    if (nD) {
+        events[12].record();
+        generateDummySamples<<<(nD + 255) / 256, 256>>>(nD, paramsBuffer.data(), instances.data(), instances.size(), materials.data());
+        events[13].record();
+    }
 
     if (params.flags & SELF_LEARNING_FLAG) {
+        events[14].record();
         nrcModel.network->inference(selfLearningQueries, selfLearningInference, false); // Do not apply EMA here
+        events[15].record();
+        cudaDeviceSynchronize();
         const auto block = 256;
         const auto grid = (forwardSamples + block - 1) / block;
         applySelfLearning<<<grid, block>>>(forwardSamples, selfLearningBounces.data(), selfLearningQueries.data(), selfLearningInference.data(), nrcTrainOutput.data());
+        events[16].record();
     }
-    
+
     params.trainingRound++;
+    check(cudaDeviceSynchronize());
 
     // Perform training steps
+    events[17].record();
     for (uint32_t offset = 0; offset < NRC_BATCH_SIZE; offset += NRC_SUBBATCH_SIZE) {
         // TODO: Use pdf
         // TODO: Limit training to the samples generated in this step to improve performance
@@ -555,7 +575,11 @@ void OptixRenderer::train() {
     }
 }
 
-void OptixRenderer::render(vec4* image, uvec2 dim) {
+FrameBreakdown OptixRenderer::render(vec4* image, uvec2 dim) {
+
+    for (auto& event : events) event.reset();
+
+    events[0].record();
 
     // Update parameters
     params.image = reinterpret_cast<float4*>(image);
@@ -568,14 +592,15 @@ void OptixRenderer::render(vec4* image, uvec2 dim) {
 
     if (!scene.isEmpty() && enableTraining) train();
 
+    events[18].record();
     switch (params.inferenceMode) {
         case InferenceMode::NO_INFERENCE:
             check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[REFERENCE], dim.x, dim.y, 1));
-            check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+            events[19].record();
             break;
         case InferenceMode::RAW_PHOTON_MAP:
             check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sppmVisSBT, dim.x, dim.y, 1));
-            check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+            events[19].record();
             break;
         case InferenceMode::PHOTON_MAPPING:
             sppmBVH.resize(dim.x * dim.y);
@@ -594,22 +619,44 @@ void OptixRenderer::render(vec4* image, uvec2 dim) {
             check(cudaDeviceSynchronize()); // Wait for the copy to finish
             accumulatePhotonsToFramebuffer<<<dim3((dim.x + 15) / 16, (dim.y + 15) / 16), dim3(16, 16)>>>(paramsBuffer.data());
             params.trainingRound++;
+            events[19].record();
             break;
         default:
             check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[INFERENCE], dim.x, dim.y, 1));
             check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+            events[19].record();
 
             nrcModel.network->inference(nrcInferenceInput, nrcInferenceOutput);
+            events[20].record();
 
             dim3 block(16, 16);
             dim3 grid((dim.x + block.x - 1) / block.x, (dim.y + block.y - 1) / block.y);
             visualizeInference<<<grid, block>>>(paramsBuffer.data());
-            check(cudaDeviceSynchronize()); // Wait for the visualization to finish
+            events[21].record();
             break;
     }
+    events[22].record();
+    check(cudaDeviceSynchronize()); // Wait for the renderer to finish
 
     params.sample++;
     params.weight = 1.0f / static_cast<float>(params.sample);
+
+    return {
+        .photonQueryGeneration = events[1].elapsed(events[2]),
+        .photonQueryMapBuildTime = events[3].elapsed(events[4]),
+        .photonGeneration = events[5].elapsed(events[6]),
+        .photonPostprocessing = events[7].elapsed(events[8]),
+        .forwardSampleGeneration = events[9].elapsed(events[10]),
+        .backwardSampleGeneration = events[10].elapsed(events[11]),
+        .balanceSampleGeneration = events[12].elapsed(events[13]),
+        .selfLearningInference = events[14].elapsed(events[15]),
+        .selfLearningPostprocessing = events[15].elapsed(events[16]),
+        .training = events[17].elapsed(events[18]),
+        .pathtracing = events[18].elapsed(events[19]),
+        .inference = events[19].elapsed(events[20]),
+        .visualization = events[20].elapsed(events[21]),
+        .total = events[0].elapsed(events[22]),
+    };
 }
 
 void OptixRenderer::generateSobol(uint offset, uint n) {

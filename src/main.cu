@@ -128,11 +128,12 @@ int main(int argc, char** argv) {
         const auto clipToWorld = renderer.scene.cameras[0].second;
         renderer.setCamera(clipToWorld);
 
+        uint32_t resolution = config.value("resolution", 512u);
         glm::vec4 xAxis = clipToWorld[0];
         glm::vec4 yAxis = clipToWorld[1];
         float aspectRatio = glm::length(xAxis) / glm::length(yAxis);
         std::cout << "Aspect Ratio: " << aspectRatio << std::endl;
-        glm::uvec2 dim = {static_cast<uint>(aspectRatio * 512), 512};
+        glm::uvec2 dim = {static_cast<uint>(aspectRatio * resolution), resolution};
         renderer.resize(dim);
         tcnn::GPUMemory<glm::vec4> image(dim.x * dim.y);
 
@@ -140,11 +141,13 @@ int main(int argc, char** argv) {
             ? config.at("pretraining").get<BreakCondition>()
             : BreakCondition{};
 
+        AverageFrameBreakdown breakdown {};
+
         uint32_t spp = 0;
         auto startTime = std::chrono::steady_clock::now();
         std::chrono::steady_clock::duration renderTime = {};
         while (!isConditionMet(pretraining, spp, renderTime)) {
-            renderer.render(image.data(), dim);
+            breakdown.add(renderer.render(image.data(), dim));
             spp++;
             std::cout << "Pretraining: " << spp << "\r" << std::flush;
         }
@@ -159,7 +162,7 @@ int main(int argc, char** argv) {
         spp = 0;
         startTime = std::chrono::steady_clock::now();
         while (!conditions.empty()) {
-            renderer.render(image.data(), dim);
+            breakdown.add(renderer.render(image.data(), dim));
             auto renderTime = std::chrono::steady_clock::now() - startTime;
             spp++;
             std::cout << "Rendering: " << spp << "\r" << std::flush;
@@ -172,7 +175,9 @@ int main(int argc, char** argv) {
                     nlohmann::json metadata = {
                         {"condition", conditionToString(*it)},
                         {"samples", spp},
-                        {"duration", renderTime.count()},
+                        {"duration", std::chrono::duration_cast<std::chrono::duration<double>>(renderTime).count()},
+                        {"breakdown", breakdown.average()},
+                        {"total_samples", breakdown.count},
                     };
                     Common::writeToFile(metadata.dump(4), path.concat(".json"));
                     it = conditions.erase(it);
