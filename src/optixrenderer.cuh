@@ -75,45 +75,53 @@ struct FrameBreakdown {
     float inference = 0.0f;
     float visualization = 0.0f;
     float total = 0.0f;
+
+    void operator+=(const FrameBreakdown& other) {
+        photonQueryGeneration += other.photonQueryGeneration;
+        photonQueryMapBuildTime += other.photonQueryMapBuildTime;
+        photonGeneration += other.photonGeneration;
+        photonPostprocessing += other.photonPostprocessing;
+        forwardSampleGeneration += other.forwardSampleGeneration;
+        backwardSampleGeneration += other.backwardSampleGeneration;
+        balanceSampleGeneration += other.balanceSampleGeneration;
+        selfLearningInference += other.selfLearningInference;
+        selfLearningPostprocessing += other.selfLearningPostprocessing;
+        training += other.training;
+        pathtracing += other.pathtracing;
+        inference += other.inference;
+        visualization += other.visualization;
+        total += other.total;
+    }
+
+    FrameBreakdown operator*(float factor) const {
+        return {
+            photonQueryGeneration * factor,
+            photonQueryMapBuildTime * factor,
+            photonGeneration * factor,
+            photonPostprocessing * factor,
+            forwardSampleGeneration * factor,
+            backwardSampleGeneration * factor,
+            balanceSampleGeneration * factor,
+            selfLearningInference * factor,
+            selfLearningPostprocessing * factor,
+            training * factor,
+            pathtracing * factor,
+            inference * factor,
+            visualization * factor,
+            total * factor,
+        };
+    }
 };
 
 struct AverageFrameBreakdown {
     FrameBreakdown sum;
     uint32_t count = 0;
     void add(const FrameBreakdown& breakdown) {
-        sum.photonQueryGeneration += breakdown.photonQueryGeneration;
-        sum.photonQueryMapBuildTime += breakdown.photonQueryMapBuildTime;
-        sum.photonGeneration += breakdown.photonGeneration;
-        sum.photonPostprocessing += breakdown.photonPostprocessing;
-        sum.forwardSampleGeneration += breakdown.forwardSampleGeneration;
-        sum.backwardSampleGeneration += breakdown.backwardSampleGeneration;
-        sum.balanceSampleGeneration += breakdown.balanceSampleGeneration;
-        sum.selfLearningInference += breakdown.selfLearningInference;
-        sum.selfLearningPostprocessing += breakdown.selfLearningPostprocessing;
-        sum.training += breakdown.training;
-        sum.pathtracing += breakdown.pathtracing;
-        sum.inference += breakdown.inference;
-        sum.visualization += breakdown.visualization;
-        sum.total += breakdown.total;
+        sum += breakdown;
         count++;
     }
     FrameBreakdown average() const {
-        return {
-            sum.photonQueryGeneration / count,
-            sum.photonQueryMapBuildTime / count,
-            sum.photonGeneration / count,
-            sum.photonPostprocessing / count,
-            sum.forwardSampleGeneration / count,
-            sum.backwardSampleGeneration / count,
-            sum.balanceSampleGeneration / count,
-            sum.selfLearningInference / count,
-            sum.selfLearningPostprocessing / count,
-            sum.training / count,
-            sum.pathtracing / count,
-            sum.inference / count,
-            sum.visualization / count,
-            sum.total / count
-        };
+        return count > 1 ? sum * (1.0f / count) : sum;
     }
 };
 
