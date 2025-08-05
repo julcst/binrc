@@ -91,7 +91,13 @@
         "expected": "cpp",
         "csignal": "cpp",
         "future": "cpp",
-        "stack": "cpp"
+        "stack": "cpp",
+        "strstream": "cpp",
+        "coroutine": "cpp",
+        "csetjmp": "cpp",
+        "cuchar": "cpp",
+        "source_location": "cpp",
+        "scoped_allocator": "cpp"
     },
     "C_Cpp.codeAnalysis.clangTidy.checks.disabled": [
         "modernize-use-trailing-return-type",

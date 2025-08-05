@@ -62,8 +62,8 @@ static void printCudaDevices() {
     for (device = 0; device < deviceCount; ++device) {
         cudaDeviceProp prop;
         check(cudaGetDeviceProperties(&prop, device));
-        //std::cout << std::format("Device {} - {}, compute capability {}.{}, cores {}, warp size {}", device, prop.name, prop.major, prop.minor, prop.multiProcessorCount, prop.warpSize) << std::endl;
+        std::cout << std::format("Device {} - {}, compute capability {}.{}, cores {}, warp size {}", device, prop.name, prop.major, prop.minor, prop.multiProcessorCount, prop.warpSize) << std::endl;
         // C++17
-        std::cout << "Device " << device << " - " << prop.name << ", compute capability " << prop.major << "." << prop.minor << ", cores " << prop.multiProcessorCount << ", warp size " << prop.warpSize << std::endl;
+        // std::cout << "Device " << device << " - " << prop.name << ", compute capability " << prop.major << "." << prop.minor << ", cores " << prop.multiProcessorCount << ", warp size " << prop.warpSize << std::endl;
     }
 }

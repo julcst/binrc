@@ -4,6 +4,7 @@ set(DEBUG_CUDA ON CACHE BOOL "Enable debugging for CUDA" FORCE)
 
 set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING "CUDA architectures to compile for" FORCE)
 set(CMAKE_CUDA_HOST_COMPILER ${CMAKE_CXX_COMPILER} CACHE PATH "Path to the host C++ compiler" FORCE)
+message(STATUS "Using host compiler: ${CMAKE_CUDA_HOST_COMPILER}")
 
 if (UNIX)
     set(OPTIX_DIR ../NVIDIA-OptiX-SDK-9.0.0-linux64-x86_64 CACHE PATH "Path to the OptiX SDK" FORCE)
@@ -12,8 +13,9 @@ elseif (WIN32)
 endif()
 
 # Config
+set(FMT_STD_FORMAT OFF CACHE BOOL "" FORCE)
 set(GLM_ENABLE_FAST_MATH ON)
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --diag-suppress 20012 --use_fast_math") # Disables glm warnings
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --diag-suppress 20012 --diag-suppress 128 --diag-suppress 2417 --use_fast_math --expt-relaxed-constexpr") # Disables glm warnings
 set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} --debug") # Enables host debugging
 if (DEBUG_CUDA)
     set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} --generate-line-info") # Enables line info
@@ -31,6 +33,7 @@ project(biNRC LANGUAGES CXX)
 find_package(CUDAToolkit 12 REQUIRED)
 set(CMAKE_CUDA_COMPILER ${CUDAToolkit_NVCC_EXECUTABLE} CACHE PATH "Path to the CUDA compiler" FORCE)
 enable_language(CUDA)
+message(STATUS "Using CUDA compiler: ${CMAKE_CUDA_COMPILER}")
 
 include(FetchContent)
 FetchContent_Declare(
@@ -46,6 +49,7 @@ set(TCNN_BUILD_EXAMPLES OFF)
 FetchContent_Declare(
     tinycudann
     GIT_REPOSITORY https://github.com/julcst/tiny-cuda-nn
+    GIT_TAG 7364f21
 )
 FetchContent_Declare(
     cuco
@@ -71,6 +75,7 @@ add_library(optixir OBJECT ${OPTIXIR})
 add_compile_definitions(_CCCL_DISABLE_INT128 _LIBCUDACXX_HAS_NO_INT128)
 target_link_libraries(optixir CUDA::cudart CUDA::curand tiny-cuda-nn cuco)
 target_include_directories(optixir PRIVATE src ${OPTIX_DIR}/include ${CUDAToolkit_INCLUDE_DIRS})
+target_compile_features(optixir PUBLIC cxx_std_20 cuda_std_20)
 set_target_properties(optixir PROPERTIES
     CUDA_OPTIX_COMPILATION ON
 )
@@ -89,7 +94,7 @@ target_link_libraries(${PROJECT_NAME} CUDA::cudart CUDA::curand framework fastgl
 target_include_directories(${PROJECT_NAME} PUBLIC src ${OPTIX_DIR}/include ${CUDAToolkit_INCLUDE_DIRS})
 
 # Set compiler flags
-target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17 cuda_std_17)
+target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20 cuda_std_20)
 set_target_properties(${PROJECT_NAME} PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
     CUDA_EXTENSIONS OFF

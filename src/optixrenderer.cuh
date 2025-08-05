@@ -42,6 +42,24 @@ enum ProgramGroup {
     SPPM_VIS_HIT,
 };
 
+NLOHMANN_JSON_SERIALIZE_ENUM(ProgramGroup, {
+    {REFERENCE, "reference"},
+    {TRAIN_EYE, "train_eye"},
+    {TRAIN_LIGHT, "train_light"},
+    {TRAIN_LIGHT_NAIVE, "train_light_naive"},
+    {TRAIN_BIDIR, "train_bidir"},
+    {INFERENCE, "inference"},
+    {SPPM_EYE_PASS, "sppm_eye_pass"},
+    {SPPM_LIGHT_PASS, "sppm_light_pass"},
+    {SPPM_VIS_RAYGEN, "sppm_vis_raygen"},
+    {SPPM_FULL, "sppm_full"},
+    {MISS, "miss"},
+    {CLOSEST_HIT, "closest_hit"},
+    {SPPM_RTX, "sppm_rtx"},
+    {NO_MISS, "no_miss"},
+    {SPPM_VIS_HIT, "sppm_vis_hit"}
+});
+
 constexpr size_t RAYGEN_COUNT = 10;
 constexpr size_t PROGRAM_GROUP_COUNT = RAYGEN_COUNT + 5;
 
@@ -60,6 +78,8 @@ public:
     void setCamera(const mat4& clipToWorld);
     void loadGLTF(const std::filesystem::path& path);
     void resize(uvec2 dim);
+    void configure(const nlohmann::json& config);
+    nlohmann::json getConfig() const;
 
     Scene scene;
     std::vector<float> lossHistory;

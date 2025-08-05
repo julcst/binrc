@@ -631,9 +631,9 @@ void OptixRenderer::generateSobol(uint offset, uint n) {
 
 void OptixRenderer::ensureSobol(uint sample) {
     if (sample < params.sequenceOffset || sample >= params.sequenceOffset + params.sequenceStride) {
-        // std::cout << std::format("Regenerating Sobol sequence for samples [{},{})", sample, sample + RAND_SEQUENCE_CACHE_SIZE) << std::endl;
+        std::cout << std::format("Regenerating Sobol sequence for samples [{},{})", sample, sample + RAND_SEQUENCE_CACHE_SIZE) << std::endl;
         // C++17
-        std::cout << "Regenerating Sobol sequence for samples [" << sample << "," << sample + RAND_SEQUENCE_CACHE_SIZE << ")" << std::endl;
+        // std::cout << "Regenerating Sobol sequence for samples [" << sample << "," << sample + RAND_SEQUENCE_CACHE_SIZE << ")" << std::endl;
         generateSobol(sample, RAND_SEQUENCE_CACHE_SIZE);
     }
 }
@@ -672,4 +672,104 @@ void OptixRenderer::reset() {
 void OptixRenderer::resetNRC() {
     nrcModel.trainer->initialize_params();
     lossHistory.clear();
+}
+
+template<typename T>
+inline void setIfExists(const nlohmann::json& config, const std::string& key, T& value) {
+    if (config.contains(key)) {
+        value = config[key].template get<T>();
+    }
+}
+
+NLOHMANN_JSON_SERIALIZE_ENUM(InferenceMode, {
+    {InferenceMode::NO_INFERENCE, "no_inference"},
+    {InferenceMode::RAW_CACHE, "raw_cache"},
+    {InferenceMode::FIRST_VERTEX, "first_vertex"},
+    {InferenceMode::FIRST_VERTEX_WITH_NEE, "first_vertex_with_nee"},
+    {InferenceMode::FIRST_DIFFUSE, "first_diffuse"},
+    {InferenceMode::VARIANCE_HEURISTIC, "variance_heuristic"},
+    {InferenceMode::RAW_PHOTON_MAP, "raw_photon_map"},
+    {InferenceMode::PHOTON_MAPPING, "photon_mapping"},
+});
+
+void OptixRenderer::configure(const nlohmann::json& config) {
+    if (config.contains("scene")) {
+        loadGLTF(config["scene"].template get<std::filesystem::path>());
+    }
+
+    if (config.contains("rendering")) {
+        const auto& renderingConfig = config["rendering"];
+        if (renderingConfig.contains("flags")) {
+            const auto& flags = renderingConfig["flags"];
+            params.flags = 0;
+            if (flags.contains("transmission")) params.flags |= TRANSMISSION_FLAG;
+            if (flags.contains("nee")) params.flags |= NEE_FLAG;
+            if (flags.contains("training_nee")) params.flags |= TRAINING_NEE_FLAG;
+            if (flags.contains("inference_nee")) params.flags |= INFERENCE_NEE_FLAG;
+            if (flags.contains("forward_rr")) params.flags |= FORWARD_RR_FLAG;
+            if (flags.contains("backward_rr")) params.flags |= BACKWARD_RR_FLAG;
+            if (flags.contains("self_learning")) params.flags |= SELF_LEARNING_FLAG;
+            if (flags.contains("diffuse_encoding")) params.flags |= DIFFUSE_ENCODING_FLAG;
+            if (flags.contains("light_trace_fix")) params.flags |= LIGHT_TRACE_FIX_FLAG;
+        }
+        setIfExists(renderingConfig, "inference_mode", params.inferenceMode);
+        setIfExists(renderingConfig, "variance_tradeoff", params.varianceTradeoff);
+        setIfExists(renderingConfig, "russian_roulette_weight", params.russianRouletteWeight);
+        setIfExists(renderingConfig, "scene_epsilon", params.sceneEpsilon);
+        setIfExists(renderingConfig, "max_path_length", params.maxPathLength);
+    }
+
+    if (config.contains("training")) {
+        const auto& trainingConfig = config["training"];
+        setIfExists(trainingConfig, "balance_weight", params.balanceWeight);
+        setIfExists(trainingConfig, "enable_training", enableTraining);
+        setIfExists(trainingConfig, "train_direction", trainingDirection);
+        setIfExists(trainingConfig, "backward_trainer", backwardTrainer);
+        setIfExists(trainingConfig, "photon_mapping_amount", photonMappingAmount);
+        setIfExists(trainingConfig, "photon_query_replacement", photonQueryReplacement);
+        setIfExists(trainingConfig, "photon_count", photonCount);
+        setIfExists(trainingConfig, "photon_radius", params.photonMap.initialRadius);
+        setIfExists(trainingConfig, "photon_radius_reduction", params.photonMap.alpha);
+    }
+
+    if (config.contains("nrc")) {
+        nrcModel = tcnn::create_from_config(NRC_INPUT_SIZE, NRC_OUTPUT_SIZE, config["nrc"]);
+    }
+}
+
+nlohmann::json OptixRenderer::getConfig() const {
+    nlohmann::json config;
+
+    config["rendering"] = {
+        {"flags", {
+            {"transmission", (params.flags & TRANSMISSION_FLAG) != 0},
+            {"nee", (params.flags & NEE_FLAG) != 0},
+            {"training_nee", (params.flags & TRAINING_NEE_FLAG) != 0},
+            {"inference_nee", (params.flags & INFERENCE_NEE_FLAG) != 0},
+            {"forward_rr", (params.flags & FORWARD_RR_FLAG) != 0},
+            {"backward_rr", (params.flags & BACKWARD_RR_FLAG) != 0},
+            {"self_learning", (params.flags & SELF_LEARNING_FLAG) != 0},
+            {"diffuse_encoding", (params.flags & DIFFUSE_ENCODING_FLAG) != 0},
+            {"light_trace_fix", (params.flags & LIGHT_TRACE_FIX_FLAG) != 0},
+        }},
+        {"inference_mode", params.inferenceMode},
+        {"variance_tradeoff", params.varianceTradeoff},
+        {"russian_roulette_weight", params.russianRouletteWeight},
+        {"scene_epsilon", params.sceneEpsilon},
+        {"max_path_length", params.maxPathLength},
+    };
+
+    config["training"] = {
+        {"balance_weight", params.balanceWeight},
+        {"enable_training", enableTraining},
+        {"train_direction", trainingDirection},
+        {"backward_trainer", backwardTrainer},
+        {"photon_mapping_amount", photonMappingAmount},
+        {"photon_query_replacement", photonQueryReplacement},
+        {"photon_count", photonCount},
+        {"photon_radius", params.photonMap.initialRadius},
+        {"photon_radius_reduction", params.photonMap.alpha},
+    };
+
+    return config;
 }

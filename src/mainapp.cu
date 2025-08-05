@@ -50,6 +50,21 @@ std::vector<std::filesystem::path> scanFolder(const std::filesystem::path& folde
     }
 }
 
+std::filesystem::path getNumberedPath(const std::filesystem::path& basePath, const std::string& extension) {
+    int number = 0;
+    std::filesystem::path path;
+    do {
+        // C++20
+        path = basePath / (std::format("screenshot_{:03d}.{}", number, extension));
+        // C++17
+        // std::stringstream ss;
+        // ss << basePath.string() << std::setw(3) << std::setfill('0') << number << "." << extension;
+        // path = ss.str();
+        number++;
+    } while (std::filesystem::exists(path));
+    return path;
+}
+
 MainApp::MainApp() : App(800, 800) {
     printCudaDevices();
 
@@ -90,37 +105,29 @@ void MainApp::resizeCallback(const vec2& res) {
 }
 
 void MainApp::keyCallback(Key key, Action action, Modifier modifier) {
-    if (action == Action::PRESS && key == Key::ESC) close();
-    if (action == Action::PRESS && key == Key::T) imguiEnabled = !imguiEnabled;
-    if (action == Action::PRESS && key == Key::C) {
-        int screenshot_number = 0;
-        std::filesystem::path screenshot_path;
-        // Find the next available screenshot number
-        do {
-            std::stringstream ss;
-            ss << "screenshot_" << std::setw(3) << std::setfill('0') << screenshot_number << ".png";
-            screenshot_path = ss.str();
-            screenshot_number++;
-        } while (std::filesystem::exists(screenshot_path));
-        
-        takeScreenshot(screenshot_path.string());
-    }
-    if (action == Action::PRESS && key == Key::X) {
-        int screenshot_number = 0;
-        std::filesystem::path screenshot_path;
-        // Find the next available screenshot number
-        do {
-            std::stringstream ss;
-            ss << "screenshot_" << std::setw(3) << std::setfill('0') << screenshot_number << ".hdr";
-            screenshot_path = ss.str();
-            screenshot_number++;
-        } while (std::filesystem::exists(screenshot_path));
-        
-        blitTexture.writeToFile(screenshot_path.string());
-    }
-    if (action == Action::PRESS && key == Key::F) {
-        camera.target = vec3(0.0f, 0.0f, 0.0f);
-        camera.invalidate();
+    if (action != Action::PRESS) return;
+    switch (key) {
+        case Key::ESC:
+            close();
+            break;
+        case Key::T:
+            imguiEnabled = !imguiEnabled;
+            break;
+        case Key::C:
+            takeScreenshot(getNumberedPath("screenshot_", "png").string());
+            break;
+        case Key::X:
+            blitTexture.writeToFile(getNumberedPath("screenshot_", "hdr").string());
+            break;
+        case Key::J:
+            std::cout << renderer.getConfig().dump(4) << std::endl;
+            break;
+        case Key::F:
+            camera.target = vec3(0.0f, 0.0f, 0.0f);
+            camera.invalidate();
+            break;
+        default:
+            break;
     }
 }
 

@@ -1,3 +1,5 @@
 build/*
 lut.png
 screenshot*.png
+tests/*.hdr
+tests/*.hdr.json
