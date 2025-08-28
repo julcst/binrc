@@ -148,8 +148,9 @@ int main(int argc, char** argv) {
         std::chrono::steady_clock::duration renderTime = {};
         while (!isConditionMet(pretraining, spp, renderTime)) {
             breakdown.add(renderer.render(image.data(), dim));
+            renderTime = std::chrono::steady_clock::now() - startTime;
             spp++;
-            std::cout << "Pretraining: " << spp << "\r" << std::flush;
+            std::cout << std::format("Pretraining: {} ({:%H:%M:%S})\r", spp, renderTime) << std::flush;
         }
 
         renderer.reset();
@@ -165,7 +166,7 @@ int main(int argc, char** argv) {
             breakdown.add(renderer.render(image.data(), dim));
             auto renderTime = std::chrono::steady_clock::now() - startTime;
             spp++;
-            std::cout << "Rendering: " << spp << "\r" << std::flush;
+            std::cout << std::format("Rendering: {} ({:%H:%M:%S})\r", spp, renderTime) << std::flush;
 
             for (auto it = conditions.begin(); it != conditions.end();) {
                 if (isConditionMet(*it, spp, renderTime)) {

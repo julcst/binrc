@@ -29,7 +29,7 @@ extern "C" __global__ void __raygen__() {
     float3 queryWo = -queryRay.direction;
     float3 queryLo = {0.0f, 0.0f, 0.0f};
     auto queryMat = calcMaterialProperties(queryPayload);
-    if(queryMat.alpha2 < 1e-2f) printf("Query material F0 %.2f albedo %.2f alpha2 %.2f\n", length2(queryMat.F0), length2(queryMat.albedo), queryMat.alpha2);
+    //if(queryMat.alpha2 < 1e-2f) printf("Query material F0 %.2f albedo %.2f alpha2 %.2f\n", length2(queryMat.F0), length2(queryMat.albedo), queryMat.alpha2);
 
     const auto r = curand_uniform4(&state); // Note curand generates in (0, 1] not [0, 1)
     const auto lightSample = samplePhoton(curand_uniform(&state), make_float2(r.x, r.y), make_float2(r.z, r.w));
