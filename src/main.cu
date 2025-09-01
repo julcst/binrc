@@ -128,62 +128,82 @@ int main(int argc, char** argv) {
         const auto clipToWorld = renderer.scene.cameras[0].second;
         renderer.setCamera(clipToWorld);
 
-        uint32_t resolution = config.value("resolution", 512u);
-        glm::vec4 xAxis = clipToWorld[0];
-        glm::vec4 yAxis = clipToWorld[1];
-        float aspectRatio = glm::length(xAxis) / glm::length(yAxis);
-        std::cout << "Aspect Ratio: " << aspectRatio << std::endl;
-        glm::uvec2 dim = {static_cast<uint>(aspectRatio * resolution), resolution};
-        renderer.resize(dim);
-        tcnn::GPUMemory<glm::vec4> image(dim.x * dim.y);
-
-        BreakCondition pretraining = config.contains("pretraining")
-            ? config.at("pretraining").get<BreakCondition>()
-            : BreakCondition{};
-
-        AverageFrameBreakdown breakdown {};
-
-        uint32_t spp = 0;
-        auto startTime = std::chrono::steady_clock::now();
-        std::chrono::steady_clock::duration renderTime = {};
-        while (!isConditionMet(pretraining, spp, renderTime)) {
-            breakdown.add(renderer.render(image.data(), dim));
-            renderTime = std::chrono::steady_clock::now() - startTime;
-            spp++;
-            std::cout << std::format("Pretraining: {} ({:%H:%M:%S})\r", spp, renderTime) << std::flush;
+        std::vector<uint32_t> resolutions = {512};
+        if (config.contains("resolution")) {
+            switch (config["resolution"].type()) {
+                case nlohmann::json::value_t::number_unsigned:
+                    resolutions = {config["resolution"].get<uint32_t>()};
+                    break;
+                case nlohmann::json::value_t::array:
+                    resolutions = config["resolution"].get<std::vector<uint32_t>>();
+                    break;
+                default:
+                    throw std::runtime_error("Invalid resolution format: " + config["resolution"].dump());
+            }
         }
 
-        renderer.reset();
+        for (const auto resolution : resolutions) {
+            glm::vec4 xAxis = clipToWorld[0];
+            glm::vec4 yAxis = clipToWorld[1];
+            float aspectRatio = glm::length(xAxis) / glm::length(yAxis);
+            std::cout << "Aspect Ratio: " << aspectRatio << std::endl;
+            glm::uvec2 dim = {static_cast<uint>(aspectRatio * resolution), resolution};
+            renderer.resize(dim);
+            tcnn::GPUMemory<glm::vec4> image(dim.x * dim.y);
 
-        std::vector<BreakCondition> conditions = config.at("export").get<std::vector<BreakCondition>>();
-        for (auto& condition : conditions) {
-            std::cout << "Condition: " << conditionToString(condition) << std::endl;
-        }
+            BreakCondition pretraining = config.contains("pretraining")
+                ? config.at("pretraining").get<BreakCondition>()
+                : BreakCondition{};
 
-        spp = 0;
-        startTime = std::chrono::steady_clock::now();
-        while (!conditions.empty()) {
-            breakdown.add(renderer.render(image.data(), dim));
-            auto renderTime = std::chrono::steady_clock::now() - startTime;
-            spp++;
-            std::cout << std::format("Rendering: {} ({:%H:%M:%S})\r", spp, renderTime) << std::flush;
+            AverageFrameBreakdown breakdown {};
 
-            for (auto it = conditions.begin(); it != conditions.end();) {
-                if (isConditionMet(*it, spp, renderTime)) {
-                    auto path = configPath.parent_path() / configPath.stem();
-                    path += "_" + conditionToString(*it);
-                    saveImage(path.concat(".hdr"), dim, image.data());
-                    nlohmann::json metadata = {
-                        {"condition", conditionToString(*it)},
-                        {"samples", spp},
-                        {"duration", std::chrono::duration_cast<std::chrono::duration<double>>(renderTime).count()},
-                        {"breakdown", breakdown.average()},
-                        {"total_samples", breakdown.count},
-                    };
-                    Common::writeToFile(metadata.dump(4), path.concat(".json"));
-                    it = conditions.erase(it);
-                } else {
-                    ++it;
+            uint32_t spp = 0;
+            auto startTime = std::chrono::steady_clock::now();
+            std::chrono::steady_clock::duration renderTime = {};
+            while (!isConditionMet(pretraining, spp, renderTime)) {
+                breakdown.add(renderer.render(image.data(), dim));
+                renderTime = std::chrono::steady_clock::now() - startTime;
+                spp++;
+                std::cout << std::format("Pretraining: {} ({:%H:%M:%S})\r", spp, renderTime) << std::flush;
+            }
+
+            renderer.reset();
+
+            std::vector<BreakCondition> conditions = config.at("export").get<std::vector<BreakCondition>>();
+            for (auto& condition : conditions) {
+                std::cout << "Condition: " << conditionToString(condition) << std::endl;
+            }
+
+            spp = 0;
+            startTime = std::chrono::steady_clock::now();
+            while (!conditions.empty()) {
+                breakdown.add(renderer.render(image.data(), dim));
+                auto renderTime = std::chrono::steady_clock::now() - startTime;
+                spp++;
+                std::cout << std::format("Rendering: {} ({:%H:%M:%S})\r", spp, renderTime) << std::flush;
+
+                for (auto it = conditions.begin(); it != conditions.end();) {
+                    if (isConditionMet(*it, spp, renderTime)) {
+                        auto path = configPath.parent_path() / configPath.stem();
+                        path += "_" + conditionToString(*it);
+                        if (resolutions.size() > 1) {
+                            path += "_" + std::to_string(resolution) + "px";
+                        }
+                        path += ".hdr";
+                        saveImage(path, dim, image.data());
+                        nlohmann::json metadata = {
+                            {"condition", conditionToString(*it)},
+                            {"samples", spp},
+                            {"duration", std::chrono::duration_cast<std::chrono::duration<double>>(renderTime).count()},
+                            {"breakdown", breakdown.average()},
+                            {"total_samples", breakdown.count},
+                            {"resolution", {dim.x, dim.y}}
+                        };
+                        Common::writeToFile(metadata.dump(4), path.concat(".json"));
+                        it = conditions.erase(it);
+                    } else {
+                        ++it;
+                    }
                 }
             }
         }

@@ -1,0 +1,14 @@
+{
+    "scene": "../caustic_small.glb",
+    "pretraining": "10s",
+    "export": [1],
+    "resolution": 960,
+    "training": {
+        "enable_training": true,
+        "train_direction": 0.0
+    },
+    "rendering": {
+        "inference_mode": "variance_heuristic",
+        "self_learning": true
+    }
+}

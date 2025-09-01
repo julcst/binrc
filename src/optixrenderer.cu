@@ -607,19 +607,26 @@ FrameBreakdown OptixRenderer::render(vec4* image, uvec2 dim) {
             params.photonMap = sppmBVH.getDeviceView(); // Update handle in params
             paramsBuffer.copy_from_host(&params, 1);
             check(cudaDeviceSynchronize()); // Wait for the copy to finish
+            events[1].record();
             check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_FULL], dim.x, dim.y, 1));
+            events[2].record();
             check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+            events[3].record();
             sppmBVH.updatePhotonAS(context);
+            events[4].record();
             check(cudaDeviceSynchronize());
+            events[5].record();
             if (photonCount) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_LIGHT_PASS], photonCount, 1, 1));
+            events[6].record();
             check(cudaDeviceSynchronize()); // Wait for the renderer to finish
             sppmBVH.totalPhotonCount += photonCount;
             params.photonMap = sppmBVH.getDeviceView(); // Update handle in params
             paramsBuffer.copy_from_host(&params, 1);
             check(cudaDeviceSynchronize()); // Wait for the copy to finish
+            events[20].record();
             accumulatePhotonsToFramebuffer<<<dim3((dim.x + 15) / 16, (dim.y + 15) / 16), dim3(16, 16)>>>(paramsBuffer.data());
+            events[21].record();
             params.trainingRound++;
-            events[19].record();
             break;
         default:
             check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[INFERENCE], dim.x, dim.y, 1));
@@ -728,6 +735,16 @@ inline void setIfExists(const nlohmann::json& config, const std::string& key, T&
     }
 }
 
+inline void setFlagIfExists(const nlohmann::json& config, const std::string& key, uint& flags, uint flag) {
+    if (config.contains(key)) {
+        if (config[key].template get<bool>()) {
+            flags |= flag;
+        } else {
+            flags &= ~flag;
+        }
+    }
+}
+
 NLOHMANN_JSON_SERIALIZE_ENUM(InferenceMode, {
     {InferenceMode::NO_INFERENCE, "no_inference"},
     {InferenceMode::RAW_CACHE, "raw_cache"},
@@ -746,19 +763,15 @@ void OptixRenderer::configure(const nlohmann::json& config) {
 
     if (config.contains("rendering")) {
         const auto& renderingConfig = config["rendering"];
-        if (renderingConfig.contains("flags")) {
-            const auto& flags = renderingConfig["flags"];
-            params.flags = 0;
-            if (flags.contains("transmission")) params.flags |= TRANSMISSION_FLAG;
-            if (flags.contains("nee")) params.flags |= NEE_FLAG;
-            if (flags.contains("training_nee")) params.flags |= TRAINING_NEE_FLAG;
-            if (flags.contains("inference_nee")) params.flags |= INFERENCE_NEE_FLAG;
-            if (flags.contains("forward_rr")) params.flags |= FORWARD_RR_FLAG;
-            if (flags.contains("backward_rr")) params.flags |= BACKWARD_RR_FLAG;
-            if (flags.contains("self_learning")) params.flags |= SELF_LEARNING_FLAG;
-            if (flags.contains("diffuse_encoding")) params.flags |= DIFFUSE_ENCODING_FLAG;
-            if (flags.contains("light_trace_fix")) params.flags |= LIGHT_TRACE_FIX_FLAG;
-        }
+        setFlagIfExists(renderingConfig, "transmission", params.flags, TRANSMISSION_FLAG);
+        setFlagIfExists(renderingConfig, "nee", params.flags, NEE_FLAG);
+        setFlagIfExists(renderingConfig, "training_nee", params.flags, TRAINING_NEE_FLAG);
+        setFlagIfExists(renderingConfig, "inference_nee", params.flags, INFERENCE_NEE_FLAG);
+        setFlagIfExists(renderingConfig, "forward_rr", params.flags, FORWARD_RR_FLAG);
+        setFlagIfExists(renderingConfig, "backward_rr", params.flags, BACKWARD_RR_FLAG);
+        setFlagIfExists(renderingConfig, "self_learning", params.flags, SELF_LEARNING_FLAG);
+        setFlagIfExists(renderingConfig, "diffuse_encoding", params.flags, DIFFUSE_ENCODING_FLAG);
+        setFlagIfExists(renderingConfig, "light_trace_fix", params.flags, LIGHT_TRACE_FIX_FLAG);
         setIfExists(renderingConfig, "inference_mode", params.inferenceMode);
         setIfExists(renderingConfig, "variance_tradeoff", params.varianceTradeoff);
         setIfExists(renderingConfig, "russian_roulette_weight", params.russianRouletteWeight);
@@ -788,17 +801,15 @@ nlohmann::json OptixRenderer::getConfig() const {
     nlohmann::json config;
 
     config["rendering"] = {
-        {"flags", {
-            {"transmission", (params.flags & TRANSMISSION_FLAG) != 0},
-            {"nee", (params.flags & NEE_FLAG) != 0},
-            {"training_nee", (params.flags & TRAINING_NEE_FLAG) != 0},
-            {"inference_nee", (params.flags & INFERENCE_NEE_FLAG) != 0},
-            {"forward_rr", (params.flags & FORWARD_RR_FLAG) != 0},
-            {"backward_rr", (params.flags & BACKWARD_RR_FLAG) != 0},
-            {"self_learning", (params.flags & SELF_LEARNING_FLAG) != 0},
-            {"diffuse_encoding", (params.flags & DIFFUSE_ENCODING_FLAG) != 0},
-            {"light_trace_fix", (params.flags & LIGHT_TRACE_FIX_FLAG) != 0},
-        }},
+        {"transmission", (params.flags & TRANSMISSION_FLAG) != 0},
+        {"nee", (params.flags & NEE_FLAG) != 0},
+        {"training_nee", (params.flags & TRAINING_NEE_FLAG) != 0},
+        {"inference_nee", (params.flags & INFERENCE_NEE_FLAG) != 0},
+        {"forward_rr", (params.flags & FORWARD_RR_FLAG) != 0},
+        {"backward_rr", (params.flags & BACKWARD_RR_FLAG) != 0},
+        {"self_learning", (params.flags & SELF_LEARNING_FLAG) != 0},
+        {"diffuse_encoding", (params.flags & DIFFUSE_ENCODING_FLAG) != 0},
+        {"light_trace_fix", (params.flags & LIGHT_TRACE_FIX_FLAG) != 0},
         {"inference_mode", params.inferenceMode},
         {"variance_tradeoff", params.varianceTradeoff},
         {"russian_roulette_weight", params.russianRouletteWeight},

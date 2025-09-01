@@ -1,0 +1,6 @@
+{
+    "scene": "../caustic_small.glb",
+    "pretraining": "10s",
+    "export": [1],
+    "resolution": 960
+}
