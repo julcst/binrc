@@ -1,0 +1,5 @@
+{
+    "scene": "../cornell_corners.glb",
+    "export": [1, "1m"],
+    "resolution": 960
+}

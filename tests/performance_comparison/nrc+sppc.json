@@ -13,6 +13,6 @@
         "photon_radius_reduction": 0.7
     },
     "rendering": {
-        "inference_mode": "variance_heuristic"
+        "inference_mode": "sah"
     }
 }

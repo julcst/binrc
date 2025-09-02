@@ -9,6 +9,6 @@
         "backward_trainer": "train_bidir"
     },
     "rendering": {
-        "inference_mode": "variance_heuristic"
+        "inference_mode": "sah"
     }
 }

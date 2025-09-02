@@ -1,13 +1,13 @@
 {
-    "scene": "../caustic_small.glb",
+    "scene": "../cornell_corners.glb",
     "pretraining": "10s",
     "export": [1],
-    "resolution": [480, 679, 831, 960, 1073, 1176, 1270, 1358, 1440],
+    "resolution": 960,
     "training": {
         "enable_training": true,
         "train_direction": 0.0
     },
     "rendering": {
-        "inference_mode": "sah"
+        "inference_mode": "first_vertex"
     }
 }

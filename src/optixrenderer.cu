@@ -749,9 +749,9 @@ NLOHMANN_JSON_SERIALIZE_ENUM(InferenceMode, {
     {InferenceMode::NO_INFERENCE, "no_inference"},
     {InferenceMode::RAW_CACHE, "raw_cache"},
     {InferenceMode::FIRST_VERTEX, "first_vertex"},
-    {InferenceMode::FIRST_VERTEX_WITH_NEE, "first_vertex_with_nee"},
     {InferenceMode::FIRST_DIFFUSE, "first_diffuse"},
-    {InferenceMode::VARIANCE_HEURISTIC, "variance_heuristic"},
+    {InferenceMode::SAH, "sah"},
+    {InferenceMode::BTH, "bth"},
     {InferenceMode::RAW_PHOTON_MAP, "raw_photon_map"},
     {InferenceMode::PHOTON_MAPPING, "photon_mapping"},
 });
@@ -773,6 +773,7 @@ void OptixRenderer::configure(const nlohmann::json& config) {
         setFlagIfExists(renderingConfig, "diffuse_encoding", params.flags, DIFFUSE_ENCODING_FLAG);
         setFlagIfExists(renderingConfig, "light_trace_fix", params.flags, LIGHT_TRACE_FIX_FLAG);
         setIfExists(renderingConfig, "inference_mode", params.inferenceMode);
+        setIfExists(renderingConfig, "bth_K", params.K);
         setIfExists(renderingConfig, "variance_tradeoff", params.varianceTradeoff);
         setIfExists(renderingConfig, "russian_roulette_weight", params.russianRouletteWeight);
         setIfExists(renderingConfig, "scene_epsilon", params.sceneEpsilon);
@@ -811,6 +812,7 @@ nlohmann::json OptixRenderer::getConfig() const {
         {"diffuse_encoding", (params.flags & DIFFUSE_ENCODING_FLAG) != 0},
         {"light_trace_fix", (params.flags & LIGHT_TRACE_FIX_FLAG) != 0},
         {"inference_mode", params.inferenceMode},
+        {"bth_K", params.K},
         {"variance_tradeoff", params.varianceTradeoff},
         {"russian_roulette_weight", params.russianRouletteWeight},
         {"scene_epsilon", params.sceneEpsilon},

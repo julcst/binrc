@@ -1,13 +1,14 @@
 {
-    "scene": "../caustic_small.glb",
+    "scene": "../cornell_corners.glb",
     "pretraining": "10s",
     "export": [1],
     "resolution": 960,
     "training": {
         "enable_training": true,
-        "train_direction": 0.0
+        "train_direction": 1.0,
+        "backward_trainer": "train_bidir"
     },
     "rendering": {
-        "inference_mode": "sah"
+        "inference_mode": "bth"
     }
 }

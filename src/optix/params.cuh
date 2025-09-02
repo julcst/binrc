@@ -91,9 +91,9 @@ constexpr std::array<std::string_view, 8> INFERENCE_MODES = {
     "No Inference",
     "Raw Cache",
     "1st Vertex",
-    "1st Vertex + NEE",
     "1st Diffuse",
-    "Variance Heuristic",
+    "SAH",
+    "BTH",
     "Raw Photon Map",
     "Photon Mapping",
 };
@@ -102,9 +102,9 @@ enum class InferenceMode : u_int8_t {
     NO_INFERENCE,
     RAW_CACHE,
     FIRST_VERTEX,
-    FIRST_VERTEX_WITH_NEE,
     FIRST_DIFFUSE,
-    VARIANCE_HEURISTIC,
+    SAH,
+    BTH,
     RAW_PHOTON_MAP,
     PHOTON_MAPPING,
 };
@@ -159,6 +159,7 @@ struct Params {
     // Rendering config
     uint flags = NEE_FLAG | TRANSMISSION_FLAG; // Flags
     InferenceMode inferenceMode;
+    uint32_t K = 1;
     float varianceTradeoff = 0.01f;
     float russianRouletteWeight = 10.0f; // Weight for Russian Roulette
     float sceneEpsilon = 1e-4f; // Scene epsilon

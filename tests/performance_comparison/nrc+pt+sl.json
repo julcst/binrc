@@ -8,7 +8,7 @@
         "train_direction": 0.0
     },
     "rendering": {
-        "inference_mode": "variance_heuristic",
+        "inference_mode": "sah",
         "self_learning": true
     }
 }
