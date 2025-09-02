@@ -8,6 +8,6 @@
         "train_direction": 0.0
     },
     "rendering": {
-        "inference_mode": "sah"
+        "inference_mode": "bth"
     }
 }
