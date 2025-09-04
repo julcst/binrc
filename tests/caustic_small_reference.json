@@ -1,5 +1,5 @@
 {
-    "scene": "../caustic_small.glb",
+    "scene": "scenes/caustics_small.glb",
     "export": [1, "30m", "1h"],
     "resolution": 512
 }

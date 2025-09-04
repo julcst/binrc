@@ -1,5 +1,5 @@
 {
-    "scene": "../cornell.glb",
+    "scene": "scenes/diffuse.glb",
     "export": [1, "1m"],
     "resolution": 512
 }

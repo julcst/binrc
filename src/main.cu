@@ -111,98 +111,108 @@ std::string conditionToString(const BreakCondition& condition) {
     }, condition);
 }
 
+template<typename T>
+std::vector<T> getVector(const nlohmann::json& json, const std::string var, const std::initializer_list<T>& defaultValues = {}) {
+    if (json.contains(var)) {
+        const auto& field = json[var];
+        std::cout << field << std::endl;
+        if (field.is_array()) {
+            return field.get<std::vector<T>>();
+        } else {
+            return {field.get<T>()};
+        }
+    } else {
+        return defaultValues;
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc == 1) {
         MainApp app;
         app.run();
     } else if (argc == 2) {
-        OptixRenderer renderer;
         const std::filesystem::path configPath = argv[1];
         const auto config = nlohmann::json::parse(Common::readFile(configPath), nullptr, true, true);
-        renderer.configure(config);
 
-        if (renderer.scene.cameras.empty()) {
-            std::cerr << "No cameras found in the scene." << std::endl;
-            return 1;
-        }
-        const auto clipToWorld = renderer.scene.cameras[0].second;
-        renderer.setCamera(clipToWorld);
+        const auto resolutions = getVector<uint32_t>(config, "resolution", {512});
+        const auto scenePaths = getVector<std::filesystem::path>(config, "scene");
 
-        std::vector<uint32_t> resolutions = {512};
-        if (config.contains("resolution")) {
-            switch (config["resolution"].type()) {
-                case nlohmann::json::value_t::number_unsigned:
-                    resolutions = {config["resolution"].get<uint32_t>()};
-                    break;
-                case nlohmann::json::value_t::array:
-                    resolutions = config["resolution"].get<std::vector<uint32_t>>();
-                    break;
-                default:
-                    throw std::runtime_error("Invalid resolution format: " + config["resolution"].dump());
+        for (const auto& scenePath : scenePaths) {
+            OptixRenderer renderer;
+            renderer.configure(config);
+            std::cout << "Loading scene: " << scenePath << std::endl;
+            renderer.loadGLTF(scenePath);
+
+            if (renderer.scene.cameras.empty()) {
+                std::cerr << "No cameras found in the scene." << std::endl;
+                return 1;
             }
-        }
+            const auto clipToWorld = renderer.scene.cameras[0].second;
+            renderer.setCamera(clipToWorld);
 
-        for (const auto resolution : resolutions) {
-            glm::vec4 xAxis = clipToWorld[0];
-            glm::vec4 yAxis = clipToWorld[1];
-            float aspectRatio = glm::length(xAxis) / glm::length(yAxis);
-            std::cout << "Aspect Ratio: " << aspectRatio << std::endl;
-            glm::uvec2 dim = {static_cast<uint>(aspectRatio * resolution), resolution};
-            renderer.resize(dim);
-            tcnn::GPUMemory<glm::vec4> image(dim.x * dim.y);
+            for (const auto resolution : resolutions) {
+                glm::vec4 xAxis = clipToWorld[0];
+                glm::vec4 yAxis = clipToWorld[1];
+                float aspectRatio = glm::length(xAxis) / glm::length(yAxis);
+                std::cout << "Aspect Ratio: " << aspectRatio << std::endl;
+                glm::uvec2 dim = {static_cast<uint>(aspectRatio * resolution), resolution};
+                renderer.resize(dim);
+                tcnn::GPUMemory<glm::vec4> image(dim.x * dim.y);
 
-            BreakCondition pretraining = config.contains("pretraining")
-                ? config.at("pretraining").get<BreakCondition>()
-                : BreakCondition{};
+                BreakCondition pretraining = config.contains("pretraining")
+                    ? config.at("pretraining").get<BreakCondition>()
+                    : BreakCondition{};
 
-            AverageFrameBreakdown breakdown {};
+                AverageFrameBreakdown breakdown {};
 
-            uint32_t spp = 0;
-            auto startTime = std::chrono::steady_clock::now();
-            std::chrono::steady_clock::duration renderTime = {};
-            while (!isConditionMet(pretraining, spp, renderTime)) {
-                breakdown.add(renderer.render(image.data(), dim));
-                renderTime = std::chrono::steady_clock::now() - startTime;
-                spp++;
-                std::cout << std::format("Pretraining: {} ({:%H:%M:%S})\r", spp, renderTime) << std::flush;
-            }
+                uint32_t spp = 0;
+                auto startTime = std::chrono::steady_clock::now();
+                std::chrono::steady_clock::duration renderTime = {};
+                while (!isConditionMet(pretraining, spp, renderTime)) {
+                    breakdown.add(renderer.render(image.data(), dim));
+                    renderTime = std::chrono::steady_clock::now() - startTime;
+                    spp++;
+                    std::cout << std::format("Pretraining: {} ({:%H:%M:%S})\r", spp, renderTime) << std::flush;
+                }
 
-            renderer.reset();
+                renderer.reset();
 
-            std::vector<BreakCondition> conditions = config.at("export").get<std::vector<BreakCondition>>();
-            for (auto& condition : conditions) {
-                std::cout << "Condition: " << conditionToString(condition) << std::endl;
-            }
+                std::vector<BreakCondition> conditions = config.at("export").get<std::vector<BreakCondition>>();
+                for (auto& condition : conditions) {
+                    std::cout << "Condition: " << conditionToString(condition) << std::endl;
+                }
 
-            spp = 0;
-            startTime = std::chrono::steady_clock::now();
-            while (!conditions.empty()) {
-                breakdown.add(renderer.render(image.data(), dim));
-                auto renderTime = std::chrono::steady_clock::now() - startTime;
-                spp++;
-                std::cout << std::format("Rendering: {} ({:%H:%M:%S})\r", spp, renderTime) << std::flush;
+                spp = 0;
+                startTime = std::chrono::steady_clock::now();
+                while (!conditions.empty()) {
+                    breakdown.add(renderer.render(image.data(), dim));
+                    auto renderTime = std::chrono::steady_clock::now() - startTime;
+                    spp++;
+                    std::cout << std::format("Rendering: {} ({:%H:%M:%S})\r", spp, renderTime) << std::flush;
 
-                for (auto it = conditions.begin(); it != conditions.end();) {
-                    if (isConditionMet(*it, spp, renderTime)) {
-                        auto path = configPath.parent_path() / configPath.stem();
-                        path += "_" + conditionToString(*it);
-                        if (resolutions.size() > 1) {
-                            path += "_" + std::to_string(resolution) + "px";
+                    for (auto it = conditions.begin(); it != conditions.end();) {
+                        if (isConditionMet(*it, spp, renderTime)) {
+                            auto path = configPath.parent_path() / configPath.stem();
+                            path += "_" + conditionToString(*it);
+                            if (scenePaths.size() > 1) path += "_" + scenePath.stem().string();
+                            if (resolutions.size() > 1) path += "_" + std::to_string(resolution) + "px";
+                            path += ".hdr";
+                            saveImage(path, dim, image.data());
+                            nlohmann::json metadata = {
+                                {"condition", conditionToString(*it)},
+                                {"samples", spp},
+                                {"duration", std::chrono::duration_cast<std::chrono::duration<double>>(renderTime).count()},
+                                {"breakdown", breakdown.average()},
+                                {"total_samples", breakdown.count},
+                                {"resolution", {dim.x, dim.y}},
+                                {"loss_history", renderer.lossHistory},
+                                {"config", renderer.getConfig()}
+                            };
+                            Common::writeToFile(metadata.dump(4), path.concat(".json"));
+                            it = conditions.erase(it);
+                        } else {
+                            ++it;
                         }
-                        path += ".hdr";
-                        saveImage(path, dim, image.data());
-                        nlohmann::json metadata = {
-                            {"condition", conditionToString(*it)},
-                            {"samples", spp},
-                            {"duration", std::chrono::duration_cast<std::chrono::duration<double>>(renderTime).count()},
-                            {"breakdown", breakdown.average()},
-                            {"total_samples", breakdown.count},
-                            {"resolution", {dim.x, dim.y}}
-                        };
-                        Common::writeToFile(metadata.dump(4), path.concat(".json"));
-                        it = conditions.erase(it);
-                    } else {
-                        ++it;
                     }
                 }
             }

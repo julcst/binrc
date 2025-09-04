@@ -18,7 +18,7 @@ extern "C" __global__ void __raygen__() {
     const auto uv = (make_float2(idx.x, idx.y) + RND_JITTER) / make_float2(dim.x, dim.y);
     auto ray = makeCameraRay(uv);
 
-    const auto nee = params.lightTable && (params.flags & NEE_FLAG);
+    const auto nee = params.lightTable && (params.flags & INFERENCE_NEE_FLAG);
     //const auto nee = false;
 
     Payload payload;
@@ -48,6 +48,7 @@ extern "C" __global__ void __raygen__() {
 
         // Trace
         const auto next = trace(ray);
+        payload = next; // Putting this here does not inference when there is no hit
 
         // Skybox
         if (isinf(next.t)) { // Use previous bounce for inference
@@ -64,7 +65,6 @@ extern "C" __global__ void __raygen__() {
         //     }
         // }
 
-        payload = next;
         isPayloadValid = true;
         wo = -ray.direction;
 

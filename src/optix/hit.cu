@@ -38,7 +38,10 @@ extern "C" __global__ void __closesthit__ch() {
     if (material.baseMap) baseColor *= make_float3(tex2D<float4>(material.baseMap, texCoord.x, texCoord.y));
 
     auto mr = make_float2(material.metallic, material.roughness);
-    if (material.mrMap) mr *= make_float2(tex2D<float4>(material.mrMap, texCoord.x, texCoord.y));
+    if (material.mrMap) {
+        auto t = tex2D<float4>(material.mrMap, texCoord.x, texCoord.y);
+        mr *= make_float2(t.z, t.y);
+    }
 
     // NOTE: Normal mapping produces artifacts with pathtracing: See Microfacet-based Normal Mapping for Robust Monte Carlo Path Tracing by Schüssler et al. 2017 for a solution
     if (material.normalMap) { // MikkTSpace normal mapping

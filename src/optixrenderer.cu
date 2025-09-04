@@ -757,10 +757,6 @@ NLOHMANN_JSON_SERIALIZE_ENUM(InferenceMode, {
 });
 
 void OptixRenderer::configure(const nlohmann::json& config) {
-    if (config.contains("scene")) {
-        loadGLTF(config["scene"].template get<std::filesystem::path>());
-    }
-
     if (config.contains("rendering")) {
         const auto& renderingConfig = config["rendering"];
         setFlagIfExists(renderingConfig, "transmission", params.flags, TRANSMISSION_FLAG);

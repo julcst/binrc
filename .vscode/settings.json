@@ -97,7 +97,15 @@
         "csetjmp": "cpp",
         "cuchar": "cpp",
         "source_location": "cpp",
-        "scoped_allocator": "cpp"
+        "scoped_allocator": "cpp",
+        "generator": "cpp",
+        "latch": "cpp",
+        "print": "cpp",
+        "spanstream": "cpp",
+        "stacktrace": "cpp",
+        "syncstream": "cpp",
+        "flat_map": "cpp",
+        "flat_set": "cpp"
     },
     "C_Cpp.codeAnalysis.clangTidy.checks.disabled": [
         "modernize-use-trailing-return-type",

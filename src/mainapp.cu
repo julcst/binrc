@@ -77,7 +77,7 @@ MainApp::MainApp() : App(800, 800) {
     camera.worldPosition = vec3(0.0f, 0.0f, -2.0f);
     camera.invalidate();
 
-    folder = std::filesystem::current_path().parent_path().string();
+    folder = (std::filesystem::current_path() / "scenes").string();
     scenes = scanFolder(folder);
 
     setVSync(false);

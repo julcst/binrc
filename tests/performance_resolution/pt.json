@@ -1,5 +1,5 @@
 {
-    "scene": "../caustic_small.glb",
+    "scene": "scenes/caustics_small.glb",
     "pretraining": "10s",
     "export": [1],
     "resolution": [480, 679, 831, 960, 1073, 1176, 1270, 1358, 1440]

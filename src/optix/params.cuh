@@ -157,7 +157,7 @@ struct Params {
     float sceneScale;
 
     // Rendering config
-    uint flags = NEE_FLAG | TRANSMISSION_FLAG; // Flags
+    uint flags = NEE_FLAG | TRANSMISSION_FLAG | INFERENCE_NEE_FLAG; // Flags
     InferenceMode inferenceMode;
     uint32_t K = 1;
     float varianceTradeoff = 0.01f;

@@ -1,5 +1,5 @@
 {
-    "scene": "../cornell_corners.glb",
+    "scene": ["scenes/diffuse.glb", "scenes/thinker.glb", "scenes/chess.glb"],
     "pretraining": "10s",
     "export": [1],
     "resolution": 960,
@@ -8,6 +8,7 @@
         "train_direction": 0.0
     },
     "rendering": {
-        "inference_mode": "first_diffuse"
+        "inference_mode": "first_diffuse",
+        "inference_nee": false
     }
 }

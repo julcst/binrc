@@ -311,15 +311,23 @@ SceneData Scene::loadGLTF(OptixDeviceContext ctx, const std::filesystem::path& p
             fastgltf::iterateAccessorWithIndex<vec3>(asset.get(), normalAcc, [&](const vec3& normal, auto i) {
                 vertexData[i].normal = glmToCuda(normal);
             });
-            auto& texCoordAcc = asset->accessors.at(primitive.findAttribute("TEXCOORD_0")->accessorIndex);
-            fastgltf::iterateAccessorWithIndex<vec2>(asset.get(), texCoordAcc, [&](const vec2& texCoord, auto i) {
-                vertexData[i].texCoord = glmToCuda(texCoord);
-            });
-            auto& tangentAcc = asset->accessors.at(primitive.findAttribute("TANGENT")->accessorIndex);
-            fastgltf::iterateAccessorWithIndex<vec4>(asset.get(), tangentAcc, [&](const vec4& tangent, auto i) {
-                vertexData[i].tangent = glmToCuda(tangent);
-            });
-
+            //auto& texCoordAcc = asset->accessors.at(primitive.findAttribute("TEXCOORD_0")->accessorIndex);
+            if (const auto* texcoord = primitive.findAttribute("TEXCOORD_0"); texcoord != primitive.attributes.end()) {
+                auto& texCoordAcc = asset->accessors.at(texcoord->accessorIndex);
+                fastgltf::iterateAccessorWithIndex<vec2>(asset.get(), texCoordAcc, [&](const vec2& texCoord, auto i) {
+                    vertexData[i].texCoord = glmToCuda(texCoord);
+                });
+            } else {
+                std::cout << "Warning: Primitive has no TEXCOORD_0 attribute\n";
+            }
+            if (const auto* tangent = primitive.findAttribute("TANGENT"); tangent != primitive.attributes.end()) {
+                auto& tangentAcc = asset->accessors.at(tangent->accessorIndex);
+                fastgltf::iterateAccessorWithIndex<vec4>(asset.get(), tangentAcc, [&](const vec4& tangent, auto i) {
+                    vertexData[i].tangent = glmToCuda(tangent);
+                });
+            } else {
+                std::cout << "Warning: Primitive has no TANGENT attribute\n";
+            }
             auto& indexAcc = asset->accessors[primitive.indicesAccessor.value()];
             std::vector<uint> indices(indexAcc.count);
             fastgltf::iterateAccessorWithIndex<uint>(asset.get(), indexAcc, [&](const uint& index, auto i) {

@@ -1,5 +1,5 @@
 {
-    "scene": "../cornell_corners.glb",
+    "scene": ["scenes/diffuse.glb", "scenes/thinker.glb", "scenes/chess.glb"],
     "pretraining": "10s",
     "export": [1, "1m"],
     "resolution": 960
