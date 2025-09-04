@@ -32,14 +32,16 @@ __device__ inline EmissiveTriangle sampleLightTable(float r) {
     uint left = 0;
     uint right = params.lightTableSize - 1;
     while (left < right) {
-        const uint mid = (left + right) / 2;
+        const uint mid = left + (right - left) / 2;
         if (params.lightTable[mid].cdf < r) {
             left = mid + 1;
         } else {
             right = mid;
         }
     }
-    return params.lightTable[left];
+    auto light = params.lightTable[left];
+    light.weight = light.cdf - (left > 0 ? params.lightTable[left - 1].cdf : 0.0f);
+    return light;
 }
 
 __device__ inline EmissiveTriangle sampleLightTableUniform(float r) {
@@ -84,7 +86,7 @@ __device__ inline float lightPdfUniform(const float3& wi, const float dist, cons
 }
 
 __device__ inline LightSample sampleLight(const float randSrc, const float2& randSurf, const float3& x) {
-    const auto light = sampleLightTableUniform(randSrc);
+    const auto light = sampleLightTable(randSrc);
     return sampleLightSource(light, randSurf, x);
 }
 
@@ -96,7 +98,7 @@ struct LightDirSample {
 };
 
 __device__ inline LightDirSample samplePhoton(const float randSrc, const float2& randSurf, const float2& randDir) {
-    const auto light = sampleLightTableUniform(randSrc);
+    const auto light = sampleLightTable(randSrc);
 
     // Sample a barycentric coordinate on the triangle uniformly
     const auto bary = sampleBarycentrics(randSurf);
