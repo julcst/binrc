@@ -139,9 +139,9 @@ __device__ __forceinline__ Instance sampleInstance(const Instance* instances, co
             right = mid;
         }
     }
-    // Sanity checks
-    if (rand > instances[left].cdf) printf("sampleInstance rand %f > cdf[i] %f\n", rand, instances[left].cdf);
-    if (left > 0 && rand < instances[left - 1].cdf) printf("sampleInstance rand %f < cdf[i-1] %f\n", rand, instances[left - 1].cdf);
+    // TODO: fix sanity checks
+    //if (rand > instances[left].cdf) printf("sampleInstance rand %f > cdf[i] %f\n", rand, instances[left].cdf);
+    //if (left > 0 && rand < instances[left - 1].cdf) printf("sampleInstance rand %f < cdf[i-1] %f\n", rand, instances[left - 1].cdf);
     return instances[left];
 }
 
@@ -216,7 +216,8 @@ __device__ __forceinline__ Surface getSurface(const Material* materials, const I
 __device__ __forceinline__ Surface sampleScene(const Instance* instances, const uint instanceCount, const Material* materials, const float randSrc, const float2& randSurf) {
     Instance inst = sampleInstance(instances, instanceCount, randSrc);
     const float randTri = (inst.cdf - randSrc) / inst.pdf;
-    if (randTri > 1.0f || randTri < 0.0f) printf("randTri (%f - %f) / %f = %f\n", inst.cdf, randSrc, inst.pdf, randTri);
+    // TODO: fix sanity checks
+    //if (randTri > 1.0f || randTri < 0.0f) printf("randTri (%f - %f) / %f = %f\n", inst.cdf, randSrc, inst.pdf, randTri);
     const auto triangleIndex = sampleMeshTriangleIndex(inst.geometry, randTri);
     const auto bary = sampleBarycentrics(randSurf);
     return getSurface(materials, inst, triangleIndex, bary);

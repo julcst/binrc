@@ -126,6 +126,24 @@ std::vector<T> getVector(const nlohmann::json& json, const std::string var, cons
     }
 }
 
+__global__ void accumulateSumAndSumSq(const glm::vec4* image, glm::vec4* sum, glm::vec4* sumSq, uint32_t imageSize) {
+    const uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= imageSize) return;
+
+    glm::vec4 pixel = image[idx];
+    sum[idx] += pixel;
+    sumSq[idx] += pixel * pixel;
+}
+
+__global__ void computeMeanAndVariance(glm::vec4* sum, glm::vec4* sumSq, glm::vec4* mean, glm::vec4* variance, float weight, uint32_t imageSize) {
+    const uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= imageSize) return;
+
+    const auto m = sum[idx] * weight;
+    mean[idx] = m;
+    variance[idx] = sumSq[idx] * weight - m * m;
+}
+
 int main(int argc, char** argv) {
     if (argc == 1) {
         MainApp app;
@@ -136,6 +154,7 @@ int main(int argc, char** argv) {
 
         const auto resolutions = getVector<uint32_t>(config, "resolution", {512});
         const auto scenePaths = getVector<std::filesystem::path>(config, "scene");
+        const uint32_t meanvarSamples = config.value("meanvar_samples", 0);
 
         for (const auto& scenePath : scenePaths) {
             OptixRenderer renderer;
@@ -214,6 +233,32 @@ int main(int argc, char** argv) {
                             ++it;
                         }
                     }
+                }
+
+                // Calculate mean and variance
+                if (meanvarSamples > 0) {
+                    std::cout << "Calculating mean and variance with " << meanvarSamples << " samples..." << std::endl;
+
+                    const uint32_t blockSize = 256;
+                    const uint32_t numBlocks = (dim.x * dim.y + blockSize - 1) / blockSize;
+                    tcnn::GPUMemory<glm::vec4> sum(dim.x * dim.y);
+                    tcnn::GPUMemory<glm::vec4> sumSq(dim.x * dim.y);
+                    renderer.enableTraining = false;
+                    for (uint32_t sample = 0; sample < meanvarSamples; sample++) {
+                        std::cout << std::format("{}/{}\r", sample, meanvarSamples - 1) << std::flush;
+                        renderer.params.weight = 1.0f; // Fully overwrite data
+                        renderer.render(image.data(), dim);
+                        accumulateSumAndSumSq<<<numBlocks, blockSize>>>(image.data(), sum.data(), sumSq.data(), dim.x * dim.y);
+                    }
+                    tcnn::GPUMemory<glm::vec4> mean(dim.x * dim.y);
+                    tcnn::GPUMemory<glm::vec4> variance(dim.x * dim.y);
+                    computeMeanAndVariance<<<numBlocks, blockSize>>>(sum.data(), sumSq.data(), mean.data(), variance.data(), 1.0f / meanvarSamples, dim.x * dim.y);
+                    cudaDeviceSynchronize();
+
+                    auto path = configPath.parent_path() / configPath.stem();
+                    if (scenePaths.size() > 1) path += "_" + scenePath.stem().string();
+                    saveImage(std::format("{}_mean.hdr", path.native()), dim, mean.data());
+                    saveImage(std::format("{}_var.hdr", path.native()), dim, variance.data());
                 }
             }
         }

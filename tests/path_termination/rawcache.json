@@ -10,5 +10,6 @@
     "rendering": {
         "inference_mode": "raw_cache",
         "inference_nee": false
-    }
+    },
+    "meanvar_samples": 1000
 }

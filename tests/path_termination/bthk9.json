@@ -11,5 +11,6 @@
         "inference_mode": "bth",
         "inference_nee": false,
         "bth_K": 9
-    }
+    },
+    "meanvar_samples": 1000
 }

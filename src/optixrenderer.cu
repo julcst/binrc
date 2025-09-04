@@ -233,9 +233,9 @@ OptixRenderer::OptixRenderer() {
     nrcTrainInput = tcnn::GPUMatrix<float>(NRC_INPUT_SIZE, NRC_BATCH_SIZE);
     nrcTrainOutput = tcnn::GPUMatrix<float>(NRC_OUTPUT_SIZE, NRC_BATCH_SIZE);
 
-    std::cout << "Network: " << std::setw(2) << nrcModel.network->hyperparams()
-              << "\nTrainer: " << std::setw(2) << nrcModel.trainer->hyperparams()
-              << std::endl;
+    // std::cout << "Network: " << std::setw(2) << nrcModel.network->hyperparams()
+    //           << "\nTrainer: " << std::setw(2) << nrcModel.trainer->hyperparams()
+    //           << std::endl;
     
     params.trainingInput = nrcTrainInput.data();
     params.trainingTarget = nrcTrainOutput.data();
@@ -280,7 +280,7 @@ __global__ void testSceneSampling(const uint sampleCount, const Instance* instan
     const auto rand = curand_uniform4(&state);
 
     const auto surf = sampleScene(instances, instanceCount, materials, rand.x, make_float2(rand.z, rand.w));
-    printf("Sample %d: %f %f %f %f %f %f %f %f %f\n", i, surf.position.x, surf.position.y, surf.position.z, surf.normal.x, surf.normal.y, surf.normal.z, surf.baseColor.x, surf.baseColor.y, surf.baseColor.z);
+    //printf("Sample %d: %f %f %f %f %f %f %f %f %f\n", i, surf.position.x, surf.position.y, surf.position.z, surf.normal.x, surf.normal.y, surf.normal.z, surf.baseColor.x, surf.baseColor.y, surf.baseColor.z);
 }
 
 void OptixRenderer::loadGLTF(const std::filesystem::path& path) {
@@ -825,6 +825,11 @@ nlohmann::json OptixRenderer::getConfig() const {
         {"photon_count", photonCount},
         {"photon_radius", params.photonMap.initialRadius},
         {"photon_radius_reduction", params.photonMap.alpha},
+    };
+
+    config["nrc"] = {
+        {"network", nrcModel.network->hyperparams()},
+        {"trainer", nrcModel.trainer->hyperparams()},
     };
 
     return config;
