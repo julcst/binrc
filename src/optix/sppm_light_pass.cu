@@ -50,13 +50,15 @@ extern "C" __global__ void __raygen__() {
                     .pos = hitPoint,
                     .wi = wi,
                     .flux = flux,
+                    .n = payload.normal,
                 });
-            } else if (curand_uniform(&state) < params.photonMap.photonRecordingProbability) {
+            } else if (params.photonMap.photonRecordingProbability == 1.0f || curand_uniform(&state) < params.photonMap.photonRecordingProbability) {
                 // Store photon only with some probability
                 params.photonMap.recordPhoton({
                     .pos = hitPoint,
                     .wi = wi,
                     .flux = flux / params.photonMap.photonRecordingProbability,
+                    .n = payload.normal,
                 });
             }
         }

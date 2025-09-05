@@ -14,11 +14,13 @@ extern "C" __global__ void __intersection__() {
 
     const auto rayOrigin = optixGetWorldRayOrigin();
 
+    const float3 n = {__uint_as_float(optixGetPayload_6()),
+                       __uint_as_float(optixGetPayload_7()),
+                       __uint_as_float(optixGetPayload_8())};
+
     float dist2 = length2(rayOrigin - query->pos);
 
-    if (dist2 > pow2(query->radius)) {
-        //optixIgnoreIntersection();
-    } else {
+    if (dist2 <= pow2(query->radius) && abs(dot(query->n, n)) > params.photonMap.photonNormalTolerance) {
         optixReportIntersection(optixGetRayTmin(), 0);
     }
 }

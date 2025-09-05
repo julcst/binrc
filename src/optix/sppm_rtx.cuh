@@ -10,6 +10,7 @@ struct Photon {
     float3 pos; // Position of the photon
     float3 wi; // Incoming direction of the photon
     float3 flux; // Incoming flux (irradiance)
+    float3 n; // Surface normal at the photon position
 };
 
 struct PhotonQuery {
@@ -59,6 +60,7 @@ struct PhotonQueryView {
     float alpha; // Radius reduction factor
     float initialRadius; // Initial radius for photon queries
     float photonRecordingProbability; // Probability that a non-caustic photon is recorded
+    float photonNormalTolerance; // Cosine of max angle between photon and surface normal
 
     __device__ __forceinline__ void updateAABB(const uint32_t idx, const PhotonQuery& query) const {
         aabbs[idx] = {
@@ -97,7 +99,8 @@ struct PhotonQueryView {
         constexpr float EPS = 1e-6f; // Small epsilon, because zero is not allowed
         std::array p = {
             __float_as_uint(photon.wi.x), __float_as_uint(photon.wi.y), __float_as_uint(photon.wi.z),
-            __float_as_uint(photon.flux.x), __float_as_uint(photon.flux.y), __float_as_uint(photon.flux.z)
+            __float_as_uint(photon.flux.x), __float_as_uint(photon.flux.y), __float_as_uint(photon.flux.z),
+            __float_as_uint(photon.n.x), __float_as_uint(photon.n.y), __float_as_uint(photon.n.z),
         };
         // TODO: Use PayloadTypeID
         optixTraverse(handle,
@@ -107,10 +110,10 @@ struct PhotonQueryView {
             OptixVisibilityMask(1), 
             OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
             0, 1, 1, // SBT offset, stride, miss index
-            p[0], p[1], p[2], p[3], p[4], p[5] // payload
+            p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]
         );
         optixReorder();
-        optixInvoke(p[0], p[1], p[2], p[3], p[4], p[5]);
+        optixInvoke(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]);
     }
 #endif
 };

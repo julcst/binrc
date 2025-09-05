@@ -9,7 +9,8 @@
     "training": {
         "photon_radius": 0.01,
         "photon_count": 700000,
-        "photon_recording_probability": 0.3
+        "photon_record_probability": 0.3,
+        "photon_normal_tolerance": 0.0
     },
     "meanvar_samples": 16
 }

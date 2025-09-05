@@ -11,6 +11,7 @@ struct SPPMRTX {
     float alpha = 0.7f;
     float initialRadius = 0.05f;
     float photonRecordingProbability = 1.0f;
+    float photonNormalTolerance = 0.86f; // Cosine of max angle between photon and surface normal (30 degrees)
     thrust::device_vector<uint8_t> tempBuffer;
     thrust::device_vector<uint8_t> gasBuffer;
     thrust::device_vector<OptixAabb> aabbBuffer;
@@ -53,6 +54,7 @@ struct SPPMRTX {
             .alpha = alpha,
             .initialRadius = initialRadius,
             .photonRecordingProbability = photonRecordingProbability,
+            .photonNormalTolerance = photonNormalTolerance,
         };
     }
 
