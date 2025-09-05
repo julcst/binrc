@@ -165,8 +165,8 @@ OptixRenderer::OptixRenderer() {
             .hitgroup = {
                 .moduleCH = nullptr, // No closest hit program for SPPM
                 .entryFunctionNameCH = nullptr,
-                .moduleAH = modules[optixir::SPPM_RTX],
-                .entryFunctionNameAH = "__anyhit__",
+                .moduleAH = nullptr,
+                .entryFunctionNameAH = nullptr,
                 .moduleIS = modules[optixir::SPPM_RTX],
                 .entryFunctionNameIS = "__intersection__",
             },

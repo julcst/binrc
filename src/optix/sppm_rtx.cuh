@@ -104,7 +104,7 @@ struct PhotonQueryView {
             0.0f, EPS, // tmin, tmax
             0.0f, // rayTime
             OptixVisibilityMask(1), 
-            OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
+            OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT | OPTIX_RAY_FLAG_DISABLE_ANYHIT,
             0, 1, 1, // SBT offset, stride, miss index
             p[0], p[1], p[2], p[3], p[4], p[5] // payload
         );
