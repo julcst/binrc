@@ -244,10 +244,11 @@ int main(int argc, char** argv) {
                     tcnn::GPUMemory<glm::vec4> sum(dim.x * dim.y);
                     tcnn::GPUMemory<glm::vec4> sumSq(dim.x * dim.y);
                     renderer.enableTraining = false;
+                    AverageFrameBreakdown breakdown {};
                     for (uint32_t sample = 0; sample < meanvarSamples; sample++) {
                         std::cout << std::format("{}/{}\r", sample, meanvarSamples - 1) << std::flush;
                         renderer.params.weight = 1.0f; // Fully overwrite data
-                        renderer.render(image.data(), dim);
+                        breakdown.add(renderer.render(image.data(), dim));
                         accumulateSumAndSumSq<<<numBlocks, blockSize>>>(image.data(), sum.data(), sumSq.data(), dim.x * dim.y);
                     }
                     tcnn::GPUMemory<glm::vec4> mean(dim.x * dim.y);
@@ -259,6 +260,14 @@ int main(int argc, char** argv) {
                     if (scenePaths.size() > 1) path += "_" + scenePath.stem().string();
                     saveImage(std::format("{}_mean.hdr", path.native()), dim, mean.data());
                     saveImage(std::format("{}_var.hdr", path.native()), dim, variance.data());
+
+                    nlohmann::json metadata = {
+                        {"samples", meanvarSamples},
+                        {"breakdown", breakdown.average()},
+                        {"resolution", {dim.x, dim.y}},
+                        {"config", renderer.getConfig()}
+                    };
+                    Common::writeToFile(metadata.dump(4), path.concat("_mean.hdr.json"));
                 }
             }
         }

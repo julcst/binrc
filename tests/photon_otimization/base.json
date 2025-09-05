@@ -1,0 +1,14 @@
+{
+    "scene": "scenes/caustics_small.glb",
+    "pretraining": 5,
+    "export": [1, "10s"],
+    "resolution": 960,
+    "rendering": {
+        "inference_mode": "photon_mapping"
+    },
+    "training": {
+        "photon_radius": 0.01,
+        "photon_count": 700000
+    },
+    "meanvar_samples": 16
+}

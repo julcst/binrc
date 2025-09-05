@@ -608,7 +608,7 @@ FrameBreakdown OptixRenderer::render(vec4* image, uvec2 dim) {
             sppmBVH.resize(dim.x * dim.y);
             params.photonMap = sppmBVH.getDeviceView(); // Update handle in params
             paramsBuffer.copy_from_host(&params, 1);
-            if (params.sample == 0) { // First iteration, reset photon map
+            if (params.weight == 1.0f) { // First iteration, reset photon map
                 std::cout << std::format("Resetting photon map with r={} and Nc={}\n", params.photonMap.initialRadius, params.photonMap.totalPhotonCount);
                 sppmBVH.resetQueries({
                     .radius = params.photonMap.initialRadius,

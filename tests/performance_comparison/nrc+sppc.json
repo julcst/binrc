@@ -9,7 +9,7 @@
         "photon_mapping_amount": 1.0,
         "photon_query_replacement": 0.01,
         "photon_count": 50000,
-        "photon_radius": 0.03,
+        "photon_radius": 0.02,
         "photon_radius_reduction": 0.7
     },
     "rendering": {

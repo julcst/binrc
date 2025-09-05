@@ -1,6 +1,6 @@
 {
     "scene": ["scenes/diffuse.glb", "scenes/thinker.glb", "scenes/chess.glb"],
     "pretraining": "10s",
-    "export": [1, "1m"],
+    "export": [1, "1m", "5m", "10m"],
     "resolution": 960
 }
