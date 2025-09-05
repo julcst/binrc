@@ -1,7 +1,7 @@
 {
     "scene": "scenes/diffuse.glb",
     "pretraining": "10s",
-    "export": [1, "1m"],
+    "export": [1],
     "resolution": 960,
     "training": {
         "enable_training": true,
@@ -13,6 +13,7 @@
         "photon_radius_reduction": 0.7
     },
     "rendering": {
-        "inference_mode": "sah"
-    }
+        "inference_mode": "bth"
+    },
+    "meanvar_samples": 1000
 }

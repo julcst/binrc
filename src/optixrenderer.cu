@@ -478,10 +478,11 @@ __global__ void accumulatePhotonsToFramebuffer(Params* params) {
     const int i = y * params->dim.x + x;
     if (i >= params->photonMap.queryCount) return; // Safety check
 
-    const auto photonQuery = params->photonMap.queries[i];
-    const auto radiance = photonQuery.calcRadiance(params->photonMap.totalPhotonCount);
+    auto& photonQuery = params->photonMap.queries[i];
+    photonQuery.applyRadiusReduction(params->photonMap.alpha);
+    const auto radiance = photonQuery.throughput * photonQuery.calcRadiance(params->photonMap.totalPhotonCount);
 
-    params->image[i] *= make_float4(radiance, 1.0f);
+    params->image[i] += params->weight * make_float4(radiance, 1.0f);
 }
 
 // TODO: Could do multiple smaller training steps per frame
@@ -496,7 +497,7 @@ void OptixRenderer::train() {
     const uint forwardSamples = totalTrainingSamples * (1.0f - trainingDirection);
     const uint backwardSamples = (totalTrainingSamples - forwardSamples) * balanceRatio * (1.0f - photonMappingAmount);
     const uint32_t photonQueries = (totalTrainingSamples - forwardSamples) * TRAIN_DEPTH * photonMappingAmount;
-    const uint32_t photonQuerySamples = photonQueries / 6 * photonQueryReplacement;
+    const uint32_t photonQuerySamples = photonQueries * photonQueryReplacement;
     //std::cout << "Training samples: " << totalTrainingSamples << " (forward: " << forwardSamples << ", backward: " << backwardSamples << ", photon queries: " << photonQueries << ")" << std::endl;
 
     sppmBVH.size = photonQueries;
@@ -509,6 +510,7 @@ void OptixRenderer::train() {
         if (photonQuerySamples) check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_EYE_PASS], photonQuerySamples, 1, 1));
         events[2].record();
         check(cudaDeviceSynchronize()); // Wait for the renderer to finish
+        sppmBVH.resetCollectedPhotons();
         events[3].record();
         sppmBVH.updatePhotonAS(context);
         events[4].record();
@@ -606,6 +608,13 @@ FrameBreakdown OptixRenderer::render(vec4* image, uvec2 dim) {
             sppmBVH.resize(dim.x * dim.y);
             params.photonMap = sppmBVH.getDeviceView(); // Update handle in params
             paramsBuffer.copy_from_host(&params, 1);
+            if (params.sample == 0) { // First iteration, reset photon map
+                std::cout << std::format("Resetting photon map with r={} and Nc={}\n", params.photonMap.initialRadius, params.photonMap.totalPhotonCount);
+                sppmBVH.resetQueries({
+                    .radius = params.photonMap.initialRadius,
+                    .totalPhotonCountAtBirth = params.photonMap.totalPhotonCount,
+                });
+            }
             check(cudaDeviceSynchronize()); // Wait for the copy to finish
             events[1].record();
             check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[SPPM_FULL], dim.x, dim.y, 1));
@@ -785,8 +794,8 @@ void OptixRenderer::configure(const nlohmann::json& config) {
         setIfExists(trainingConfig, "photon_mapping_amount", photonMappingAmount);
         setIfExists(trainingConfig, "photon_query_replacement", photonQueryReplacement);
         setIfExists(trainingConfig, "photon_count", photonCount);
-        setIfExists(trainingConfig, "photon_radius", params.photonMap.initialRadius);
-        setIfExists(trainingConfig, "photon_radius_reduction", params.photonMap.alpha);
+        setIfExists(trainingConfig, "photon_radius", sppmBVH.initialRadius);
+        setIfExists(trainingConfig, "photon_radius_reduction", sppmBVH.alpha);
     }
 
     if (config.contains("nrc")) {

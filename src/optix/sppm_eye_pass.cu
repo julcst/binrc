@@ -25,9 +25,9 @@ extern "C" __global__ void __raygen__() {
         const auto r = curand_uniform4(&state);
 
         // Russian roulette
-        const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
-        if (r.x >= pContinue) break;
-        throughput /= pContinue;
+        // const float pContinue = min(luminance(throughput) * params.russianRouletteWeight, 1.0f);
+        // if (r.x >= pContinue) break;
+        // throughput /= pContinue;
 
         const auto payload = trace(ray);
 
@@ -39,16 +39,17 @@ extern "C" __global__ void __raygen__() {
         const auto mat = calcMaterialProperties(payload.baseColor, payload.metallic, alpha, payload.transmission);
         const auto sample = sampleDisney(r.y, {r.z, r.w}, {r.z, r.w}, wo, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);
 
-        // TODO: Check pdf <= 1 / PI
-        if (luminance(mat.albedo * (1 - mat.transmission)) > 1e-6f) {
+        // Alternative: Check pdf <= 1 / PI
+        if (mat.isDiffuse()) {
             params.photonMap.store({
                 .pos = hitPoint,
                 .wo = wo,
                 .n = payload.normal,
                 .mat = mat,
-                .radius = params.photonMap.initialRadius, // TODO: Radius reduction
+                .radius = params.photonMap.initialRadius,
                 .totalPhotonCountAtBirth = params.photonMap.totalPhotonCount,
             });
+            break;
         }
         
         ray = Ray{hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.direction, payload.normal)), sample.direction};
@@ -70,19 +71,22 @@ extern "C" __global__ void __raygen__full() {
     auto ray = makeCameraRay(uv);
 
     float3 throughput = make_float3(1.0f);
+    float3 radiancePlus = make_float3(0.0f);
 
-    // TODO: Handle too long paths
-    for (uint depth = 0; depth < 6; depth++) {
+    for (uint depth = 0; depth < MAX_BOUNCES; depth++) {
         const auto r = curand_uniform4(&state);
 
         const auto payload = trace(ray);
 
         if (isinf(payload.t)) {// Skybox => No photon query
-            params.photonMap.store(i, {
-                .radius = 0.0f, // Invalid query no radius
-            });
-            params.image[i] = make_float4(0.0f, 0.0f, 0.0f, 1.0f);
+            params.photonMap.queries[i].throughput = {0.0f, 0.0f, 0.0f};
+            params.photonMap.markAABBInvalid(i);
+            radiancePlus += throughput * payload.emission;
             break;
+        }
+
+        if (luminance(payload.emission) > 0.0f) { // Add self-emission
+            radiancePlus += throughput * payload.emission;
         }
 
         const auto wo = -ray.direction;
@@ -91,21 +95,24 @@ extern "C" __global__ void __raygen__full() {
         const auto mat = calcMaterialProperties(payload.baseColor, payload.metallic, alpha, payload.transmission);
         const auto sample = sampleDisney(r.y, {r.z, r.w}, {r.z, r.w}, wo, payload.normal, payload.baseColor, payload.metallic, alpha, payload.transmission);
 
-        // if (luminance(mat.albedo * (1 - mat.transmission)) > 1e-6f) {
-        if (sample.pdf <= INV_PI + 1e-2f) {
-            params.photonMap.store(i, {
-                .pos = hitPoint,
-                .wo = wo,
-                .n = payload.normal,
-                .mat = mat,
-                .radius = params.photonMap.initialRadius, // TODO: Radius reduction
-                .totalPhotonCountAtBirth = params.photonMap.totalPhotonCount,
-            });
-            params.image[i] = make_float4(throughput, 1.0f);
+        //if (sample.pdf <= INV_PI + 1e-2f) {
+        if (mat.isDiffuse()) {
+            auto query = params.photonMap.queries[i];
+            query.pos = hitPoint;
+            query.wo = wo;
+            query.n = payload.normal;
+            query.mat = mat;
+            query.throughput = throughput;
+            query.collectedPhotons = 0;
+            params.photonMap.store(i, query);
             break;
         }
         
         ray = Ray{hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.direction, payload.normal)), sample.direction};
         throughput *= sample.throughput;
     }
+
+    // No valid query found -> Zero it out
+    // TODO: On termination, store previous query
+    params.image[i] = mix(params.image[i], make_float4(radiancePlus, 1.0f), params.weight);
 }

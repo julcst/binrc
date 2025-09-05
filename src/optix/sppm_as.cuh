@@ -31,6 +31,16 @@ struct SPPMRTX {
         queryBuffer.reserve(n);
     }
 
+    inline void resetQueries(const PhotonQuery& q = {}) {
+        queryBuffer.assign(size, q);
+    }
+
+    inline void resetCollectedPhotons() {
+        thrust::for_each(queryBuffer.begin(), queryBuffer.end(), [] __device__ (PhotonQuery& q) {
+            q.collectedPhotons = 0;
+        });
+    }
+
     inline PhotonQueryView getDeviceView() {
         return PhotonQueryView { 
             .queries = queryBuffer.data().get(),

@@ -191,7 +191,7 @@ struct Params {
     cudaTextureObject_t brdfLUT;
 
     // Photon mapping parameters
-    PhotonQueryView photonMap;
+    PhotonQueryView photonMap; // NOTE: This is only a constant view and should not be modified
 };
 extern "C" __constant__ const Params params;
 

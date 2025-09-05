@@ -53,6 +53,11 @@ extern "C" __global__ void __raygen__() {
         flux *= sample.throughput; // FIXME, this is BRDF * cosThetaO / pdf, not BRDF * cosThetaI / pdf
         //flux += payload.emission; // TODO: Is this correct?
 
+        if (!isfinite(sample.direction)) {
+            printf("Warning: NaN sample direction in light pass: depth=%d alpha=%f transmission=%f metallic=%f\n", depth, alpha, payload.transmission, payload.metallic);
+            break;
+        }
+
         ray = Ray{hitPoint + payload.normal * copysignf(params.sceneEpsilon, dot(sample.direction, payload.normal)), sample.direction};
     }
 }

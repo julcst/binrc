@@ -67,6 +67,14 @@ __host__ __device__ constexpr bool isnegative(float x) {
     return x < 0.0f;
 }
 
+__host__ __device__ constexpr dim3 ceildiv(const dim3& a, const dim3& b) {
+    return dim3(
+        (a.x + b.x - 1) / b.x,
+        (a.y + b.y - 1) / b.y,
+        (a.z + b.z - 1) / b.z
+    );
+}
+
 // Matrices
 
 struct float2x2 {

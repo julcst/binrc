@@ -53,6 +53,17 @@ __device__ inline Payload trace(const Ray& ray) {
     return getPayload(p);
 }
 
+__device__ inline Payload traceSafe(const Ray& ray, const char* where) {
+    if (!isfinite(ray.direction)) {
+        printf("Warning: NaN ray direction (%f, %f, %f) at %s\n", ray.direction.x, ray.direction.y, ray.direction.z, where);
+        return Payload{
+            .emission = {0.0f, 0.0f, 0.0f},
+            .t = INFINITY,
+        };
+    }
+    return trace(ray);
+}
+
 __device__ inline bool traceOcclusion(const float3& a, const float3& b) {
     const auto dir = b - a;
     optixTraverse(

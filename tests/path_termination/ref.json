@@ -1,5 +1,6 @@
 {
     "scene": ["scenes/diffuse.glb", "scenes/thinker.glb", "scenes/chess.glb"],
     "export": [1, "1m"],
-    "resolution": 960
+    "resolution": 960,
+    "meanvar_samples": 1000
 }

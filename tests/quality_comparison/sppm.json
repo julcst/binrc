@@ -1,10 +1,13 @@
 {
-    "scene": "scenes/diffuse.glb",
-    "pretraining": "10s",
-    "export": [1],
+    "scene": ["scenes/diffuse.glb", "scenes/caustics_small.glb"],
+    "pretraining": 2,
+    "export": [1, "1m"],
     "resolution": 960,
     "rendering": {
-        "inference_mode": "photon_mapping",
-        "photon_radius": 0.03
+        "inference_mode": "photon_mapping"
+    },
+    "training": {
+        "photon_radius": 0.003,
+        "photon_count": 700000
     }
 }

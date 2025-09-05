@@ -22,6 +22,7 @@ struct PhotonQuery {
     float totalCollectedPhotons = 0; // Total number of photons collected
     uint32_t collectedPhotons = 0; // Number of photons collected in this pass
     uint32_t totalPhotonCountAtBirth = 0; // Total number of photons at initialization
+    float3 throughput = {0.0f, 0.0f, 0.0f}; // Throughput (only used for SPPM)
 
     __device__ float3 calcRadiance(uint32_t totalPhotonCount) const {
         // TODO: Handle totalPhotonCountAtBirth >= totalPhotonCount
@@ -55,8 +56,8 @@ struct PhotonQueryView {
     uint32_t queryCount = 0;
     OptixTraversableHandle handle = 0;
     uint32_t totalPhotonCount = 0;
-    float alpha = 0.7f; // Radius reduction factor
-    float initialRadius = 0.1f; // Initial radius for photon queries
+    float alpha; // Radius reduction factor
+    float initialRadius; // Initial radius for photon queries
 
     __device__ __forceinline__ void updateAABB(const uint32_t idx, const PhotonQuery& query) const {
         aabbs[idx] = {
@@ -66,6 +67,17 @@ struct PhotonQueryView {
             .maxX = query.pos.x + query.radius,
             .maxY = query.pos.y + query.radius,
             .maxZ = query.pos.z + query.radius
+        };
+    }
+
+    __device__ __forceinline__ void markAABBInvalid(const uint32_t idx) const {
+        aabbs[idx] = {
+            .minX = 0.0f,
+            .minY = 0.0f,
+            .minZ = 0.0f,
+            .maxX = 0.0f,
+            .maxY = 0.0f,
+            .maxZ = 0.0f
         };
     }
 
