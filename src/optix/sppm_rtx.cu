@@ -19,22 +19,7 @@ extern "C" __global__ void __intersection__() {
     if (dist2 > pow2(query->radius)) {
         //optixIgnoreIntersection();
     } else {
-        const float3 wi = {__uint_as_float(optixGetPayload_0()),
-                        __uint_as_float(optixGetPayload_1()),
-                        __uint_as_float(optixGetPayload_2())};
-        const float3 flux = {__uint_as_float(optixGetPayload_3()),
-                            __uint_as_float(optixGetPayload_4()),
-                            __uint_as_float(optixGetPayload_5())};
-
-        const auto radiance = evalDisneyBRDF(wi, query->wo, query->n, query->mat) * flux;
-
-        // NOTE: Does atomicAdd hurt performance because of serialization?
-        // Probably not so much, because we have rather sparse photon queries
-        // Maybe warp aggregated atomics could help?
-        atomicAdd(&query->collectedPhotons, 1u);
-        atomicAdd(&query->flux.x, radiance.x);
-        atomicAdd(&query->flux.y, radiance.y);
-        atomicAdd(&query->flux.z, radiance.z);
+        optixReportIntersection(optixGetRayTmin(), 0);
     }
 }
 

@@ -99,17 +99,17 @@ struct PhotonQueryView {
             __float_as_uint(photon.flux.x), __float_as_uint(photon.flux.y), __float_as_uint(photon.flux.z)
         };
         // TODO: Use PayloadTypeID
-        optixTrace(handle,
+        optixTraverse(handle,
             photon.pos, {EPS}, // origin, direction
             0.0f, EPS, // tmin, tmax
             0.0f, // rayTime
             OptixVisibilityMask(1), 
-            OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT | OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+            OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
             0, 1, 1, // SBT offset, stride, miss index
             p[0], p[1], p[2], p[3], p[4], p[5] // payload
         );
-        // TODO: SER for cache efficiency
-        // optixInvoke();
+        optixReorder();
+        optixInvoke(p[0], p[1], p[2], p[3], p[4], p[5]);
     }
 #endif
 };
