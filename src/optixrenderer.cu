@@ -796,6 +796,7 @@ void OptixRenderer::configure(const nlohmann::json& config) {
         setIfExists(trainingConfig, "photon_count", photonCount);
         setIfExists(trainingConfig, "photon_radius", sppmBVH.initialRadius);
         setIfExists(trainingConfig, "photon_radius_reduction", sppmBVH.alpha);
+        setIfExists(trainingConfig, "photon_record_probability", sppmBVH.photonRecordingProbability);
     }
 
     if (config.contains("nrc")) {
@@ -832,8 +833,9 @@ nlohmann::json OptixRenderer::getConfig() const {
         {"photon_mapping_amount", photonMappingAmount},
         {"photon_query_replacement", photonQueryReplacement},
         {"photon_count", photonCount},
-        {"photon_radius", params.photonMap.initialRadius},
-        {"photon_radius_reduction", params.photonMap.alpha},
+        {"photon_radius", sppmBVH.initialRadius},
+        {"photon_radius_reduction", sppmBVH.alpha},
+        {"photon_record_probability", sppmBVH.photonRecordingProbability},
     };
 
     config["nrc"] = {

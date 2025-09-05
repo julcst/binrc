@@ -58,6 +58,7 @@ struct PhotonQueryView {
     uint32_t totalPhotonCount = 0;
     float alpha; // Radius reduction factor
     float initialRadius; // Initial radius for photon queries
+    float photonRecordingProbability; // Probability that a non-caustic photon is recorded
 
     __device__ __forceinline__ void updateAABB(const uint32_t idx, const PhotonQuery& query) const {
         aabbs[idx] = {
