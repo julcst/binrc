@@ -163,6 +163,8 @@ public:
     Params params = {}; // NOTE: Initialization is important to prevent invalid pointers
     SPPMRTX sppmBVH {NRC_BATCH_SIZE};
     ProgramGroup backwardTrainer = TRAIN_LIGHT;
+    bool useJITFusion = true;
+    bool useFusedInference = true;
 
 private:
     OptixDeviceContext context;
@@ -192,6 +194,8 @@ private:
     tcnn::GPUMatrix<float> nrcInferenceOutput;
     tcnn::GPUMemory<float3> nrcInferenceThroughput;
 
+    std::unique_ptr<tcnn::CudaRtcKernel> fusedInferenceKernel;
+
     tcnn::GPUMemory<std::array<TrainBounce, TRAIN_DEPTH>> selfLearningBounces {NRC_BATCH_SIZE};
     tcnn::GPUMatrix<float> selfLearningInference {NRC_OUTPUT_SIZE, NRC_BATCH_SIZE};
     tcnn::GPUMatrix<float> selfLearningQueries {NRC_INPUT_SIZE, NRC_BATCH_SIZE};
@@ -204,4 +208,5 @@ private:
     void generateSobol(uint offset, uint n);
     void ensureSobol(uint sample);
     void train();
+    void loadModel(const tcnn::TrainableModel& model);
 };

@@ -49,8 +49,13 @@ set(TCNN_BUILD_EXAMPLES OFF)
 FetchContent_Declare(
     tinycudann
     GIT_REPOSITORY https://github.com/julcst/tiny-cuda-nn
-    GIT_TAG 7364f21
+    GIT_TAG fix-fmt
 )
+# FetchContent_Declare(
+#     tinycudann
+#     GIT_REPOSITORY https://github.com/NVlabs/tiny-cuda-nn
+#     GIT_TAG master
+# )
 FetchContent_Declare(
     cuco
     GIT_REPOSITORY https://github.com/NVIDIA/cuCollections
