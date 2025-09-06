@@ -1,0 +1,5 @@
+{
+    "scene": ["scenes/diffuse.glb", "scenes/thinker.glb", "scenes/chess.glb", "scenes/ajar_caustic.glb"],
+    "export": ["3m"],
+    "resolution": 960
+}

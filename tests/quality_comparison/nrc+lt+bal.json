@@ -5,12 +5,13 @@
     "resolution": 960,
     "training": {
         "enable_training": true,
-        "train_direction": 0.0
+        "train_direction": 1.0,
+        "backward_trainer": "train_light",
+        "balance_weight": 2.0
     },
     "rendering": {
         "inference_mode": "first_diffuse",
-        "inference_nee": false,
-        "self_learning": true
+        "inference_nee": false
     },
     "meanvar_samples": 1000
 }

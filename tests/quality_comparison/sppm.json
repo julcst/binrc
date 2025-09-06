@@ -1,7 +1,7 @@
 {
-    "scene": ["scenes/diffuse.glb", "scenes/caustics_small.glb"],
-    "pretraining": 2,
-    "export": [1, "1m"],
+    "scene": ["scenes/diffuse.glb", "scenes/thinker.glb", "scenes/chess.glb", "scenes/ajar_caustic.glb", "scenes/caustics_small.glb"],
+    "pretraining": "10s",
+    "export": [1],
     "resolution": 960,
     "rendering": {
         "inference_mode": "photon_mapping"
@@ -9,5 +9,6 @@
     "training": {
         "photon_radius": 0.003,
         "photon_count": 700000
-    }
+    },
+    "meanvar_samples": 1000
 }
