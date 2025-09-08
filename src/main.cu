@@ -178,6 +178,12 @@ int main(int argc, char** argv) {
                 renderer.resize(dim);
                 tcnn::GPUMemory<glm::vec4> image(dim.x * dim.y);
 
+                if (renderer.useJITFusion) {
+                    std::cout << "Compiling fused kernels..." << std::endl;
+                    renderer.render(image.data(), dim); // Warmup to compile the kernels
+                    renderer.reset();
+                }
+
                 BreakCondition pretraining = config.contains("pretraining")
                     ? config.at("pretraining").get<BreakCondition>()
                     : BreakCondition{};
@@ -225,7 +231,7 @@ int main(int argc, char** argv) {
                                 {"total_samples", breakdown.count},
                                 {"resolution", {dim.x, dim.y}},
                                 {"loss_history", renderer.lossHistory},
-                                {"config", renderer.getConfig()}
+                                {"config", renderer.getConfig()},
                             };
                             Common::writeToFile(metadata.dump(4), path.concat(".json"));
                             it = conditions.erase(it);

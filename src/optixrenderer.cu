@@ -389,22 +389,21 @@ __global__ void inference_kernel(
 ) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
-    if (x >= dim.x || y >= dim.y) return;
+    bool valid = (x < dim.x) && (y < dim.y);
 
     const int i = y * dim.x + x;
     const int idxIn = i * NRC_INPUT_SIZE;
 
     // Pack input into hvec
-    tcnn::hvec<NRC_INPUT_SIZE> nerf_in;
+    tcnn::vec<NRC_INPUT_SIZE> nerf_in;
     #pragma unroll
     for (int j = 0; j < NRC_INPUT_SIZE; j++)
-        nerf_in[j] = inferenceInput[idxIn + j];
-
-    const auto diffuse = make_float3(nerf_in[8], nerf_in[9], nerf_in[10]);
-    const auto specular = make_float3(nerf_in[11], nerf_in[12], nerf_in[13]);
+        nerf_in[j] = valid ? inferenceInput[idxIn + j] : 0.0f;
 
     // Call tiny-cuda-nn model. All 32 threads of the warp must be active here.
-    tcnn::hvec<NRC_OUTPUT_SIZE> nerf_out = model_fun(nerf_in, params);
+    tcnn::vec<NRC_OUTPUT_SIZE> nerf_out = model_fun(nerf_in, params);
+
+    if (!valid) return;
 
     auto inference = make_float3(nerf_out[0], nerf_out[1], nerf_out[2]);
 
@@ -412,10 +411,13 @@ __global__ void inference_kernel(
 
     if (throughput.x <= 0.0f && throughput.y <= 0.0f && throughput.z <= 0.0f) return;
 
-    if (raw)
+    if (raw) {
         image[i] = make_float4(inference, 1.0f);
-    else
+    } else {
+        const auto diffuse = make_float3(nerf_in[8], nerf_in[9], nerf_in[10]);
+        const auto specular = make_float3(nerf_in[11], nerf_in[12], nerf_in[13]);
         image[i] += weight * make_float4(inference * (diffuse + specular) * throughput, 1.0f);
+    }
 }
 )";
 
@@ -423,18 +425,20 @@ void OptixRenderer::loadModel(const tcnn::TrainableModel& model) {
     nrcModel = model;
     nrcModel.network->set_jit_fusion(tcnn::supports_jit_fusion() && useJITFusion);
     std::cout << "JIT Fusion enabled: " << nrcModel.network->jit_fusion() << std::endl;
-    auto generatedSource = fmt::format(R"(
-            {MODEL_DEVICE_FUNCTION}
-            #define NRC_INPUT_SIZE {NRC_INPUT_SIZE}
-            #define NRC_OUTPUT_SIZE {NRC_OUTPUT_SIZE}
-            {INFERENCE_KERNEL}
-        )",
-        fmt::arg("MODEL_DEVICE_FUNCTION", model.network->generate_device_function("model_fun")),
-        fmt::arg("NRC_INPUT_SIZE", NRC_INPUT_SIZE),
-        fmt::arg("NRC_OUTPUT_SIZE", NRC_OUTPUT_SIZE),
-        fmt::arg("INFERENCE_KERNEL", inferenceKernel)
-    );
-    //fusedInferenceKernel = std::make_unique<tcnn::CudaRtcKernel>("inference_kernel", generatedSource);
+    if (useFusedInference) {
+        auto generatedSource = fmt::format(R"(
+                {MODEL_DEVICE_FUNCTION}
+                #define NRC_INPUT_SIZE {NRC_INPUT_SIZE}
+                #define NRC_OUTPUT_SIZE {NRC_OUTPUT_SIZE}
+                {INFERENCE_KERNEL}
+            )",
+            fmt::arg("MODEL_DEVICE_FUNCTION", model.network->generate_device_function("model_fun")),
+            fmt::arg("NRC_INPUT_SIZE", NRC_INPUT_SIZE),
+            fmt::arg("NRC_OUTPUT_SIZE", NRC_OUTPUT_SIZE),
+            fmt::arg("INFERENCE_KERNEL", inferenceKernel)
+        );
+        fusedInferenceKernel = std::make_unique<tcnn::CudaRtcKernel>("inference_kernel", generatedSource);
+    }
 }
 
 __device__ inline void writeNRCInput(float* dest, uint idx, const NRCInput& input) {
@@ -725,13 +729,27 @@ FrameBreakdown OptixRenderer::render(vec4* image, uvec2 dim) {
             check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[INFERENCE], dim.x, dim.y, 1));
             check(cudaDeviceSynchronize()); // Wait for the renderer to finish
             events[19].record();
-            nrcModel.network->inference(nrcInferenceInput, nrcInferenceOutput);
-            events[20].record();
+            if (useFusedInference && fusedInferenceKernel) {
+                dim3 block(16, 16);
+                dim3 grid((dim.x + block.x - 1) / block.x, (dim.y + block.y - 1) / block.y);
+                // int2 dim,
+                // float* inferenceInput, 
+                // float3* inferenceThroughput,
+                // bool raw,
+                // float4* image,
+                // float weight,
+                // const network_precision_t* __restrict__ params
+                fusedInferenceKernel->launch(grid, block, 0, nullptr, params.dim, nrcInferenceInput.data(), nrcInferenceThroughput.data(), params.inferenceMode == InferenceMode::RAW_CACHE, params.image, params.weight, nrcModel.network->inference_params());
+                events[20].record();
+            } else {
+                nrcModel.network->inference(nrcInferenceInput, nrcInferenceOutput);
+                events[20].record();
 
-            dim3 block(16, 16);
-            dim3 grid((dim.x + block.x - 1) / block.x, (dim.y + block.y - 1) / block.y);
-            visualizeInference<<<grid, block>>>(paramsBuffer.data());
-            events[21].record();
+                dim3 block(16, 16);
+                dim3 grid((dim.x + block.x - 1) / block.x, (dim.y + block.y - 1) / block.y);
+                visualizeInference<<<grid, block>>>(paramsBuffer.data());
+                events[21].record();
+            }
             break;
     }
     events[22].record();
@@ -933,6 +951,9 @@ nlohmann::json OptixRenderer::getConfig() const {
         {"network", nrcModel.network->hyperparams()},
         {"trainer", nrcModel.trainer->hyperparams()},
     };
+
+    config["jit_supported"] = tcnn::supports_jit_fusion();
+    config["jit_fusion"] = nrcModel.network->jit_fusion();
 
     return config;
 }
