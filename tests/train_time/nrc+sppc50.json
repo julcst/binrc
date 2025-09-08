@@ -1,0 +1,20 @@
+{
+    "scene": ["scenes/caustics_small.glb"],
+    "pretraining": 50,
+    "export": [1],
+    "resolution": 960,
+    "training": {
+        "enable_training": true,
+        "train_direction": 1.0,
+        "photon_mapping_amount": 1.0,
+        "photon_query_replacement": 0.01,
+        "photon_count": 100000,
+        "photon_radius": 0.01,
+        "photon_radius_reduction": 0.7
+    },
+    "rendering": {
+        "inference_mode": "first_diffuse",
+        "inference_nee": false
+    },
+    "meanvar_samples": 1000
+}

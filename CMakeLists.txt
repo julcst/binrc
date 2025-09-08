@@ -49,7 +49,7 @@ set(TCNN_BUILD_EXAMPLES OFF)
 FetchContent_Declare(
     tinycudann
     GIT_REPOSITORY https://github.com/julcst/tiny-cuda-nn
-    GIT_TAG fix-fmt
+    GIT_TAG master
 )
 # FetchContent_Declare(
 #     tinycudann

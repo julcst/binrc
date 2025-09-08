@@ -1,0 +1,15 @@
+{
+    "scene": ["scenes/diffuse.glb", "scenes/thinker.glb", "scenes/chess.glb"],
+    "pretraining": "10s",
+    "export": [1],
+    "resolution": 960,
+    "training": {
+        "enable_training": true,
+        "train_direction": 0.0
+    },
+    "rendering": {
+        "inference_mode": "first_diffuse",
+        "inference_nee": true
+    },
+    "meanvar_samples": 1000
+}

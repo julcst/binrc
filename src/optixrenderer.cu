@@ -881,13 +881,15 @@ void OptixRenderer::configure(const nlohmann::json& config) {
         setIfExists(trainingConfig, "photon_radius_reduction", sppmBVH.alpha);
         setIfExists(trainingConfig, "photon_record_probability", sppmBVH.photonRecordingProbability);
         setIfExists(trainingConfig, "photon_normal_tolerance", sppmBVH.photonNormalTolerance);
+        setIfExists(trainingConfig, "use_jit_fusion", useJITFusion);
+        setIfExists(trainingConfig, "use_fused_inference", useFusedInference);
     }
 
     if (config.contains("nrc")) {
         loadModel(tcnn::create_from_config(NRC_INPUT_SIZE, NRC_OUTPUT_SIZE, config["nrc"]));
     }
 
-    nrcModel.network->set_jit_fusion(tcnn::supports_jit_fusion());
+    nrcModel.network->set_jit_fusion(tcnn::supports_jit_fusion() && useJITFusion);
 }
 
 nlohmann::json OptixRenderer::getConfig() const {
@@ -923,6 +925,8 @@ nlohmann::json OptixRenderer::getConfig() const {
         {"photon_radius_reduction", sppmBVH.alpha},
         {"photon_record_probability", sppmBVH.photonRecordingProbability},
         {"photon_normal_tolerance", sppmBVH.photonNormalTolerance},
+        {"use_jit_fusion", useJITFusion},
+        {"use_fused_inference", useFusedInference},
     };
 
     config["nrc"] = {
