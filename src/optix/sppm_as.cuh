@@ -25,7 +25,7 @@ struct SPPMRTX {
     //     aabbBuffer.resize(numRecords);
     // }
 
-    SPPMRTX(uint32_t n) : aabbBuffer(n), queryBuffer(n), size(n) {}
+    SPPMRTX(uint32_t n = 0) : aabbBuffer(n), queryBuffer(n), size(n) {}
 
     inline void resize(uint32_t n) {
         size = n;

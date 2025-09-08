@@ -161,10 +161,11 @@ public:
     float photonQueryReplacement = 0.5f; // Proportion of photon queries that are kept between frames
     uint32_t photonCount = 1 << 17; // Number of photons to generate
     Params params = {}; // NOTE: Initialization is important to prevent invalid pointers
-    SPPMRTX sppmBVH {NRC_BATCH_SIZE};
+    SPPMRTX sppmBVH;
     ProgramGroup backwardTrainer = TRAIN_LIGHT;
-    bool useJITFusion = true;
-    bool useFusedInference = true;
+    bool useJITFusion = false;
+    bool useFusedInference = false;
+    uint32_t trainingSteps = 1; // Number of training steps per frame
 
 private:
     OptixDeviceContext context;
@@ -196,9 +197,9 @@ private:
 
     std::unique_ptr<tcnn::CudaRtcKernel> fusedInferenceKernel;
 
-    tcnn::GPUMemory<std::array<TrainBounce, TRAIN_DEPTH>> selfLearningBounces {NRC_BATCH_SIZE};
-    tcnn::GPUMatrix<float> selfLearningInference {NRC_OUTPUT_SIZE, NRC_BATCH_SIZE};
-    tcnn::GPUMatrix<float> selfLearningQueries {NRC_INPUT_SIZE, NRC_BATCH_SIZE};
+    tcnn::GPUMemory<std::array<TrainBounce, TRAIN_DEPTH>> selfLearningBounces;
+    tcnn::GPUMatrix<float> selfLearningInference;
+    tcnn::GPUMatrix<float> selfLearningQueries;
 
     BRDFLUT brdfLUT;
 
@@ -209,4 +210,5 @@ private:
     void ensureSobol(uint sample);
     void train();
     void loadModel(const tcnn::TrainableModel& model);
+    void resizeNRC();
 };

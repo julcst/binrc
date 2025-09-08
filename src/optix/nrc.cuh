@@ -51,7 +51,7 @@ __device__ inline void writeNRCInput(float* to, uint idx, const NRCInput& input)
 
 __device__ inline uint pushNRCTrainInput(const NRCInput& input) {
     // TODO: Try to avoid atomic operations
-    const auto i = atomicAdd(params.trainingIndexPtr, 1u) % NRC_BATCH_SIZE;
+    const auto i = atomicAdd(params.trainingIndexPtr, 1u) % params.nrcSize;
     writeNRCInput(params.trainingInput + i * NRC_INPUT_SIZE, input);
     return i;
 }

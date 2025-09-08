@@ -1,0 +1,15 @@
+{
+    "scene": "scenes/diffuse.glb",
+    "pretraining": "10s",
+    "export": [1],
+    "resolution": 960,
+    "training": {
+        "enable_training": true,
+        "train_direction": 0.0,
+        "use_jit_fusion": false,
+        "use_fused_inference": false
+    },
+    "rendering": {
+        "inference_mode": "sah"
+    }
+}

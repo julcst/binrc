@@ -28,6 +28,25 @@
 #include "optix/sampling.cuh"
 #include "optix/sppm_as.cuh"
 
+void OptixRenderer::resizeNRC() {
+    if (params.nrcSize / trainingSteps % tcnn::BATCH_SIZE_GRANULARITY != 0) {
+        std::cerr << "Warning: Batch size is not divisible by tcnn::BATCH_SIZE_GRANULARITY." << std::endl;
+        return;
+    }
+    nrcTrainInput.resize(NRC_INPUT_SIZE, params.nrcSize);
+    nrcTrainOutput.resize(NRC_OUTPUT_SIZE, params.nrcSize);
+    selfLearningBounces.resize(params.nrcSize);
+    selfLearningInference.resize(NRC_OUTPUT_SIZE, params.nrcSize);
+    selfLearningQueries.resize(NRC_INPUT_SIZE, params.nrcSize);
+    sppmBVH.resize(params.nrcSize);
+
+    // Update references in params
+    params.trainingInput = nrcTrainInput.data();
+    params.trainingTarget = nrcTrainOutput.data();
+    params.selfLearningBounces = selfLearningBounces.data();
+    params.selfLearningQueries = selfLearningQueries.data();
+}
+
 OptixRenderer::OptixRenderer() {
     check(cudaFree(nullptr)); // Initialize CUDA for this device on this thread
     check(optixInit()); // Initialize the OptiX API
@@ -230,8 +249,7 @@ OptixRenderer::OptixRenderer() {
     }
 
     loadModel(tcnn::create_from_config(NRC_INPUT_SIZE, NRC_OUTPUT_SIZE, nlohmann::json::parse(Common::readFile("nrc.json"), nullptr, true, true)));
-    nrcTrainInput = tcnn::GPUMatrix<float>(NRC_INPUT_SIZE, NRC_BATCH_SIZE);
-    nrcTrainOutput = tcnn::GPUMatrix<float>(NRC_OUTPUT_SIZE, NRC_BATCH_SIZE);
+    resizeNRC();
 
     // std::cout << "Network: " << std::setw(2) << nrcModel.network->hyperparams()
     //           << "\nTrainer: " << std::setw(2) << nrcModel.trainer->hyperparams()
@@ -508,7 +526,7 @@ __global__ void generateDummySamples(const uint sampleCount, Params* params, con
     const auto wo = buildTBN(surf.normal) * sampleCosineHemisphere({rand.w, curand_uniform(&state)});
 
     const auto input = encodeInput(params, wo, surf, params->brdfLUT);
-    const auto idx = atomicAdd(params->trainingIndexPtr, 1u) % NRC_BATCH_SIZE; // TODO: This is a bad and unnecessary use of atomic operations
+    const auto idx = atomicAdd(params->trainingIndexPtr, 1u) % params->nrcSize; // TODO: This is a bad and unnecessary use of atomic operations
     writeNRCInput(params->trainingInput, idx, input);
     writeNRCOutput(params->trainingTarget, idx, make_float3(0.0f));
 }
@@ -547,7 +565,7 @@ __global__ void writePhotonQueriesToTrainingSet(Params* params, float* nrcQuerie
     photonQuery.applyRadiusReduction(params->photonMap.alpha);
     params->photonMap.updateAABB(i, photonQuery);
 
-    const auto trainIdx = atomicAdd(params->trainingIndexPtr, 1u) % NRC_BATCH_SIZE;
+    const auto trainIdx = atomicAdd(params->trainingIndexPtr, 1u) % params->nrcSize;
 
     const auto input = encodeInput(params, photonQuery.pos, photonQuery.wo, photonQuery.n, photonQuery.mat, params->brdfLUT);
     const auto reflectanceFactorizationTerm = max(input.diffuse + input.specular, 1e-3f);
@@ -581,7 +599,7 @@ void OptixRenderer::train() {
     // Calculate sample amounts per training methods
     // FIXME: Fix crash when changing trainigDirection
     const float balanceRatio = 1.0f / params.balanceWeight;
-    const auto totalTrainingSamples = NRC_BATCH_SIZE / TRAIN_DEPTH;
+    const auto totalTrainingSamples = params.nrcSize / TRAIN_DEPTH;
     const uint forwardSamples = totalTrainingSamples * (1.0f - trainingDirection);
     const uint backwardSamples = (totalTrainingSamples - forwardSamples) * balanceRatio * (1.0f - photonMappingAmount);
     const uint32_t photonQueries = (totalTrainingSamples - forwardSamples) * TRAIN_DEPTH * photonMappingAmount;
@@ -655,11 +673,12 @@ void OptixRenderer::train() {
 
     // Perform training steps
     events[17].record();
-    for (uint32_t offset = 0; offset < NRC_BATCH_SIZE; offset += NRC_SUBBATCH_SIZE) {
+    uint32_t batchSize = params.nrcSize / trainingSteps;
+    for (uint32_t offset = 0; offset < params.nrcSize; offset += batchSize) {
         // TODO: Use pdf
         // TODO: Limit training to the samples generated in this step to improve performance
         // TODO: Shuffling
-        auto ctx = nrcModel.trainer->training_step(nrcTrainInput.slice_cols(offset, NRC_SUBBATCH_SIZE), nrcTrainOutput.slice_cols(offset, NRC_SUBBATCH_SIZE));
+        auto ctx = nrcModel.trainer->training_step(nrcTrainInput.slice_cols(offset, batchSize), nrcTrainOutput.slice_cols(offset, batchSize));
         float loss = nrcModel.trainer->loss(*ctx);
         lossHistory.push_back(loss);
     }
@@ -901,11 +920,14 @@ void OptixRenderer::configure(const nlohmann::json& config) {
         setIfExists(trainingConfig, "photon_normal_tolerance", sppmBVH.photonNormalTolerance);
         setIfExists(trainingConfig, "use_jit_fusion", useJITFusion);
         setIfExists(trainingConfig, "use_fused_inference", useFusedInference);
+        setIfExists(trainingConfig, "training_steps", trainingSteps);
+        setIfExists(trainingConfig, "nrc_size", params.nrcSize);
     }
 
     if (config.contains("nrc")) {
         loadModel(tcnn::create_from_config(NRC_INPUT_SIZE, NRC_OUTPUT_SIZE, config["nrc"]));
     }
+    resizeNRC();
 
     nrcModel.network->set_jit_fusion(tcnn::supports_jit_fusion() && useJITFusion);
 }
@@ -945,6 +967,8 @@ nlohmann::json OptixRenderer::getConfig() const {
         {"photon_normal_tolerance", sppmBVH.photonNormalTolerance},
         {"use_jit_fusion", useJITFusion},
         {"use_fused_inference", useFusedInference},
+        {"training_steps", trainingSteps},
+        {"nrc_size", params.nrcSize},
     };
 
     config["nrc"] = {

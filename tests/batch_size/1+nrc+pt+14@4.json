@@ -1,0 +1,17 @@
+{
+    "scene": "scenes/thinker.glb",
+    "pretraining": 1,
+    "export": [1],
+    "resolution": 960,
+    "training": {
+        "enable_training": true,
+        "train_direction": 0.0,
+        "training_steps": 4,
+        "nrc_size": 16384
+    },
+    "rendering": {
+        "inference_mode": "first_diffuse",
+        "inference_nee": false
+    },
+    "meanvar_samples": 1000
+}
