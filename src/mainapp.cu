@@ -114,10 +114,10 @@ void MainApp::keyCallback(Key key, Action action, Modifier modifier) {
             imguiEnabled = !imguiEnabled;
             break;
         case Key::C:
-            takeScreenshot(getNumberedPath("screenshot_", "png").string());
+            takeScreenshot(getNumberedPath("", "png").string());
             break;
         case Key::X:
-            blitTexture.writeToFile(getNumberedPath("screenshot_", "hdr").string());
+            blitTexture.writeToFile(getNumberedPath("", "hdr").string());
             break;
         case Key::J:
             std::cout << renderer.getConfig().dump(4) << std::endl;
