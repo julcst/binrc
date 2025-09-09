@@ -117,7 +117,7 @@ extern "C" __global__ void __raygen__() {
     }
 
     // TODO: Keep 1/16 of learning paths unbiased from self-learning
-    if (params.flags & SELF_LEARNING_FLAG) {
+    if (params.flags & SELF_LEARNING_FLAG && pixelIdx % 16 != 0) {
         params.selfLearningBounces[pixelIdx] = trainBounces;
         // Component-wise copy of the training input to self-learning queries
         auto terminalBounceInputIdx = nTrainingSamples > 0 ? trainBounces[nTrainingSamples - 1].index : trainBounces[0].index;

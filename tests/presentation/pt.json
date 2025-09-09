@@ -1,0 +1,8 @@
+{
+    "scene": "scenes/thinker.glb",
+    "export": [1],
+    "resolution": 512,
+    "rendering": {
+        "nee": false
+    }
+}

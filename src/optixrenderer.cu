@@ -533,7 +533,7 @@ __global__ void generateDummySamples(const uint sampleCount, Params* params, con
 
 __global__ void applySelfLearning(unsigned int numQueries, std::array<TrainBounce, TRAIN_DEPTH>* selfLearningBounces, float* nrcQueries, float* nrcOutput, float* trainTarget) {
     const auto i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= numQueries) return;
+    if (i >= numQueries || i % 16 == 0) return; // Skip every 16th query to suppress bias
 
     const int idxIn = i * NRC_INPUT_SIZE;
     const int idxOut = i * NRC_OUTPUT_SIZE;
