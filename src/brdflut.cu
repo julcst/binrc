@@ -72,7 +72,7 @@ __host__ __device__ __forceinline__ float3 integrateSpecular(float roughness, fl
     bias /= float(samples);
     diffuse /= float(samples);
     
-    return {scale, bias, diffuse};
+    return {scale, bias, 0.0f};
 }
 
 __global__ void computeSpecularLUT(cudaSurfaceObject_t surfObj, uint width, uint height, uint samples) {

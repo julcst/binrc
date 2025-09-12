@@ -199,6 +199,7 @@ int main(int argc, char** argv) {
                     spp++;
                     std::cout << std::format("Pretraining: {} ({:%H:%M:%S})\r", spp, renderTime) << std::flush;
                 }
+                const auto pretrainTime = std::chrono::steady_clock::now() - startTime;
 
                 renderer.reset();
 
@@ -227,6 +228,7 @@ int main(int argc, char** argv) {
                                 {"condition", conditionToString(*it)},
                                 {"samples", spp},
                                 {"duration", std::chrono::duration_cast<std::chrono::duration<double>>(renderTime).count()},
+                                {"pretraining_time", std::chrono::duration_cast<std::chrono::duration<double>>(pretrainTime).count()},
                                 {"breakdown", breakdown.average()},
                                 {"total_samples", breakdown.count},
                                 {"resolution", {dim.x, dim.y}},

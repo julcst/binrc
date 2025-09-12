@@ -34,6 +34,7 @@ enum ProgramGroup {
     SPPM_LIGHT_PASS,
     SPPM_VIS_RAYGEN,
     SPPM_FULL,
+    BALANCING,
 // Other
     MISS,
     CLOSEST_HIT,
@@ -132,7 +133,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FrameBreakdown,
     visualization, total
 );
 
-constexpr size_t RAYGEN_COUNT = 10;
+constexpr size_t RAYGEN_COUNT = 11;
 constexpr size_t PROGRAM_GROUP_COUNT = RAYGEN_COUNT + 5;
 
 class OptixRenderer {
@@ -166,6 +167,7 @@ public:
     bool useJITFusion = false;
     bool useFusedInference = false;
     uint32_t trainingSteps = 1; // Number of training steps per frame
+    bool balanceFromCamera = false;
 
 private:
     OptixDeviceContext context;

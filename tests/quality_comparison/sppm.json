@@ -1,6 +1,6 @@
 {
     "scene": ["scenes/diffuse.glb", "scenes/thinker.glb", "scenes/chess.glb", "scenes/ajar_caustic.glb", "scenes/caustics_small.glb"],
-    "pretraining": "10s",
+    "pretraining": 1,
     "export": [1],
     "resolution": 960,
     "rendering": {

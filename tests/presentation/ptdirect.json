@@ -1,0 +1,9 @@
+{
+    "scene": "scenes/diffuse.glb",
+    "export": [1000],
+    "resolution": 512,
+    "rendering": {
+        "nee": true,
+        "max_path_length": 2
+    }
+}

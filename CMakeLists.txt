@@ -75,6 +75,7 @@ set(OPTIXIR
     src/optix/sppm_eye_pass.cu
     src/optix/sppm_light_pass.cu
     src/optix/sppm_rtx.cu
+    src/optix/balancing.cu
 )
 add_library(optixir OBJECT ${OPTIXIR})
 add_compile_definitions(_CCCL_DISABLE_INT128 _LIBCUDACXX_HAS_NO_INT128)

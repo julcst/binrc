@@ -166,6 +166,13 @@ OptixRenderer::OptixRenderer() {
             },
         },
         OptixProgramGroupDesc {
+            .kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
+            .raygen = {
+                .module = modules[optixir::BALANCING],
+                .entryFunctionName = "__raygen__",
+            },
+        },
+        OptixProgramGroupDesc {
             .kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
             .miss = {
                 .module = modules[optixir::HIT],
@@ -653,7 +660,11 @@ void OptixRenderer::train() {
     // FIXME: Upsides too dark
     if (nD) {
         events[12].record();
-        generateDummySamples<<<(nD + 255) / 256, 256>>>(nD, paramsBuffer.data(), instances.data(), instances.size(), materials.data());
+        if (balanceFromCamera) {
+            check(optixLaunch(pipeline, nullptr, reinterpret_cast<CUdeviceptr>(paramsBuffer.data()), sizeof(Params), &sbts[BALANCING], nD, 1, 1));
+        } else {
+            generateDummySamples<<<(nD + 255) / 256, 256>>>(nD, paramsBuffer.data(), instances.data(), instances.size(), materials.data());
+        }
         events[13].record();
     }
 
@@ -908,6 +919,7 @@ void OptixRenderer::configure(const nlohmann::json& config) {
     if (config.contains("training")) {
         const auto& trainingConfig = config["training"];
         setIfExists(trainingConfig, "balance_weight", params.balanceWeight);
+        setIfExists(trainingConfig, "balance_from_camera", balanceFromCamera);
         setIfExists(trainingConfig, "enable_training", enableTraining);
         setIfExists(trainingConfig, "train_direction", trainingDirection);
         setIfExists(trainingConfig, "backward_trainer", backwardTrainer);
@@ -955,6 +967,7 @@ nlohmann::json OptixRenderer::getConfig() const {
 
     config["training"] = {
         {"balance_weight", params.balanceWeight},
+        {"balance_from_camera", balanceFromCamera},
         {"enable_training", enableTraining},
         {"train_direction", trainingDirection},
         {"backward_trainer", backwardTrainer},

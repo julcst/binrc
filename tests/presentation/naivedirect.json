@@ -1,0 +1,18 @@
+{
+    "scene": "scenes/diffuse.glb",
+    "pretraining": "10s",
+    "export": [1],
+    "resolution": 512,
+    "training": {
+        "enable_training": true,
+        "train_direction": 1.0,
+        "backward_trainer": "train_light_naive"
+    },
+    "rendering": {
+        "inference_mode": "first_diffuse",
+        "inference_nee": false,
+        "nee": false,
+        "max_path_length": 2
+    },
+     "meanvar_samples": 1000
+}

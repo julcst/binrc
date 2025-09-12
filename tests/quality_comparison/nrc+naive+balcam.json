@@ -1,0 +1,18 @@
+{
+    "scene": ["scenes/diffuse.glb", "scenes/thinker.glb", "scenes/chess.glb", "scenes/ajar_caustic.glb", "scenes/caustics_small.glb"],
+    "pretraining": "10s",
+    "export": [1],
+    "resolution": 960,
+    "training": {
+        "enable_training": true,
+        "train_direction": 1.0,
+        "backward_trainer": "train_light_naive",
+        "balance_weight": 2.0,
+        "balance_from_camera": true
+    },
+    "rendering": {
+        "inference_mode": "first_diffuse",
+        "inference_nee": false
+    },
+    "meanvar_samples": 1000
+}

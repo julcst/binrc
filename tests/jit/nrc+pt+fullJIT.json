@@ -10,6 +10,6 @@
         "use_fused_inference": true
     },
     "rendering": {
-        "inference_mode": "raw_cache"
+        "inference_mode": "first_diffuse"
     }
 }

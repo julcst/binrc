@@ -1,6 +1,6 @@
 {
-    "scene": ["scenes/thinker.glb"],
-    "pretraining": "10s",
+    "scene": ["scenes/diffuse.glb"],
+    "pretraining": 40, 
     "export": [1],
     "resolution": 960,
     "training": {
@@ -34,8 +34,8 @@
                 // },
                 {
                     "n_dims_to_encode": 5,
-                    "otype": "OneBlob",
-                    //"otype": "OneBlobDiffuse",
+                    //"otype": "OneBlob",
+                    "otype": "OneBlobDiffuse",
                     "n_bins": 4
                 },
                 {
